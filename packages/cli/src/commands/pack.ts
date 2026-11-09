@@ -21,6 +21,7 @@ import { packFivemTarget } from "../lib/fivem-pack.ts";
 import { listFiles, readResource, sdkRoot, type LoadedResource } from "../lib/sdk.ts";
 import { compileTypeScript, type CompileIssue } from "../lib/typescript.ts";
 import { packBeamMPCommand } from "../lib/beammp.ts";
+import { packEscrow } from "../lib/escrow-pack.ts";
 
 export const summary = "Package a resource: a publishable .zip, or a folder for OPEN//77, Garry's Mod, BeamMP or FiveM";
 
@@ -250,9 +251,9 @@ export function packForOpen77(
 }
 
 export async function run(args: string[]): Promise<number> {
-  const a = parseArgs(args, { booleans: ["help", "allow-unportable", "no-runtime"] });
+  const a = parseArgs(args, { booleans: ["help", "allow-unportable", "no-runtime", "escrow"], repeatable: ["escrow-ignore"] });
   if (a.bools.has("help") || a.positional.length === 0) {
-    console.log("scriptgo pack <resourceDir> [--target scriptgo|open77|garrysmod|beammp|fivem] [--out dist] [--allow-unportable] [--no-runtime]");
+    console.log("scriptgo pack <resourceDir> [--target scriptgo|open77|garrysmod|beammp|fivem] [--out dist] [--allow-unportable] [--no-runtime] [--escrow [--escrow-ignore <glob>]...]");
     return a.bools.has("help") ? 0 : 2;
   }
   const res = readResource(a.positional[0]!);
@@ -274,6 +275,20 @@ export async function run(args: string[]): Promise<number> {
     const { zip, files: packed, errors } = await scriptgoArchive(m, files, res.root, res.manifestFile);
     for (const e of errors) console.error(`error ${e.code}: ${e.message}`);
     if (errors.length > 0) return 1;
+    if (a.bools.has("escrow")) {
+      const identifier = m.author ? `${m.author}//${m.name.replace(/_/g, "-")}` : m.name;
+      const r = packEscrow({
+        archive: zip, manifest: m, manifestFile: res.manifestFile, identifier, outDir: out,
+        allowlist: a.multi["escrow-ignore"] ?? [],
+      });
+      console.log(`escrow bundle -> ${r.bundlePath} (${r.bytes} bytes)`);
+      console.log(`  clear:     ${r.clearFiles.join(", ")}`);
+      console.log(`  encrypted: ${r.encryptedFiles.join(", ")}`);
+      console.log(`  content key (SECRET, master only) -> ${r.keyPath}`);
+      console.log("  note: real code secrecy only on a host that can hold the key (.NET / native kit);");
+      console.log("        on a pure-Lua host escrow degrades to license-only — do not claim code secrecy there.");
+      return 0;
+    }
     mkdirSync(out, { recursive: true });
     const file = join(out, `${m.name}-${m.version}.zip`);
     writeFileSync(file, zip);
