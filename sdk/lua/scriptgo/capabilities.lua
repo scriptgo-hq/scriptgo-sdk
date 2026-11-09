@@ -215,10 +215,37 @@ M.ENVIRONMENTS = {
         capabilities = {}, notes = {}, limitations = {},
     },
     fivem = {
+        -- ADR-0020. Adapter and `scriptgo pack --target fivem` written and unit-tested against a
+        -- stub of the natives; planned until a real FXServer run passes (it needs the owner's
+        -- Cfx.re registration key).
         name = "FiveM", kind = "mod_platform", status = "planned", dialects = { "5.4" }, sides = { "server", "client" },
         summary = "A shim that runs SCRIPT//GO packages on FiveM servers, with the same threads, events and exports model.",
         sales = "free_only", salesNote = "The platform's creator terms keep paid content on its own marketplace: free packages only.",
-        capabilities = {}, notes = {}, limitations = {},
+        capabilities = {
+            events = "supported", logging = "supported", storage = "supported", players = "supported",
+            permissions = "supported", commands = "supported", config = "supported", ui = "fallback",
+            http = "partial", licensing = "unavailable",
+        },
+        notes = {
+            events = "FiveM's own events and exports; TriggerEvent runs its handlers at once instead of on the next tick.",
+            logging = "print to the server console (channel script:<resource>) or the client console, with the level in front.",
+            storage = "Resource KVP (GetResourceKvpString / SetResourceKvp) on both sides, values stored as JSON text.",
+            players = "Server side: GetPlayers, GetPlayerName, and the license: identifier.",
+            permissions = "Server side: ACE (IsPlayerAceAllowed), granted with add_ace in server.cfg.",
+            commands = "RegisterCommand; restricted commands check the ACE command.<name>.",
+            config = "Server side: the convar <resource>:<key> (set in server.cfg).",
+            ui = "Chat messages (chat:addMessage, handled by FXServer's chat system resource).",
+            http = "Server side, through PerformHttpRequest; redirects are not followed. No host allow-list: the server owner decides what a resource may call.",
+            licensing = "Unavailable by design: Rockstar's Creator Platform License Agreement (2026-09-10, §3.1(6)) forbids a third-party marketplace that sells or licenses server content, so FiveM packages are free only.",
+        },
+        limitations = {
+            "Planned: no run on a real FXServer has passed yet. FXServer does not start without a Cfx.re registration key (sv_licenseKey).",
+            "Free packages only: `scriptgo pack --target fivem` refuses licensed packages.",
+            "Only the server half can be verified; the client half needs the game.",
+            "`require` finds no resource module on FiveM: list every module as a script.",
+            "The client has no `os`: ScriptGo.time.now() is nil there.",
+            "RedM runs the same shim (game rdr3); it is not built or verified yet.",
+        },
     },
     redm = {
         name = "RedM", kind = "mod_platform", status = "planned", dialects = { "5.4" }, sides = { "server", "client" },

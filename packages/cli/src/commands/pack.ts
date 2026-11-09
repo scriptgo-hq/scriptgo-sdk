@@ -9,6 +9,7 @@ import { zipSync } from "fflate";
 import { expandGlob, parseManifest, validateResourceFiles, type ParsedManifest } from "@scriptgo/manifest";
 import { parseArgs } from "../lib/args.ts";
 import { open77Portability } from "../lib/portability.ts";
+import { packFivemTarget } from "../lib/fivem-pack.ts";
 import { listFiles, readResource, sdkRoot, type LoadedResource } from "../lib/sdk.ts";
 
 export const summary = "Package a resource: a publishable .zip, or an OPEN//77 resource folder";
@@ -260,6 +261,7 @@ export async function run(args: string[]): Promise<number> {
     return 0;
   }
 
+  if (target === "fivem") return packFivemTarget(res, out, a.bools.has("allow-unportable")); // lib/fivem-pack.ts
   console.error(`unknown target '${target}' (scriptgo, open77)`);
   return 2;
 }

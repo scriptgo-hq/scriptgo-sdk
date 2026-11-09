@@ -46,16 +46,17 @@ import { defaultSearchPaths, pickInterpreters, readResource, repoRoot, standalon
 import { writeReadmeExample, type ReadmeExample } from "../lib/readme-example.ts";
 import { startStubApi, type StubRequest } from "../lib/stub-api.ts";
 import { packForOpen77 } from "./pack.ts";
+import { fivemOptions, verifyFivem } from "../lib/fivem-verify.ts";
 
 export const summary = "Run a resource on its environments and write compatibility reports";
 
-interface Check {
+export interface Check {
   name: string;
   status: "passed" | "failed" | "skipped";
   message: string;
 }
 
-interface Report {
+export interface Report {
   package: string;
   version: string;
   environment: string;
@@ -174,7 +175,7 @@ function findResource(name: string, search: string[]): string | null {
 }
 
 /** The resource and its dependency closure, dependencies first. */
-function closure(root: LoadedResource, search: string[]): { order: LoadedResource[]; missing: string[] } {
+export function closure(root: LoadedResource, search: string[]): { order: LoadedResource[]; missing: string[] } {
   const order: LoadedResource[] = [];
   const missing: string[] = [];
   const seen = new Set<string>();
@@ -650,6 +651,8 @@ export async function run(args: string[]): Promise<number> {
   if (env === "neovim" || env === "all") {
     reports.push(await verifyEngine("neovim", findNeovim(a.flags.nvim), res, m, search, example, stub));
   }
+  // FiveM: lib/fivem-verify.ts (--fivem-server, --fivem-port, SCRIPTGO_FIVEM_LICENSE_KEY).
+  if (env === "fivem" || env === "all") reports.push(await verifyFivem(res, m, search, fivemOptions(a.flags, stub, example)));
   await stubServer?.close();
   example?.cleanup();
   // Stored logs never carry local paths (they hold the user name): temporary folders and home.
