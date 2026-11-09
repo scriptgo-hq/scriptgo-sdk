@@ -8,6 +8,7 @@ import {
   Classification,
   CompatibilityStatus,
   EnvironmentKind,
+  EnvironmentSales,
   EnvironmentStatus,
   ListingStatus,
   OfferInterval,
@@ -26,6 +27,9 @@ export const Environment = z.object({
   name: z.string(),
   kind: EnvironmentKind,
   status: EnvironmentStatus,
+  /** Whether the rights holder of the underlying game allows paid packages there. */
+  sales: EnvironmentSales,
+  salesNote: z.string(),
   luaDialects: z.array(z.string()),
   runtimeVersions: z.array(z.string()),
   adapterVersion: z.string(),

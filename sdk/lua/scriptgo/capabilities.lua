@@ -127,6 +127,8 @@ M.ENVIRONMENTS = {
         -- or runtime that hosts Lua itself.
         kind = "mod_platform",
         status = "experimental",
+        sales = "review",
+        salesNote = "Paid packages are reviewed first: the game's rights holder restricts commercial use of its IP.",
         dialects = { "5.4" },
         summary = "Packages run on OPEN//77 servers and clients through a small shim that maps ScriptGo.* onto Open77.* (`scriptgo pack --target open77`).",
         sides = { "server", "client" },
@@ -180,8 +182,71 @@ M.ENVIRONMENTS = {
             "Measured with Neovim 0.12.6 (LuaJIT 2.1) on Windows, headless (nvim --headless --clean -l); macOS, Linux and older Neovim releases are not measured yet.",
         },
     },
+    -- Planned mod platforms (docs/research/game-modding-landscape.md). No adapter yet: no
+    -- capabilities, no install steps. `sales` says whether paid packages are possible there.
+    hytale = {
+        name = "Hytale", kind = "mod_platform", status = "planned", dialects = {}, sides = { "server" },
+        summary = "A server plugin that runs SCRIPT//GO packages on Hytale servers; players install nothing.",
+        sales = "allowed", salesNote = "The game's terms allow paid mods and plugins.",
+        capabilities = {}, notes = {}, limitations = {},
+    },
+    garrysmod = {
+        name = "Garry's Mod", kind = "mod_platform", status = "planned", dialects = { "luajit" }, sides = { "server", "client" },
+        summary = "Packages on Garry's Mod servers and clients (roleplay, sandbox, game modes), through its Lua.",
+        sales = "allowed", salesNote = "The developer allows selling mods you own, outside the Steam Workshop.",
+        capabilities = {}, notes = {}, limitations = {},
+    },
+    rust = {
+        name = "Rust (Oxide/Carbon)", kind = "mod_platform", status = "planned", dialects = { "5.4" }, sides = { "server" },
+        summary = "An Oxide/Carbon plugin that runs SCRIPT//GO packages on Rust servers through an embedded Lua VM.",
+        sales = "allowed", salesNote = "The developer allows selling mods you own.",
+        capabilities = {}, notes = {}, limitations = {},
+    },
+    beammp = {
+        name = "BeamMP", kind = "mod_platform", status = "planned", dialects = { "5.3", "luajit" }, sides = { "server", "client" },
+        summary = "BeamMP server plugins and BeamNG.drive client mods, for driving and roleplay servers.",
+        sales = "review", salesNote = "No published rule on selling mods: free packages only until the rights holder confirms in writing.",
+        capabilities = {}, notes = {}, limitations = {},
+    },
+    roblox = {
+        name = "Roblox", kind = "mod_platform", status = "planned", dialects = { "luau" }, sides = { "server", "client" },
+        summary = "A Luau compatibility layer for Roblox experiences.",
+        sales = "review", salesNote = "Roblox sells creations through its own store: free packages only until a legal review.",
+        capabilities = {}, notes = {}, limitations = {},
+    },
+    fivem = {
+        name = "FiveM", kind = "mod_platform", status = "planned", dialects = { "5.4" }, sides = { "server", "client" },
+        summary = "A shim that runs SCRIPT//GO packages on FiveM servers, with the same threads, events and exports model.",
+        sales = "free_only", salesNote = "The platform's creator terms keep paid content on its own marketplace: free packages only.",
+        capabilities = {}, notes = {}, limitations = {},
+    },
+    redm = {
+        name = "RedM", kind = "mod_platform", status = "planned", dialects = { "5.4" }, sides = { "server", "client" },
+        summary = "The same shim on RedM roleplay servers.",
+        sales = "free_only", salesNote = "The platform's creator terms keep paid content on its own marketplace: free packages only.",
+        capabilities = {}, notes = {}, limitations = {},
+    },
+    kcdmp = {
+        name = "KCD:MP", kind = "mod_platform", status = "planned", dialects = { "5.4" }, sides = { "server", "client" },
+        summary = "Game modes and client scripts for KCD:MP medieval roleplay servers (Kingdom Come: Deliverance II).",
+        sales = "free_only", salesNote = "The game's developer does not allow selling mods: free packages only.",
+        capabilities = {}, notes = {}, limitations = {},
+    },
+    zomboid = {
+        name = "Project Zomboid", kind = "mod_platform", status = "planned", dialects = { "5.1" }, sides = { "server", "client" },
+        summary = "Project Zomboid server and client mods, for survival and roleplay servers.",
+        sales = "free_only", salesNote = "The game's terms do not allow selling mods without approval: free packages only.",
+        capabilities = {}, notes = {}, limitations = {},
+    },
+    dst = {
+        name = "Don't Starve Together", kind = "mod_platform", status = "planned", dialects = { "5.1" }, sides = { "server", "client" },
+        summary = "Don't Starve Together server and client mods.",
+        sales = "free_only", salesNote = "The game's developer does not allow paid or paywalled mods: free packages only.",
+        capabilities = {}, notes = {}, limitations = {},
+    },
 }
 
-M.ORDER = { "standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim" }
+M.ORDER = { "standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim",
+    "hytale", "garrysmod", "rust", "beammp", "roblox", "fivem", "redm", "kcdmp", "zomboid", "dst" }
 
 return M

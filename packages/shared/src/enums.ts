@@ -7,6 +7,9 @@ export type EnvironmentStatus = z.infer<typeof EnvironmentStatus>;
 /** runtime: an engine or runtime that hosts Lua itself. mod_platform: a layer on top of an existing game. */
 export const EnvironmentKind = z.enum(["runtime", "mod_platform"]);
 export type EnvironmentKind = z.infer<typeof EnvironmentKind>;
+/** Whether paid packages are possible there: allowed, free_only (the rights holder forbids selling), review. */
+export const EnvironmentSales = z.enum(["allowed", "free_only", "review"]);
+export type EnvironmentSales = z.infer<typeof EnvironmentSales>;
 
 export const CapabilitySupport = z.enum(["supported", "partial", "fallback", "unavailable"]);
 export type CapabilitySupport = z.infer<typeof CapabilitySupport>;

@@ -6,6 +6,8 @@
       "name": "Lua Standalone",
       "kind": "runtime",
       "status": "available",
+      "sales": "allowed",
+      "salesNote": "",
       "luaDialects": [
         "5.1",
         "5.4",
@@ -55,6 +57,8 @@
       "name": "LÖVE",
       "kind": "runtime",
       "status": "beta",
+      "sales": "allowed",
+      "salesNote": "",
       "luaDialects": [
         "LuaJIT"
       ],
@@ -105,6 +109,8 @@
       "name": "Godot 4",
       "kind": "runtime",
       "status": "beta",
+      "sales": "allowed",
+      "salesNote": "",
       "luaDialects": [
         "5.4",
         "LuaJIT"
@@ -157,6 +163,8 @@
       "name": "Luanti",
       "kind": "runtime",
       "status": "beta",
+      "sales": "allowed",
+      "salesNote": "",
       "luaDialects": [
         "5.1",
         "LuaJIT"
@@ -207,6 +215,8 @@
       "name": "OPEN//77",
       "kind": "mod_platform",
       "status": "experimental",
+      "sales": "review",
+      "salesNote": "Paid packages are reviewed first: the game's rights holder restricts commercial use of its IP.",
       "luaDialects": [
         "5.4"
       ],
@@ -258,6 +268,8 @@
       "name": "OpenResty",
       "kind": "runtime",
       "status": "planned",
+      "sales": "allowed",
+      "salesNote": "",
       "luaDialects": [
         "LuaJIT"
       ],
@@ -277,6 +289,8 @@
       "name": "Defold",
       "kind": "runtime",
       "status": "planned",
+      "sales": "allowed",
+      "salesNote": "",
       "luaDialects": [
         "LuaJIT"
       ],
@@ -296,6 +310,8 @@
       "name": "Neovim",
       "kind": "runtime",
       "status": "beta",
+      "sales": "allowed",
+      "salesNote": "",
       "luaDialects": [
         "LuaJIT"
       ],
@@ -341,6 +357,215 @@
           "notes": "measured by verification reports"
         }
       ]
+    },
+    {
+      "slug": "hytale",
+      "name": "Hytale",
+      "kind": "mod_platform",
+      "status": "planned",
+      "sales": "allowed",
+      "salesNote": "The game's terms allow paid mods and plugins.",
+      "luaDialects": [],
+      "runtimeVersions": [],
+      "adapterVersion": "",
+      "summary": "A server plugin that runs SCRIPT//GO packages on Hytale servers; players install nothing.",
+      "capabilities": {},
+      "capabilityNotes": {},
+      "setupMarkdown": "",
+      "limitations": [],
+      "listed": true,
+      "sortOrder": 90,
+      "adapters": []
+    },
+    {
+      "slug": "garrysmod",
+      "name": "Garry's Mod",
+      "kind": "mod_platform",
+      "status": "planned",
+      "sales": "allowed",
+      "salesNote": "The developer allows selling mods you own, outside the Steam Workshop.",
+      "luaDialects": [
+        "LuaJIT"
+      ],
+      "runtimeVersions": [],
+      "adapterVersion": "",
+      "summary": "Packages on Garry's Mod servers and clients (roleplay, sandbox, game modes), through its Lua.",
+      "capabilities": {},
+      "capabilityNotes": {},
+      "setupMarkdown": "",
+      "limitations": [],
+      "listed": true,
+      "sortOrder": 100,
+      "adapters": []
+    },
+    {
+      "slug": "rust",
+      "name": "Rust (Oxide/Carbon)",
+      "kind": "mod_platform",
+      "status": "planned",
+      "sales": "allowed",
+      "salesNote": "The developer allows selling mods you own.",
+      "luaDialects": [
+        "5.4"
+      ],
+      "runtimeVersions": [],
+      "adapterVersion": "",
+      "summary": "An Oxide/Carbon plugin that runs SCRIPT//GO packages on Rust servers through an embedded Lua VM.",
+      "capabilities": {},
+      "capabilityNotes": {},
+      "setupMarkdown": "",
+      "limitations": [],
+      "listed": true,
+      "sortOrder": 110,
+      "adapters": []
+    },
+    {
+      "slug": "beammp",
+      "name": "BeamMP",
+      "kind": "mod_platform",
+      "status": "planned",
+      "sales": "review",
+      "salesNote": "No published rule on selling mods: free packages only until the rights holder confirms in writing.",
+      "luaDialects": [
+        "5.3",
+        "LuaJIT"
+      ],
+      "runtimeVersions": [],
+      "adapterVersion": "",
+      "summary": "BeamMP server plugins and BeamNG.drive client mods, for driving and roleplay servers.",
+      "capabilities": {},
+      "capabilityNotes": {},
+      "setupMarkdown": "",
+      "limitations": [],
+      "listed": true,
+      "sortOrder": 120,
+      "adapters": []
+    },
+    {
+      "slug": "roblox",
+      "name": "Roblox",
+      "kind": "mod_platform",
+      "status": "planned",
+      "sales": "review",
+      "salesNote": "Roblox sells creations through its own store: free packages only until a legal review.",
+      "luaDialects": [
+        "Luau"
+      ],
+      "runtimeVersions": [],
+      "adapterVersion": "",
+      "summary": "A Luau compatibility layer for Roblox experiences.",
+      "capabilities": {},
+      "capabilityNotes": {},
+      "setupMarkdown": "",
+      "limitations": [],
+      "listed": true,
+      "sortOrder": 130,
+      "adapters": []
+    },
+    {
+      "slug": "fivem",
+      "name": "FiveM",
+      "kind": "mod_platform",
+      "status": "planned",
+      "sales": "free_only",
+      "salesNote": "The platform's creator terms keep paid content on its own marketplace: free packages only.",
+      "luaDialects": [
+        "5.4"
+      ],
+      "runtimeVersions": [],
+      "adapterVersion": "",
+      "summary": "A shim that runs SCRIPT//GO packages on FiveM servers, with the same threads, events and exports model.",
+      "capabilities": {},
+      "capabilityNotes": {},
+      "setupMarkdown": "",
+      "limitations": [],
+      "listed": true,
+      "sortOrder": 140,
+      "adapters": []
+    },
+    {
+      "slug": "redm",
+      "name": "RedM",
+      "kind": "mod_platform",
+      "status": "planned",
+      "sales": "free_only",
+      "salesNote": "The platform's creator terms keep paid content on its own marketplace: free packages only.",
+      "luaDialects": [
+        "5.4"
+      ],
+      "runtimeVersions": [],
+      "adapterVersion": "",
+      "summary": "The same shim on RedM roleplay servers.",
+      "capabilities": {},
+      "capabilityNotes": {},
+      "setupMarkdown": "",
+      "limitations": [],
+      "listed": true,
+      "sortOrder": 150,
+      "adapters": []
+    },
+    {
+      "slug": "kcdmp",
+      "name": "KCD:MP",
+      "kind": "mod_platform",
+      "status": "planned",
+      "sales": "free_only",
+      "salesNote": "The game's developer does not allow selling mods: free packages only.",
+      "luaDialects": [
+        "5.4"
+      ],
+      "runtimeVersions": [],
+      "adapterVersion": "",
+      "summary": "Game modes and client scripts for KCD:MP medieval roleplay servers (Kingdom Come: Deliverance II).",
+      "capabilities": {},
+      "capabilityNotes": {},
+      "setupMarkdown": "",
+      "limitations": [],
+      "listed": true,
+      "sortOrder": 160,
+      "adapters": []
+    },
+    {
+      "slug": "zomboid",
+      "name": "Project Zomboid",
+      "kind": "mod_platform",
+      "status": "planned",
+      "sales": "free_only",
+      "salesNote": "The game's terms do not allow selling mods without approval: free packages only.",
+      "luaDialects": [
+        "5.1"
+      ],
+      "runtimeVersions": [],
+      "adapterVersion": "",
+      "summary": "Project Zomboid server and client mods, for survival and roleplay servers.",
+      "capabilities": {},
+      "capabilityNotes": {},
+      "setupMarkdown": "",
+      "limitations": [],
+      "listed": true,
+      "sortOrder": 170,
+      "adapters": []
+    },
+    {
+      "slug": "dst",
+      "name": "Don't Starve Together",
+      "kind": "mod_platform",
+      "status": "planned",
+      "sales": "free_only",
+      "salesNote": "The game's developer does not allow paid or paywalled mods: free packages only.",
+      "luaDialects": [
+        "5.1"
+      ],
+      "runtimeVersions": [],
+      "adapterVersion": "",
+      "summary": "Don't Starve Together server and client mods.",
+      "capabilities": {},
+      "capabilityNotes": {},
+      "setupMarkdown": "",
+      "limitations": [],
+      "listed": true,
+      "sortOrder": 180,
+      "adapters": []
     }
   ]
 }
