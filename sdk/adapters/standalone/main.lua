@@ -294,7 +294,8 @@ local function verify()
                     check("export:" .. e, side and side.exports[e] ~= nil, "")
                 end
                 h:join(2, "Verifier")
-                h:tick(100)
+                -- Simulated time: long enough for start-up threads and self-checks (SGCHECK lines).
+                h:tick(tonumber(flags.settle) or 2000)
                 h:drop(2, "verify_done")
                 h.host:stopAll()
                 h:tick(0)

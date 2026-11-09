@@ -34,8 +34,8 @@ const specs = readdirSync(specDir)
   .filter((f) => f.endsWith("_spec.lua"))
   .sort()
   .map((f) => join(specDir, f));
-// Resources with test_script files: official packages and examples.
-const packageDirs = [join(root, "sdk", "packages"), join(root, "examples", "packages")];
+// Resources with test_script files: official packages, the conformance probe and examples.
+const packageDirs = [join(root, "sdk", "packages"), join(root, "sdk", "conformance"), join(root, "examples", "packages")];
 const packages = [];
 for (const dir of packageDirs) {
   if (!existsSync(dir)) continue;
