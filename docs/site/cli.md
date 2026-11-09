@@ -103,8 +103,8 @@ per Lua interpreter), `open77`, `luanti`, `love2d`, `godot` or `all`:
 
 Without the server binary, Docker or the engine, that run is reported as skipped and writes no
 report. `--stub-api` starts a local stand-in for the licensing API and gives the resource its URL
-and a valid key (standalone and OPEN//77 runs); `--api <url> --license-key <key>` uses a real API
-instead.
+and a valid key (standalone, LÖVE and OPEN//77 runs); `--api <url> --license-key <key>` uses a
+real API instead.
 
 #### The README example runs too
 

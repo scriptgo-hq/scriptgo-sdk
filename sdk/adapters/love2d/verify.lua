@@ -2,6 +2,7 @@
 --
 --   lovec <game> --scriptgo-verify <resourceDir> [--search <dir>]... [--report <out.json>]
 --                [--settle <ms>] [--evidence <kind>=<value>]... [--with <exampleDir>]
+--                [--config <config.json>]   (same shape as the standalone host's config)
 --
 -- Starts the resource and its dependencies through the love2d adapter, ticks them from real
 -- love.update frames for --settle ms (default 2000), stops them, and writes a compatibility report
@@ -23,7 +24,7 @@ return function(sgl, argv)
             if a == "--scriptgo-verify" then flags.resource = v; i = i + 2
             elseif a == "--search" then search[#search + 1] = v; i = i + 2
             elseif a == "--evidence" then extraEvidence[#extraEvidence + 1] = v; i = i + 2
-            elseif a == "--report" or a == "--settle" or a == "--with" then flags[a:sub(3)] = v; i = i + 2
+            elseif a == "--report" or a == "--settle" or a == "--with" or a == "--config" then flags[a:sub(3)] = v; i = i + 2
             else i = i + 1 end
         end
     end
@@ -85,9 +86,16 @@ return function(sgl, argv)
     local root = sgl.absolute(flags.resource)
     for k, s in ipairs(search) do search[k] = sgl.absolute(s) end
 
+    -- --config: resources, convars, permissions, as for the standalone host (licensing runs).
+    local config
+    if flags.config then
+        config = sgl.readFile(sgl.absolute(flags.config))
+        if not config then return fatal("cannot read config " .. flags.config) end
+    end
+
     local logs, errorMessages = {}, {}
     local okNew, sg = pcall(sgl.new, {
-        resources = {}, search = search, autoStart = false, storageDir = STORAGE, quiet = true,
+        resources = {}, search = search, autoStart = false, storageDir = STORAGE, quiet = true, config = config,
         logSink = function(level, origin, msg)
             local line = ("[%s] %s %s"):format(level, origin, tostring(msg))
             logs[#logs + 1] = line

@@ -83,7 +83,7 @@ end
 local SG = {}
 SG.__index = SG
 
--- opts: resources, search, core, config, storageDir, player = { id, name }, autoStart (true),
+-- opts: resources, search, core, config (table or JSON text), storageDir, player = { id, name }, autoStart (true),
 -- logLevel, quiet, logSink, curl, http, httpThread, budgetMs, consoleKey (scancode, default "`").
 function M.new(opts)
     opts = opts or {}
@@ -91,6 +91,9 @@ function M.new(opts)
     if not coreDir then error("scriptgo_love: the SCRIPT//GO core (init.lua) was not found; pass opts.core", 2) end
     local scriptgo = assert(loadChunk(coreDir .. "init.lua"))(coreDir, readAny)
     local makeAdapter = assert(loadChunk(HERE .. "adapter.lua"))()
+    -- opts.config: a table, or its JSON text (the verify mode reads it from a file).
+    local config = opts.config
+    if type(config) == "string" then config = scriptgo.json.decode(config) end
     local self = setmetatable({
         scriptgo = scriptgo,
         player = opts.player or { id = 1, name = "Player" },
@@ -101,7 +104,7 @@ function M.new(opts)
     for _, dir in ipairs(opts.search or { "" }) do self.search[#self.search + 1] = normalize(dir) end
     local userSink = opts.logSink
     self.adapter = makeAdapter(scriptgo, {
-        config = opts.config, storageDir = opts.storageDir, localPlayerId = self.player.id,
+        config = config, storageDir = opts.storageDir, localPlayerId = self.player.id,
         logLevel = opts.logLevel, quiet = opts.quiet, curl = opts.curl, http = opts.http,
         httpThread = opts.httpThread, maxToasts = opts.maxToasts,
         logSink = function(level, origin, msg)

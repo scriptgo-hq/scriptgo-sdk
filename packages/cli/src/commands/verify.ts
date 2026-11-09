@@ -507,6 +507,7 @@ function sha256File(p: string): string {
  */
 async function verifyEngine(
   environment: "love2d" | "godot", exe: string | null, res: LoadedResource, m: ParsedManifest, search: string[], example?: ReadmeExample | null,
+  stub?: ApiTarget,
 ): Promise<Report> {
   const started = Date.now();
   const base = (status: Report["status"], checks: Check[], log = ""): Report => ({
@@ -534,6 +535,16 @@ async function verifyEngine(
   const verifyArgs = ["--scriptgo-verify", res.root, "--report", reportFile, "--settle", "2000"];
   for (const s of search) if (existsSync(s)) verifyArgs.push("--search", s);
   if (example) verifyArgs.push("--with", example.dir);
+  // LÖVE takes the standalone config shape: the API's URL and key reach the resource as config.
+  const firstRequest = stub?.requests.length ?? 0;
+  if (stub && environment === "love2d") {
+    const config = join(tmp, "config.json");
+    writeFileSync(config, JSON.stringify({
+      resources: { [m.name]: { api: stub.url, license_key: stub.licenseKey } },
+      convars: { scriptgo_api: stub.url },
+    }));
+    verifyArgs.push("--config", config);
+  }
   const argv = environment === "love2d"
     ? [join(repoRoot, "examples", "love2d", "demo"), ...verifyArgs, "--evidence", `engine-sha256=${sha256File(exe)}`]
     : ["--headless", "--path", join(repoRoot, "examples", "godot", "demo"), "--", ...verifyArgs];
@@ -552,7 +563,11 @@ async function verifyEngine(
     report = base("failing", [{ name: "engine_run", status: "failed", message: `no valid report (exit ${r.status}): ${e instanceof Error ? e.message.split("\n")[0] : String(e)}` }], tail);
   }
   rmSync(tmp, { recursive: true, force: true });
-  report.evidence = { ...report.evidence, ...exampleEvidence(example) };
+  if (stub && environment === "love2d") {
+    report.checks.push(...apiChecks(stub.requests, firstRequest, "love2d", report.adapterVersion));
+    report.log = report.log.split(stub.licenseKey).join("<license_key>").split(stub.url).join("<stub-api>");
+  }
+  report.evidence = { ...report.evidence, ...exampleEvidence(example), ...(stub && environment === "love2d" ? { api: stub.label } : {}) };
   report.status = statusOf(report.checks);
   report.durationMs = Date.now() - started;
   return report;
@@ -612,7 +627,7 @@ export async function run(args: string[]): Promise<number> {
     }));
   }
   if (env === "love2d" || env === "all") {
-    reports.push(await verifyEngine("love2d", findLove(a.flags.love), res, m, search, example));
+    reports.push(await verifyEngine("love2d", findLove(a.flags.love), res, m, search, example, stub));
   }
   if (env === "godot" || env === "all") {
     reports.push(await verifyEngine("godot", findGodot(a.flags.godot), res, m, search, example));
