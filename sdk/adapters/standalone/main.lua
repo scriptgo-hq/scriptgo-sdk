@@ -282,7 +282,17 @@ local function verify()
         local declared = #m.environments == 0
         for _, e in ipairs(m.environments) do if e == env then declared = true end end
         check("environment_declared", declared, env)
-        local h = scriptgo.testing.harness({ environment = env })
+        -- Simulated players and clock, but with --config the real config and HTTP (curl) of the
+        -- standalone adapter, so a resource can be verified against a live (or stub) API.
+        local adapter = scriptgo.testing.memoryAdapter({ environment = env })
+        adapter.adapterVersion = scriptgo.VERSION
+        if flags.config then
+            local real = makeAdapter(scriptgo, { config = loadConfig(), quiet = true })
+            adapter.config, adapter.http = real.config, real.http
+            adapter.capabilities.http = real.capabilities.http ~= false
+            adapter.capabilities.licensing = real.capabilities.licensing ~= false
+        end
+        local h = scriptgo.testing.harness({ adapter = adapter, environment = env })
         local ok, err = addWithDeps(h.host, root)
         check("dependencies_resolved", ok ~= nil, err or "")
         if ok then

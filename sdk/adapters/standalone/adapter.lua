@@ -181,13 +181,23 @@ return function(scriptgo, opts)
         if isWindows then return '"' .. tostring(s):gsub('"', '\\"') .. '"' end
         return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
     end
+    -- os.tmpname() on Windows: the UCRT gives a full path in %TEMP%, the old MSVCRT a name at the
+    -- drive root ("\s1v4."), which is usually not writable.
+    local function tempFile()
+        local name = os.tmpname()
+        if isWindows and name:find("^[\\/]") then
+            local dir = os.getenv("TEMP") or os.getenv("TMP") or "."
+            name = dir .. "\\" .. name:gsub("^[\\/]+", "")
+        end
+        return name
+    end
     adapter.http = {
         request = function(req, done)
             if adapter.capabilities.http == false then
                 done({ status = 0, body = "", error = "http_unavailable" })
                 return
             end
-            local tmpBody = os.tmpname()
+            local tmpBody = tempFile()
             local parts = { "curl -s -S -m " .. tostring(math.floor((req.timeoutMs or 10000) / 1000)) }
             parts[#parts + 1] = "-X " .. (req.method or "GET")
             for k, v in pairs(req.headers or {}) do parts[#parts + 1] = "-H " .. shellQuote(k .. ": " .. v) end
@@ -195,14 +205,18 @@ return function(scriptgo, opts)
                 writeFile(tmpBody, req.body)
                 parts[#parts + 1] = "--data-binary @" .. shellQuote(tmpBody)
             end
-            parts[#parts + 1] = "-w " .. shellQuote("\n__SG_STATUS__%{http_code}")
+            -- A backslash and an n, which curl turns into a newline: a real newline would end the
+            -- command line under cmd.exe (Windows) before the URL.
+            parts[#parts + 1] = "-w " .. shellQuote("\\n__SG_STATUS__%{http_code}")
             parts[#parts + 1] = shellQuote(req.url)
             local p = io.popen(table.concat(parts, " ") .. (isWindows and " 2>NUL" or " 2>/dev/null"))
             local out = p and p:read("*a") or ""
             if p then p:close() end
             os.remove(tmpBody)
             local body, status = out:match("^(.*)\n__SG_STATUS__(%d+)$")
-            done({ status = tonumber(status) or 0, body = body or out })
+            local code = tonumber(status) or 0
+            -- curl writes 000 when the exchange did not complete (refused, timeout, DNS).
+            done({ status = code, body = body or out, error = code == 0 and "http_failed" or nil })
         end,
     }
 

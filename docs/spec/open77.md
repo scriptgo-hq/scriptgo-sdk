@@ -31,7 +31,7 @@ scriptgo pack my_resource --target open77 --out dist
 
 ```lua
 shared_script "scriptgo_shim.lua"         -- the namespace, storage, events, exports
-server_script "scriptgo_shim_server.lua"  -- players, permissions, config, server notifications
+server_script "scriptgo_shim_server.lua"  -- players, permissions, config, notifications, http, licensing
 client_script "scriptgo_shim_client.lua"  -- client notifications
 shared_script "shared/..."                -- then the resource's own scripts
 ```
@@ -52,7 +52,8 @@ shared script, and because its client sandbox has no `setmetatable`.
 | `permissions.has(id, privilege)` | `Open77.acl.isAllowed` (permission `acl.read`); id `0` is the console | server |
 | `config.get(key, default)` | `GetConvar("<resource>:<key>")`, which falls through to the resource's tunables; JSON, booleans and numbers decoded | server |
 | `ui.notify(target, payload)` | server: `Open77.notifications.send/broadcast` (permission `network.events`); client: the `open77_notifications` package's `show` export | both |
-| `http`, `licensing` | not available: every call raises `capability_unavailable:<cap>@open77` | — |
+| `http.request{ method, url, headers, body }` | `Open77.http.request` (permission `http.request`) awaited on a promise; answers `{ status, body, headers, error }`, `status = 0` when the exchange did not complete; a request the server refuses at once answers `nil, reason` (`host_not_allowed`, `http_unavailable`...) | server |
+| `licensing.activate/verify` | POST to the `scriptgo_api` convar (default `http://localhost:4100`) over `Open77.http.request`, same request and answer shapes as every SCRIPT//GO host (`/v1/licenses/*`) | server |
 | events, exports, commands, promises | native OPEN//77 globals, untouched | both |
 
 ### Least privilege
@@ -60,15 +61,32 @@ shared script, and because its client sandbox has no `setmetatable`.
 The side files are cut by capability: a `-- @capability <name>` ... `-- @end` section is kept only
 when the manifest lists that capability (required or optional). The packed resource therefore
 names no native it does not use, and `pack` adds exactly the OPEN//77 permissions the kept
-sections need: `acl.read` for `permissions`, `network.events` for `ui`.
+sections need: `acl.read` for `permissions`, `network.events` for `ui`, `http.request` for `http`
+and `licensing`. Each kept section also switches its capability on, so
+`ScriptGo.capabilities.has(c)` is true exactly where the packed resource can call `c`.
+
+### Outbound HTTP is the operator's decision
+
+OPEN//77 keeps outbound HTTP off until the server operator turns it on, and then only towards the
+hosts they list. A resource that uses `http` or `licensing` needs, in `server.jsonc`:
+
+```jsonc
+"http": { "enabled": true, "allowedHosts": ["api.scriptgo.example"] },
+"convars": { "scriptgo_api": "https://api.scriptgo.example" }
+```
+
+`pack` prints this as a warning. Anything not on the list answers `nil, "host_not_allowed"` before a
+byte leaves the server, and redirects are never followed. The licence key itself goes in the
+`<resource>:license_key` convar (or a tunable), never in the resource folder.
 
 ### What `pack` refuses
 
 | Code | Why |
 |---|---|
-| `capability_unavailable:http@open77`, `capability_unavailable:licensing@open77` | A required capability OPEN//77 does not give SCRIPT//GO resources. Make it optional, or drop `open77` from `environments`. `--allow-unavailable` packs anyway |
 | `open77_no_os`, `open77_no_io`, `open77_no_debug`, `open77_no_package`, `open77_no_load` | The OPEN//77 sandbox has no `os`, `io`, `debug`, `package`, `loadstring`, `dofile` or `loadfile` |
 | `open77_client_no_metatables` | `setmetatable` / `getmetatable` in a shared or client script |
+
+`--allow-unportable` packs despite these, with each finding as a warning.
 | version ranges with `\|\|` | OPEN//77 dependency constraints cannot express them; dropped with a warning (`^` and `~` become two comparators) |
 
 `scriptgo validate` runs the same portability lint: an error when `environments` lists `open77`, a
@@ -90,6 +108,12 @@ writes one JSON report per run to `verification/reports/`:
   an error. Only the server half runs; no game client is launched. Without a server binary
   (`--open77-server` or `OP77_SERVER_EXE`) the report is `skipped`, never `verified`.
 
+With `--stub-api`, verify also starts a loopback stand-in for the licensing API that parses every
+request with the API's own schemas (`VerifyBody`, `ActivateBody`) and answers in its shapes. The
+resource gets the stub's URL and a valid key as config (`api`, `license_key`) and `scriptgo_api`;
+on OPEN//77 the server's outbound HTTP is switched on with `127.0.0.1` as the only allowed host. The
+report gains `api:bodies_valid`, `api:environment` and `api:adapter_version`.
+
 On both, a resource can report its own checks by printing `SGCHECK PASS <name>`,
 `SGCHECK FAIL <name> <detail>` and finally `SGCHECK DONE ...`; each line becomes a check of the
 report, and started checks that never print `DONE` fail.
@@ -101,6 +125,13 @@ player-id guards, promises, synchronous and asynchronous cross-resource exports,
 Permissions kits). On 2026-11-09 it passed 25/25 on the standalone host under Lua 5.4, 5.1 and
 LuaJIT, and 25/25 on an OPEN//77 dedicated server (Lua 5.4), alongside the three official
 packages. See `TEST_RESULTS.md`.
+
+`sdk/conformance/sg_probe_net` checks `http` and `licensing` against that stub: GET, a 404 that is an
+answer and not a failure, verify (valid and unknown key), activate, verify by deployment token,
+activate refused with `unknown_key`, and on OPEN//77 the allow-list refusal of any other host. On
+2026-11-09 it passed 9/9 on the standalone host (Lua 5.4, 5.1, LuaJIT) and 10/10 on an OPEN//77
+dedicated server; the sample paid package Inventory Pro reached `license active` through the same
+path on both.
 
 Not yet measured: the client half on OPEN//77 (it needs a running game client), and packages
 whose behaviour depends on connected players.

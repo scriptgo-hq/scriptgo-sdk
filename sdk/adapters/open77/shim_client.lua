@@ -5,6 +5,7 @@ local O = SG._open77
 -- @capability ui
 -- notify(payload) or notify(nil, payload): the local player's toast, shown by the bundled
 -- open77_notifications package. The call is asynchronous; a missing package is logged, not raised.
+O.caps.ui = true
 SG.ui = {
     notify = function(target, payload)
         if payload == nil then payload = target end

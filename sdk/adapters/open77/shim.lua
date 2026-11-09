@@ -18,10 +18,11 @@ local side = isServer and "server" or "client"
 local resourceName = GetCurrentResourceName()
 local J = rawget(_G, "json") or Open77.json
 
+-- Always present on both sides. Each `@capability` section of the side files switches its own
+-- capability on, so `capabilities.has` answers for what this packed resource can really call.
 local CAPS = {
-    events = true, logging = true, storage = true, commands = true, ui = true,
-    players = isServer, permissions = isServer, config = isServer,
-    http = false, licensing = false,
+    events = true, logging = true, storage = true, commands = true, ui = false,
+    players = false, permissions = false, config = false, http = false, licensing = false,
 }
 local ALL = { "events", "logging", "storage", "players", "permissions", "commands", "config", "ui", "http", "licensing" }
 
@@ -59,7 +60,7 @@ SG.runtime = {
     luaVersion = function() return _VERSION end,
     environment = function() return "open77" end,
     side = function() return side end,
-    adapterVersion = function() return "open77-shim-0.2.0" end,
+    adapterVersion = function() return "open77-shim-0.3.0" end,
 }
 
 SG.resource = {
