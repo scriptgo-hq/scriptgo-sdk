@@ -1,0 +1,26 @@
+{
+  "name": "@scriptgo/cli",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "scriptgo": "./bin/scriptgo.mjs"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@scriptgo/manifest": "workspace:*",
+    "tsx": "^4.19.0",
+    "fflate": "^0.8.3",
+    "@scriptgo/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0",
+    "@types/node": "^22.15.0"
+  }
+}
