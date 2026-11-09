@@ -11,6 +11,9 @@ other environments. It takes about fifteen minutes.
 If you have written a resource for a multiplayer game server before, you already know the format. A
 SCRIPT//GO package is a folder with a declarative manifest and shared, server and client scripts.
 
+The guide is written in Lua, because every environment runs Lua. TypeScript runs on the .NET kit:
+see [Languages](#languages) at the end.
+
 > [!WARNING]
 > The `scriptgo` CLI and the environment adapters are in preview. Commands may gain flags. See
 > [CLI](/docs/cli) for the current state.
@@ -234,6 +237,95 @@ A published version is immutable. To fix `0.1.0`, publish `0.1.1`.
 An environment shows **Verified** on your package page only after a compatibility run passed for
 that release. Declaring an environment in the manifest is not enough: until a run passes, it
 shows as **Not tested**.
+
+## Languages
+
+Lua runs in every environment. TypeScript and JavaScript run on the .NET kit (`dotnet`, an
+experimental environment) and nowhere else yet: the other environments skip a TypeScript resource.
+C# is planned; a `.cs` script is refused today (`unsupported_script`).
+
+A TypeScript resource has the same shape. Its manifest can be `scriptgo.json`, the same manifest in
+JSON, or `scriptgo.lua` as above.
+
+```json
+{
+  "resource": "greeter_ts",
+  "version": "0.1.0",
+  "scriptgo_version": ">=0.1.0",
+  "title": "Greeter",
+  "license": "MIT",
+  "category": "other",
+  "environments": ["dotnet"],
+  "capabilities": ["events", "logging"],
+  "server_scripts": ["server/main.ts"]
+}
+```
+
+```ts
+// server/main.ts
+const seen = new Map<string, number>();
+
+// TypeScript registers its exports with exports(name, fn).
+exports("greet", (who: string) => {
+  const n = (seen.get(who) ?? 0) + 1;
+  seen.set(who, n);
+  return `hello ${who} (${n})`;
+});
+
+AddEventHandler("onResourceStart", (resource: string) => {
+  if (resource === GetCurrentResourceName()) ScriptGo.log.info("greeter_ts started");
+});
+
+CreateThread(async () => {
+  await Wait(100); // Wait returns a promise in TypeScript
+  print("greeter_ts is ready");
+});
+```
+
+- Register exports with `exports(name, fn)`. Declarative exports in the manifest (`exports`,
+  `server_exports`) look for global functions, and the top-level functions of a TypeScript bundle
+  are not globals.
+- `Wait` returns a promise: `await` it inside an `async` thread.
+- A failed call throws a `ScriptGoError` whose `code` is the reason, where Lua returns
+  `nil, reason`.
+
+Run it on the .NET kit. The CLI compiles each `.ts` entry with esbuild into `<entry>.ts.js`, then
+the kit's console host runs the copy. It needs the .NET 10 SDK; the host is built on first use.
+
+```bash
+scriptgo verify greeter_ts --env dotnet --lang ts
+```
+
+A Lua resource calls the TypeScript export like any other, and the reverse works too. Values are
+copied between the two languages, never shared.
+
+```lua
+-- server/main.lua of a Lua resource that declares dependency "greeter_ts"
+CreateThread(function()
+  Wait(200)
+  print(exports.greeter_ts:greet("alder"))   -- hello alder (1)
+end)
+```
+
+esbuild removes the types without checking them, so run `tsc --noEmit` for type errors. The
+typings are `@scriptgo/types`, generated from the runtime contract. The package is not on npm yet:
+in the SCRIPT//GO repository it is `packages/types`. A resource's `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "types": ["@scriptgo/types"],
+    "strict": true,
+    "noEmit": true
+  }
+}
+```
+
+The runtime has no DOM and no Node.js, so leave their typings out. `scriptgo pack` puts each
+compiled `<entry>.ts.js` in the archive next to its `.ts`. How values, events and exports cross
+between languages is specified in `docs/spec/multi-language.md` in the repository.
 
 ## Next steps
 

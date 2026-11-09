@@ -1,9 +1,10 @@
 # The OPEN//77 target
 
-A SCRIPT//GO resource and an OPEN//77 resource are the same thing: a folder with a declarative Lua
-manifest and shared, server and client scripts written against the FiveM-shaped runtime
-(`CreateThread`, `Wait`, events, exports, `RegisterCommand`). This page describes the two
-directions between them and how compatibility is measured.
+A Lua SCRIPT//GO resource and an OPEN//77 resource have the same shape: a folder with a
+declarative Lua manifest and shared, server and client scripts written against the FiveM-shaped
+runtime (`CreateThread`, `Wait`, events, exports, `RegisterCommand`). OPEN//77 runs Lua only, so a
+TypeScript resource does not run there. This page describes the two directions between them and how
+compatibility is measured.
 
 Every OPEN//77 fact below was checked against the OPEN//77 devkit catalogue for build
 `2.50.0+op77.156`, and the runtime claims were measured on a real OPEN//77 dedicated server (see
