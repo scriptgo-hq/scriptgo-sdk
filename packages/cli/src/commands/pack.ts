@@ -63,6 +63,25 @@ export function referencedFiles(m: ParsedManifest, files: string[], manifestFile
   return [...set].sort();
 }
 
+/** Documents shipped in a SCRIPT//GO archive so the package page can show them. */
+export const DOC_FILES = ["README.md", "CHANGELOG.md", "LICENSE", "LICENSE.md", "LICENSE.txt"];
+
+/**
+ * The SCRIPT//GO upload archive, shared by `pack --target scriptgo` and `publish`: the referenced
+ * files plus test scripts and documents. Deterministic (fixed timestamps), so the same sources
+ * always give the same bytes and SHA-256.
+ */
+export function scriptgoArchive(m: ParsedManifest, all: string[], root: string, manifestFile: string): { zip: Uint8Array; files: string[] } {
+  const included = new Set(referencedFiles(m, all, manifestFile));
+  for (const t of m.testScripts) for (const f of expandGlob(t, all)) included.add(f);
+  for (const d of DOC_FILES) if (all.includes(d)) included.add(d);
+  const files = [...included].sort();
+  const entries: Record<string, Uint8Array> = {};
+  for (const f of files) entries[`${m.name}/${f}`] = readFileSync(join(root, f));
+  const zip = zipSync(entries, { level: 9, mtime: new Date("2026-01-01T00:00:00Z") });
+  return { zip, files };
+}
+
 const quote = (s: string): string => JSON.stringify(s);
 const list = (items: string[]): string => `{ ${items.map(quote).join(", ")} }`;
 
@@ -222,17 +241,13 @@ export async function run(args: string[]): Promise<number> {
   }
   const target = a.flags.target ?? "scriptgo";
   const out = resolve(a.flags.out ?? "dist");
-  const included = referencedFiles(m, files, res.manifestFile);
-
   if (target === "scriptgo") {
-    const entries: Record<string, Uint8Array> = {};
-    for (const f of included) entries[`${m.name}/${f}`] = readFileSync(join(res.root, f));
-    // Deterministic archive: fixed timestamps so the same sources give the same bytes and hash.
-    const zip = zipSync(entries, { level: 9, mtime: new Date("2026-01-01T00:00:00Z") });
+    // Same archive as `scriptgo publish` uploads, so a zip uploaded on the website gets the same page.
+    const { zip, files: packed } = scriptgoArchive(m, files, res.root, res.manifestFile);
     mkdirSync(out, { recursive: true });
     const file = join(out, `${m.name}-${m.version}.zip`);
     writeFileSync(file, zip);
-    console.log(`packed ${included.length} files -> ${file} (${zip.byteLength} bytes)`);
+    console.log(`packed ${packed.length} files -> ${file} (${zip.byteLength} bytes)`);
     return 0;
   }
 

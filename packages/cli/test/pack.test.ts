@@ -158,3 +158,22 @@ describe("selfChecks", () => {
     expect(selfChecks("nothing here")).toEqual([]);
   });
 });
+
+describe("pack --target scriptgo", () => {
+  it("ships README, CHANGELOG, LICENSE and test scripts, like publish", async () => {
+    const { scriptgoArchive } = await import("../src/commands/pack.ts");
+    const { buildArchive } = await import("../src/commands/publish.ts");
+    const { unzipSync } = await import("fflate");
+    const dir = join(repoRoot, "sdk", "packages", "sg_inventory");
+    const res = readResource(dir);
+    if (!res.result.ok) throw new Error("manifest");
+    const all = listFiles(res.root);
+    const packed = scriptgoArchive(res.result.manifest, all, res.root, res.manifestFile);
+    expect(packed.files).toContain("README.md");
+    for (const t of res.result.manifest.testScripts) expect(packed.files.some((f) => f === t || f.startsWith(t.split("*")[0]!))).toBe(true);
+    const names = Object.keys(unzipSync(packed.zip));
+    expect(names).toContain(`${res.result.manifest.name}/README.md`);
+    // The website upload and the CLI publish get byte-identical archives.
+    expect(Buffer.from(buildArchive(dir).zip).equals(Buffer.from(packed.zip))).toBe(true);
+  });
+});

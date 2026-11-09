@@ -4,19 +4,15 @@
 // uploads it as a new release, waits for validation, declares rights and publishes. The package is
 // created on first publish (slug = resource name with '_' turned into '-', or --package).
 // Rights are never assumed: without --owns-code the release is left validated but unpublished.
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { join } from "node:path";
-import { zipSync } from "fflate";
 import { Category } from "@scriptgo/shared";
 import { parseArgs } from "../lib/args.ts";
 import { listFiles, readResource } from "../lib/sdk.ts";
-import { referencedFiles } from "./pack.ts";
+import { scriptgoArchive } from "./pack.ts";
 import { ApiClient, ApiError, describeError } from "./_api-client.ts";
 
 export const summary = "Upload a resource as a new release and publish it (needs login)";
-
-const DOC_FILES = ["README.md", "CHANGELOG.md", "LICENSE", "LICENSE.md", "LICENSE.txt"];
 
 interface Check {
   stage: string;
@@ -39,14 +35,7 @@ export function buildArchive(dir: string): { zip: Uint8Array; name: string; vers
   const res = readResource(dir);
   if (!res.result.ok) throw new Error(res.result.errors.map((e) => `${e.code}: ${e.message}`).join("\n"));
   const m = res.result.manifest;
-  const all = listFiles(res.root);
-  const included = new Set(referencedFiles(m, all, res.manifestFile));
-  for (const t of m.testScripts) if (all.includes(t)) included.add(t);
-  for (const d of DOC_FILES) if (all.includes(d)) included.add(d);
-  const files = [...included].sort();
-  const entries: Record<string, Uint8Array> = {};
-  for (const f of files) entries[`${m.name}/${f}`] = readFileSync(join(res.root, f));
-  const zip = zipSync(entries, { level: 9, mtime: new Date("2026-01-01T00:00:00Z") });
+  const { zip, files } = scriptgoArchive(m, listFiles(res.root), res.root, res.manifestFile);
   return { zip, name: m.name, version: m.version, title: m.title, description: m.description, category: m.category, license: m.license, files };
 }
 

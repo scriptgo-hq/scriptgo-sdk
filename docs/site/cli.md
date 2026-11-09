@@ -52,7 +52,7 @@ scoped to one user. Revoke it from the same settings page if it leaks.
 | `scriptgo test <dir>` | Runs the resource's `test_script` files in the standalone host |
 | `scriptgo run <dir>...` | Runs resources in the standalone host, in simulated or real time |
 | `scriptgo verify <dir>` | Runs the resource on its environments and writes compatibility reports |
-| `scriptgo pack <dir>` | Builds a publishable `.zip`, or an OPEN//77 resource folder with `--target open77` |
+| `scriptgo pack <dir>` | Builds the `.zip` you can upload on the website: the same archive `publish` sends, README and tests included. `--target open77` builds an OPEN//77 resource folder instead |
 | `scriptgo login` | Saves a personal access token |
 | `scriptgo publish [dir]` | Uploads a release of the resource and publishes it |
 | `scriptgo add creator//package` | Installs a package into `./resources` |
