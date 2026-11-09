@@ -34,7 +34,7 @@ The core does not change. To be listed, an environment also needs an entry in th
 ## What an adapter looks like
 
 The adapter is a plain table. The reference adapters in `sdk/adapters/` (`standalone`, `love2d`,
-`godot`, `luanti`, `neovim`) show complete ones; the in-memory adapter in `sdk/lua/scriptgo/testing.lua` is
+`godot`, `luanti`, `neovim`, `cctweaked`) show complete ones; the in-memory adapter in `sdk/lua/scriptgo/testing.lua` is
 the smallest.
 
 ```lua
@@ -51,6 +51,9 @@ return {
   },
 
   now = function() return MyEngine.time_seconds() end,          -- monotonic, in seconds
+  -- Optional: Unix seconds, when the engine's os.time() is something else (CC: Tweaked's is the
+  -- in-game hour). Resources then get it from os.time() and ScriptGo.time.now().
+  -- wallTime = function() return math.floor(MyEngine.epoch_ms() / 1000) end,
   log = function(level, origin, message) MyEngine.log(level, origin .. ": " .. message) end,
   readFile = function(path) return MyEngine.read_text(path) end, -- nil when missing
   listFiles = function(root) return MyEngine.list_files(root) end, -- optional
@@ -124,6 +127,21 @@ core.register_globalstep(function() host:tick() end)
 -- What the plugin (sdk/adapters/neovim/lua/scriptgo_nvim/init.lua) does: a libuv timer whose
 -- callback runs on the main loop, so resources never run inside a fast event.
 timer:start(0, 10, vim.schedule_wrap(function() host:tick() end))
+```
+
+```lua env=cctweaked
+-- What the computer program (sdk/adapters/cctweaked/computer/scriptgo/sg.lua) does: a CC timer
+-- every server tick; other events (HTTP answers) go to the adapter.
+local timer = os.startTimer(0.05)
+while true do
+  local ev = table.pack(os.pullEventRaw())
+  if ev[1] == "timer" and ev[2] == timer then
+    host:tick(adapter.now())
+    timer = os.startTimer(0.05)
+  else
+    adapter.onEvent(ev[1], ev[2], ev[3], ev[4])
+  end
+end
 ```
 
 ## Sides

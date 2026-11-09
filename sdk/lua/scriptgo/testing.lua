@@ -26,6 +26,7 @@ end
 -- opts.environment  = environment id reported to resources (default "standalone")
 -- opts.permissions  = { [playerId] = { ["privilege"] = true } }
 -- opts.config       = { [resourceName] = { key = value }, _global = { convar = value } }
+-- opts.wallTime     = function returning Unix seconds, for hosts whose os.time is not (CC: Tweaked)
 function M.memoryAdapter(opts)
     opts = opts or {}
     local files = opts.files or {}
@@ -39,6 +40,7 @@ function M.memoryAdapter(opts)
         notifications = {},
         logs = {},
         httpLog = {},
+        wallTime = opts.wallTime,
     }
     local set = opts.capabilities
     for _, c in ipairs(caps.ALL) do

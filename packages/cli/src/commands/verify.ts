@@ -17,6 +17,13 @@
 //   neovim      runs `nvim --headless --clean -l sdk/adapters/neovim/verify.lua`: the plugin's libuv
 //               timer ticks the host on Neovim's main loop. Needs --nvim, SCRIPTGO_NVIM or
 //               tools/runtimes/neovim. HTTP and licensing through curl, so --stub-api applies.
+//   cctweaked   starts a real Minecraft: Java Edition server (Fabric + CC: Tweaked, pinned by
+//               sdk/adapters/cctweaked/runtime.mjs) on 127.0.0.1 with a throwaway flat world, places
+//               a ComputerCraft computer whose disk holds the core, the adapter and the resources,
+//               and reads the report the computer writes (lib/cctweaked.ts). Skipped until the
+//               operator accepts the Minecraft EULA themselves: --accept-minecraft-eula writes
+//               eula=true into the runtime's server/eula.txt (never a tracked file); nothing else
+//               writes it. --stub-api does not apply: licensing is not offered on Minecraft.
 //
 // Everywhere, lines a resource prints as `SGCHECK PASS|FAIL <name>` become checks of the report.
 //
@@ -45,6 +52,7 @@ import { parseArgs } from "../lib/args.ts";
 import { defaultSearchPaths, pickInterpreters, readResource, repoRoot, standaloneMain, type LoadedResource } from "../lib/sdk.ts";
 import { writeReadmeExample, type ReadmeExample } from "../lib/readme-example.ts";
 import { startStubApi, type StubRequest } from "../lib/stub-api.ts";
+import { acceptMinecraftEula, verifyCcTweaked } from "../lib/cctweaked.ts";
 import { packForOpen77 } from "./pack.ts";
 
 export const summary = "Run a resource on its environments and write compatibility reports";
@@ -193,6 +201,32 @@ function closure(root: LoadedResource, search: string[]): { order: LoadedResourc
   };
   visit(root);
   return { order, missing };
+}
+
+/**
+ * Resources a package's tests load next to it (`load({ with = { "sg_permissions" } })`), found in
+ * the search paths, with their own dependencies. Hosts that read the search paths at test time
+ * find them by themselves; a host with its own sandboxed disk (a CC: Tweaked computer) needs them
+ * copied in. Any quoted name in a test script that is also a resource folder counts.
+ */
+function testCompanions(res: LoadedResource, search: string[], have: Set<string>): LoadedResource[] {
+  if (!res.result.ok) return [];
+  const out: LoadedResource[] = [];
+  for (const rel of res.result.manifest.testScripts) {
+    const file = join(res.root, rel);
+    if (!existsSync(file)) continue;
+    for (const [, name] of readFileSync(file, "utf8").matchAll(/["']([A-Za-z0-9_-]{2,64})["']/g)) {
+      if (!name || have.has(name)) continue;
+      const dir = findResource(name, search);
+      if (!dir) continue;
+      for (const r of closure(readResource(dir), search).order) {
+        if (!r.result.ok || have.has(r.result.manifest.name)) continue;
+        have.add(r.result.manifest.name);
+        out.push(r);
+      }
+    }
+  }
+  return out;
 }
 
 /**
@@ -589,11 +623,11 @@ async function verifyEngine(
 }
 
 export async function run(args: string[]): Promise<number> {
-  const a = parseArgs(args, { booleans: ["help", "json", "stub-api", "no-readme-example"], repeatable: ["search"] });
+  const a = parseArgs(args, { booleans: ["help", "json", "stub-api", "no-readme-example", "accept-minecraft-eula"], repeatable: ["search"] });
   if (a.bools.has("help") || a.positional.length === 0) {
-    console.log(`scriptgo verify <resourceDir> [--env standalone|open77|luanti|love2d|godot|neovim|all] [--lua all|lua54|lua51|luajit]
+    console.log(`scriptgo verify <resourceDir> [--env standalone|open77|luanti|love2d|godot|neovim|cctweaked|all] [--lua all|lua54|lua51|luajit]
     [--luanti-image ${LUANTI_IMAGE}] [--luanti-seconds 3] [--love path\\to\\lovec.exe] [--godot path\\to\\Godot_console.exe]
-    [--nvim path\\to\\nvim.exe] [--no-readme-example]
+    [--nvim path\\to\\nvim.exe] [--cctweaked-seconds 3] [--cctweaked-timeout 600] [--accept-minecraft-eula] [--no-readme-example]
     [--search dir]... [--out verification/reports] [--json]
     [--stub-api | --api <url> --license-key <sg_live_...>]
     [--open77-server path\\to\\Open77.Server.exe] [--port 11861] [--settle 1500] [--timeout 30000]`);
@@ -650,6 +684,31 @@ export async function run(args: string[]): Promise<number> {
   if (env === "neovim" || env === "all") {
     reports.push(await verifyEngine("neovim", findNeovim(a.flags.nvim), res, m, search, example, stub));
   }
+  if (env === "cctweaked" || env === "all") {
+    const { order, missing } = closure(res, search);
+    if (missing.length > 0) {
+      reports.push({
+        package: m.name, version: m.version, environment: "cctweaked", status: "failing", runtimeVersion: "", adapterVersion: "", luaVersion: "",
+        durationMs: 0, checks: [{ name: "dependencies_resolved", status: "failed", message: missing.join(", ") }], log: "", evidence: {},
+      });
+    } else {
+      if (a.bools.has("accept-minecraft-eula")) {
+        console.log(`Minecraft EULA accepted by the operator (--accept-minecraft-eula): ${acceptMinecraftEula()}`);
+      }
+      const resources = order.filter((r) => r.result.ok).map((r) => ({ name: (r.result as { manifest: ParsedManifest }).manifest.name, dir: r.root }));
+      for (const r of testCompanions(res, search, new Set(resources.map((x) => x.name)))) {
+        resources.push({ name: (r.result as { manifest: ParsedManifest }).manifest.name, dir: r.root });
+      }
+      if (example) resources.push({ name: example.name, dir: example.dir });
+      const timeout = Number(a.flags["cctweaked-timeout"] ?? 600) * 1000;
+      const report = await verifyCcTweaked({
+        pkg: { name: m.name, version: m.version }, resources, resource: m.name, withResource: example?.name ?? null,
+        seconds: Number(a.flags["cctweaked-seconds"] ?? 3), readyTimeoutMs: timeout, reportTimeoutMs: Math.min(timeout, 180_000),
+      });
+      report.evidence = { ...report.evidence, ...exampleEvidence(example) };
+      reports.push(report);
+    }
+  }
   await stubServer?.close();
   example?.cleanup();
   // Stored logs never carry local paths (they hold the user name): temporary folders and home.
@@ -664,7 +723,7 @@ export async function run(args: string[]): Promise<number> {
     for (const c of r.checks) c.message = scrub(c.message);
   }
   if (reports.length === 0) {
-    console.error(`unknown environment '${env}' (standalone, open77, luanti, love2d, godot, neovim, all)`);
+    console.error(`unknown environment '${env}' (standalone, open77, luanti, love2d, godot, neovim, cctweaked, all)`);
     return 2;
   }
 

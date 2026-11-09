@@ -131,8 +131,11 @@ local function buildBaseEnv()
     env.utf8 = copyLib(rawget(_G, "utf8"))
     env.bit = copyLib(rawget(_G, "bit"))
     env.os = copyLib(os, { "time", "clock", "date", "difftime" })
+    -- Some hosts (CC: Tweaked) have no collectgarbage at all: then "count" is refused too.
+    local gc = rawget(_G, "collectgarbage")
     env.collectgarbage = function(opt)
-        if opt == "count" then return collectgarbage("count") end
+        if opt == "count" and gc then return gc("count") end
+        if opt == "count" then error("collectgarbage: not available on this host", 2) end
         error("collectgarbage: only \"count\" is available to resources", 2)
     end
     env._G = env
@@ -770,6 +773,16 @@ function Host:_buildEnv(side)
     local res = side.res
     local env = buildBaseEnv()
     local environment = self.environment
+    -- Hosts whose os.time is not Unix time (CC: Tweaked: the in-game hour) give a wall clock; then
+    -- os.time() means Unix seconds there too, and os.time(t) keeps converting a date table.
+    local wallTime = self.adapter.wallTime
+    if wallTime and env.os then
+        local hostTime = env.os.time
+        env.os.time = function(t)
+            if t == nil then return wallTime() end
+            return hostTime(t)
+        end
+    end
 
     local function inThread(fnName)
         if host.currentSide ~= side or not side.current then
@@ -973,7 +986,10 @@ function Host:_buildEnv(side)
     SG.json = { encode = json.encode, decode = json.decode, null = json.null, object = json.object }
     SG.time = {
         monotonic = function() return host.now end,
-        now = function() return os.time() end,
+        now = function()
+            if wallTime then return wallTime() end
+            return os.time()
+        end,
     }
     SG.runtime = {
         version = function() return M.VERSION end,
