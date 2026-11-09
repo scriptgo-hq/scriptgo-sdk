@@ -35,7 +35,7 @@ const GRACE_MS = 72 * 3600 * 1000;
 
 export async function startStubApi(opts: { packages: string[]; environments?: string[]; host?: string }): Promise<StubApi> {
   const licenseKey = "sg_live_stub_" + randomBytes(12).toString("hex");
-  const environments = opts.environments ?? ["standalone", "love2d", "godot", "luanti", "openresty", "defold", "neovim", "open77"];
+  const environments = opts.environments ?? ["standalone", "love2d", "godot", "luanti", "openresty", "defold", "neovim", "open77", "dotnet"];
   const deployments = new Map<string, { environment: string; activationId: string }>();
   const requests: StubRequest[] = [];
   const periodEnd = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();

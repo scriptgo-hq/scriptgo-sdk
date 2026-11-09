@@ -1,0 +1,811 @@
+{
+  "idl": 1,
+  "runtime": "0.1.0",
+  "description": "The SCRIPT//GO runtime contract, language-neutral. It describes what the kits expose to resources today; docs/spec/runtime-idl.md explains the format, docs/spec/multi-language.md the semantics across languages. Typings are generated from this file (tools/gen-types.mjs -> packages/types).",
+  "sides": ["server", "client"],
+  "languages": {
+    "lua": {
+      "status": "implemented",
+      "extensions": [".lua"],
+      "failure": "A call that can fail answers nil (or false) followed by a reason string; misuse (wrong argument types, calls outside a thread) raises a Lua error.",
+      "sandbox": "string, table, math, utf8, os.time/clock/date/difftime, pcall, xpcall, error, assert, select, type, tostring, tonumber, pairs, ipairs, next, rawget/rawset/rawequal/rawlen, setmetatable (no __gc), getmetatable, unpack, collectgarbage(\"count\"). No io, debug, package, load, loadstring, dofile, loadfile, coroutine."
+    },
+    "js": {
+      "status": "implemented",
+      "extensions": [".js", ".ts"],
+      "failure": "A call that can fail throws a ScriptGoError whose code is the reason; asynchronous calls return promises that reject with one. Misuse (wrong argument types) throws a TypeError.",
+      "sandbox": "ECMAScript built-ins only. No eval, no new Function, no require, no process, no CLR access.",
+      "typescript": "scriptgo pack and scriptgo verify compile each .ts entry with esbuild 0.25.12 into <entry>.js (one IIFE bundle per entry, ES2022), placed next to the .ts in the archive or in the copy verify runs; a host loads <entry>.js, or fails with typescript_not_compiled:<entry>.",
+      "typescriptPreamble": [
+        "/** Native modules registered by the host integrator. Their generated declarations (ScriptGo.Host NativeModule.ToTypeScript) merge into this namespace. */",
+        "declare namespace ScriptGoNatives { const __modules: unique symbol; }"
+      ]
+    },
+    "cs": {
+      "status": "reserved",
+      "extensions": [".cs"],
+      "note": "Phase 3. No C# guest exists yet: no kit runs .cs scripts and manifests that list them are refused (unsupported_script). This IDL has no C# bindings."
+    }
+  },
+  "kits": {
+    "lua-core": { "path": "sdk/lua/scriptgo", "languages": ["lua"], "note": "The pure-Lua portable host every Lua-only adapter embeds." },
+    "dotnet": { "path": "sdk/dotnet/ScriptGo.Host", "languages": ["lua", "js"], "note": "The .NET host kit: Lua guests on KeraLua, JavaScript guests on Jint." }
+  },
+  "capabilities": {
+    "events": "Local events, network events between sides, lifecycle events.",
+    "logging": "ScriptGo.log and print routed to the host log.",
+    "storage": "Per-resource persistent key/value storage (JSON values).",
+    "players": "Player list, names, join and drop events.",
+    "permissions": "Host privileges for a player (operators, privs, ACE).",
+    "commands": "RegisterCommand from the console or chat.",
+    "config": "Per-resource configuration and GetConvar.",
+    "ui": "ScriptGo.ui.notify: on-screen notifications or chat fallback.",
+    "http": "Outbound HTTP requests from the server side.",
+    "licensing": "License activation and verification against the SCRIPT//GO API."
+  },
+  "types": {
+    "value": { "kind": "primitive", "doc": "Any value the codec copies: nil, boolean, integer, number (finite), string, or an acyclic table with string or integer keys (see codec)." },
+    "any": { "kind": "primitive", "doc": "Anything, including values the codec refuses (only for calls that never copy, such as print)." },
+    "nil": { "kind": "primitive", "doc": "No value: nil in Lua, undefined in JavaScript." },
+    "boolean": { "kind": "primitive" },
+    "integer": { "kind": "primitive", "doc": "A 64-bit integer in Lua; a number with no fractional part (within +-2^53) in JavaScript." },
+    "number": { "kind": "primitive" },
+    "string": { "kind": "primitive", "doc": "Bytes in Lua, UTF-16 text in JavaScript; copied as UTF-8." },
+    "table": { "kind": "primitive", "doc": "A Lua table; an array or a plain object in JavaScript." },
+    "PlayerId": { "kind": "alias", "type": "integer", "doc": "A player id, >= 1. 0 stands for the console (commands, permissions); -1 targets every player (TriggerClientEvent, ui.notify)." },
+    "Side": { "kind": "enum", "values": ["server", "client"] },
+    "Language": { "kind": "enum", "values": ["lua", "js"], "doc": "The guest language running the calling code." },
+    "ResourceState": { "kind": "enum", "values": ["missing", "stopped", "starting", "started", "failed"] },
+    "Notification": {
+      "kind": "record",
+      "open": true,
+      "doc": "A UI notification. The host adds a resource field with the sender's name.",
+      "fields": [
+        { "name": "type", "type": "string?", "doc": "info, success, warning or error" },
+        { "name": "title", "type": "string?" },
+        { "name": "message", "type": "string?" },
+        { "name": "durationMs", "type": "integer?" }
+      ]
+    },
+    "HttpRequest": {
+      "kind": "record",
+      "fields": [
+        { "name": "method", "type": "string?", "doc": "GET by default" },
+        { "name": "url", "type": "string", "doc": "Absolute http or https URL" },
+        { "name": "headers", "type": "map<string>?" },
+        { "name": "body", "type": "string?" }
+      ]
+    },
+    "HttpResponse": {
+      "kind": "record",
+      "fields": [
+        { "name": "status", "type": "integer" },
+        { "name": "headers", "type": "map<string>", "doc": "Header names as the server sent them, sorted" },
+        { "name": "body", "type": "string" }
+      ]
+    },
+    "LicenseActivation": {
+      "kind": "record",
+      "fields": [
+        { "name": "licenseKey", "type": "string" },
+        { "name": "package", "type": "string", "doc": "creator/package" },
+        { "name": "deploymentName", "type": "string?" }
+      ]
+    },
+    "LicenseVerification": {
+      "kind": "record",
+      "fields": [
+        { "name": "licenseKey", "type": "string" },
+        { "name": "package", "type": "string" },
+        { "name": "deploymentToken", "type": "string" }
+      ]
+    },
+    "Dependency": {
+      "kind": "record",
+      "fields": [
+        { "name": "name", "type": "string" },
+        { "name": "range", "type": "string?" }
+      ]
+    },
+    "Manifest": {
+      "kind": "record",
+      "open": true,
+      "doc": "The parsed manifest of the calling resource, with camelCase field names (docs/spec/manifest.md).",
+      "fields": [
+        { "name": "format", "type": "string" },
+        { "name": "name", "type": "string" },
+        { "name": "version", "type": "string" },
+        { "name": "title", "type": "string?" },
+        { "name": "description", "type": "string?" },
+        { "name": "author", "type": "string?" },
+        { "name": "license", "type": "string?" },
+        { "name": "repository", "type": "string?" },
+        { "name": "category", "type": "string?" },
+        { "name": "scriptgoVersion", "type": "string?" },
+        { "name": "open77Version", "type": "string?" },
+        { "name": "autoStart", "type": "boolean" },
+        { "name": "licensed", "type": "boolean" },
+        { "name": "lua", "type": "string[]" },
+        { "name": "environments", "type": "string[]" },
+        { "name": "capabilities", "type": "string[]" },
+        { "name": "optionalCapabilities", "type": "string[]" },
+        { "name": "sharedScripts", "type": "string[]" },
+        { "name": "serverScripts", "type": "string[]" },
+        { "name": "clientScripts", "type": "string[]" },
+        { "name": "testScripts", "type": "string[]" },
+        { "name": "environmentScripts", "type": "map<string[]>" },
+        { "name": "permissions", "type": "string[]" },
+        { "name": "files", "type": "string[]" },
+        { "name": "exports", "type": "string[]" },
+        { "name": "serverExports", "type": "string[]" },
+        { "name": "webUiPage", "type": "string?" },
+        { "name": "webFiles", "type": "string[]" },
+        { "name": "dependencies", "type": "Dependency[]" }
+      ]
+    },
+    "ThreadFn": { "kind": "callback", "params": [], "returns": ["any"], "doc": "Lua: runs in a scheduler coroutine. JavaScript: may be async." },
+    "TimerFn": { "kind": "callback", "params": [], "returns": ["any"] },
+    "EventHandler": { "kind": "callback", "params": [{ "name": "args", "type": "value..." }], "returns": ["any"] },
+    "CommandHandler": {
+      "kind": "callback",
+      "params": [
+        { "name": "source", "type": "PlayerId", "doc": "0 for the console" },
+        { "name": "args", "type": "string[]", "doc": "The words after the command name (Lua: a table with n)" },
+        { "name": "raw", "type": "string", "doc": "The whole line, without a leading slash" }
+      ],
+      "returns": ["any"]
+    },
+    "ExportFn": { "kind": "callback", "params": [{ "name": "args", "type": "value..." }], "returns": ["value..."], "doc": "Lua: returns its values. JavaScript: returns one value, ScriptGo.values(...) for several, or a promise (async exports only)." },
+    "LuaPromise": {
+      "kind": "opaque",
+      "languages": ["lua"],
+      "doc": "A Lua promise: p:await() -> values... or nil, reason (inside a thread); p:next(onResolved, onRejected); p:status(); p:isSettled(); p:resolve(...); p:reject(reason)."
+    },
+    "Values": { "kind": "opaque", "languages": ["js"], "doc": "Several return values from a JavaScript export, built by ScriptGo.values(a, b, ...)." }
+  },
+  "errors": {
+    "capability_unavailable:<capability>@<environment>": "The host does not provide that capability.",
+    "language_unavailable:<language>@<environment>": "The host has no guest for a language the resource's scripts use (the resource does not start).",
+    "typescript_not_compiled:<entry>": "A .ts entry has no compiled <entry>.js next to it (run scriptgo pack or scriptgo verify).",
+    "resource_preparing": "An export was called from file scope while the calling resource is still loading.",
+    "resource_stopped": "The calling resource side was stopped.",
+    "invalid_event_name": "Event names are non-empty strings of at most 128 characters.",
+    "invalid_target": "A client target is a player id >= 1 or -1.",
+    "client_only": "Only the client side may call this.",
+    "server_only": "Only the server side may call this.",
+    "network_unavailable": "The host does not run the other side.",
+    "event_queue_limit": "The host's queue of events for the next tick is full.",
+    "event_payload_not_serializable": "An event argument was refused by the codec.",
+    "invalid_export_name": "Export names are non-empty strings of at most 64 characters.",
+    "export_function_required": "exports(name, fn) needs a function.",
+    "export_not_found": "The target resource side has no export of that name.",
+    "export_resource_unavailable": "The target resource is not started, or has no such side.",
+    "export_yielded": "A synchronous export call reached code that waits (Wait, await).",
+    "export_recursion_limit": "Synchronous export calls nested deeper than the host allows.",
+    "export_arguments_not_serializable": "An export argument was refused by the codec.",
+    "export_result_not_serializable": "An export result was refused by the codec.",
+    "export_failed: <message>": "An asynchronous export raised or rejected.",
+    "export_target_stopped": "The target resource stopped before an asynchronous export finished.",
+    "invalid_path": "A resource path is not relative, uses .., a drive letter or a leading /.",
+    "not_found": "No such file in the resource.",
+    "invalid_module_name": "require: module names are dot-separated words, or @dependency[/a.b].",
+    "module_not_found:<module>": "require: no a/b.lua nor a/b/init.lua.",
+    "module_load_failed: <message>": "require: the module does not compile.",
+    "dependency_not_declared:<resource>": "require(\"@lib\") names a resource the manifest does not depend on.",
+    "invalid_payload": "ui.notify needs a table payload.",
+    "invalid_request": "http.request and licensing calls need an options table.",
+    "invalid_url": "http.request needs an absolute http or https URL.",
+    "http_failed: <message>": "The HTTP request failed or timed out (30 s).",
+    "http is server-side only": "ScriptGo.http.request called on the client side.",
+    "licensing is server-side only": "ScriptGo.licensing called on the client side.",
+    "invalid_response (<status>)": "licensing: the API answered something that is not JSON.",
+    "http_<status>": "licensing: an HTTP error without an error code in the body.",
+    "invalid_command_name": "RegisterCommand needs a name.",
+    "duplicate command '<name>'": "Another resource side already registered that command.",
+    "unknown_command:<name>": "ExecuteCommand found no such command.",
+    "promise_cancelled": "Lua: the promise was cancelled.",
+    "promise_rejected": "A promise was rejected without a reason string.",
+    "promise_already_settled": "Lua: resolve or reject on a settled promise.",
+    "await_requires_scheduler_coroutine": "Lua: await outside a thread on a pending promise.",
+    "quota_exceeded:instructions": "The resource side ran more instructions (Lua) or statements (JavaScript) than its budget for one host-level entry.",
+    "quota_exceeded:memory": "Lua: the state's heap went over its cap (the resource stops). JavaScript: the entry allocated more than its cap (the entry is abandoned).",
+    "quota_exceeded:time": "JavaScript: one entry ran longer than its wall-clock budget.",
+    "quota_exceeded:threads": "Too many live threads (Lua coroutines, pending JavaScript timers).",
+    "quota_exceeded:handlers": "Too many event handlers on one resource side.",
+    "quota_exceeded:exports": "Too many exports on one resource side.",
+    "native_not_found:<module>.<function>": "No such native module function.",
+    "native_unavailable_on_side:<side>": "The native function is declared for the other side.",
+    "permission_denied:<permission>": "The native needs a permission the manifest does not declare or the host does not grant.",
+    "invalid_argument_count": "A native received more arguments than it declares.",
+    "invalid_argument:<name>": "A native argument does not match its declared type.",
+    "native_arguments_not_serializable": "A native argument was refused by the codec.",
+    "native_result_not_serializable": "A native result was refused by the codec.",
+    "native_failed": "The native handler threw (the host log has the message).",
+    "codec: <reason>": "The codec refused a value: codec: cannot transfer a function, codec: cyclic table, codec: value nested deeper than 32, codec: value exceeds 1 MiB, codec: non-finite number, codec: table keys must be strings or integers, ..."
+  },
+  "globals": [
+    {
+      "name": "CreateThread",
+      "kind": "function",
+      "doc": "Starts fn in a scheduler thread. It inherits the caller's source.",
+      "params": [{ "name": "fn", "type": "ThreadFn" }],
+      "returns": [],
+      "errors": ["quota_exceeded:threads"],
+      "lua": { "failure": "raise", "doc": "Runs fn in a coroutine until its first yield." },
+      "js": { "failure": "throw", "doc": "Calls fn now; an async fn continues after each await on later ticks. Errors and rejections are logged." }
+    },
+    {
+      "name": "Wait",
+      "kind": "function",
+      "doc": "Suspends the calling thread for ms milliseconds. Wait(0) resumes on the next host tick.",
+      "params": [{ "name": "ms", "type": "number" }],
+      "returns": [],
+      "errors": ["quota_exceeded:threads"],
+      "lua": { "failure": "raise", "doc": "Yields. Raises when called outside a thread (file scope)." },
+      "js": { "returns": ["promise<nil>"], "failure": "throw", "doc": "Returns a promise: await Wait(100)." }
+    },
+    {
+      "name": "SetTimeout",
+      "kind": "function",
+      "doc": "Runs fn once after ms milliseconds.",
+      "params": [{ "name": "ms", "type": "number" }, { "name": "fn", "type": "TimerFn" }],
+      "returns": ["integer"],
+      "errors": ["quota_exceeded:threads"],
+      "lua": { "failure": "raise" },
+      "js": { "failure": "throw" }
+    },
+    {
+      "name": "ClearTimeout",
+      "kind": "function",
+      "doc": "Cancels a timer from SetTimeout (or setTimeout in JavaScript).",
+      "params": [{ "name": "id", "type": "integer" }],
+      "returns": []
+    },
+    {
+      "name": "AddEventHandler",
+      "kind": "function",
+      "doc": "Handles an event on this resource side. Handlers run in registration order, across the languages of one resource.",
+      "params": [{ "name": "name", "type": "string" }, { "name": "fn", "type": "EventHandler" }],
+      "returns": ["integer"],
+      "errors": ["invalid_event_name", "quota_exceeded:handlers"],
+      "lua": { "failure": "raise", "doc": "Each delivery runs the handler in a new thread." },
+      "js": { "failure": "throw", "doc": "Each delivery calls the handler; source is valid until its first await." }
+    },
+    {
+      "name": "RemoveEventHandler",
+      "kind": "function",
+      "params": [{ "name": "id", "type": "integer" }],
+      "returns": ["boolean"]
+    },
+    {
+      "name": "TriggerEvent",
+      "kind": "function",
+      "doc": "Server: the host-wide bus; queued to the next tick, delivered to every started resource in resource-name order, without source. Client: delivered now, inside this resource side only.",
+      "params": [{ "name": "name", "type": "string" }, { "name": "args", "type": "value..." }],
+      "returns": ["boolean"],
+      "errors": ["invalid_event_name", "event_payload_not_serializable", "event_queue_limit"],
+      "lua": { "failure": "false_reason" },
+      "js": { "failure": "throw" }
+    },
+    {
+      "name": "RegisterNetEvent",
+      "kind": "function",
+      "doc": "Allows network events of that name to reach this resource side; with fn, also adds a handler (its id is returned).",
+      "params": [{ "name": "name", "type": "string" }, { "name": "fn", "type": "EventHandler?" }],
+      "returns": ["integer?"],
+      "errors": ["invalid_event_name", "quota_exceeded:handlers"],
+      "lua": { "failure": "raise" },
+      "js": { "failure": "throw" }
+    },
+    {
+      "name": "TriggerServerEvent",
+      "kind": "function",
+      "sides": ["client"],
+      "doc": "Client to server. Server handlers see the sending player in source.",
+      "params": [{ "name": "name", "type": "string" }, { "name": "args", "type": "value..." }],
+      "returns": ["boolean"],
+      "errors": ["client_only", "network_unavailable", "invalid_event_name", "event_payload_not_serializable", "event_queue_limit"],
+      "lua": { "failure": "false_reason" },
+      "js": { "failure": "throw" }
+    },
+    {
+      "name": "TriggerClientEvent",
+      "kind": "function",
+      "sides": ["server"],
+      "doc": "Server to one client, or every client with target -1.",
+      "params": [{ "name": "name", "type": "string" }, { "name": "target", "type": "PlayerId" }, { "name": "args", "type": "value..." }],
+      "returns": ["boolean"],
+      "errors": ["server_only", "invalid_target", "network_unavailable", "invalid_event_name", "event_payload_not_serializable", "event_queue_limit"],
+      "lua": { "failure": "false_reason" },
+      "js": { "failure": "throw" }
+    },
+    {
+      "name": "source",
+      "kind": "value",
+      "type": "PlayerId?",
+      "doc": "The player behind the code running now: the sender of a network event on the server, the player of playerJoining/playerDropped, the caller of a command. nil elsewhere.",
+      "lua": { "doc": "Kept per thread: still valid after Wait in the same handler." },
+      "js": { "doc": "Valid in the synchronous part of a handler or command only: read it before the first await." }
+    },
+    {
+      "name": "exports",
+      "kind": "exports",
+      "doc": "exports(name, fn) publishes an export of this resource side. exports.<resource>.<name>(...) calls another resource's export synchronously, in any language: the export must finish without waiting. Values are copied through the codec.",
+      "params": [{ "name": "name", "type": "string" }, { "name": "fn", "type": "ExportFn" }],
+      "returns": ["boolean"],
+      "errors": ["invalid_export_name", "export_function_required", "quota_exceeded:exports", "resource_preparing", "export_resource_unavailable", "export_not_found", "export_yielded", "export_recursion_limit", "export_arguments_not_serializable", "export_result_not_serializable"],
+      "lua": {
+        "failure": "nil_reason",
+        "doc": "Register: exports(name, fn) -> true or nil, reason. Call: exports.res:name(...) -> every value; a failure raises \"export res:name <reason>\"."
+      },
+      "js": {
+        "failure": "throw",
+        "doc": "Register: exports(name, fn) -> true, throws ScriptGoError. Call: exports.res.name(...) -> the first value; a failure throws ScriptGoError(reason) with the message \"export res:name <reason>\". ScriptGo.exports.invoke returns every value.",
+        "signature": "declare const exports: ScriptGoExports;",
+        "declarations": [
+          "/**",
+          " * exports(name, fn) registers an export; exports.<resource>.<name>(...) calls one synchronously and",
+          " * returns its first value. Other resources' exports are typed any (so that noUncheckedIndexedAccess",
+          " * does not make every call optional): check what they return.",
+          " */",
+          "interface ScriptGoExports {",
+          "  (name: string, fn: ScriptGoExportFn): true;",
+          "  readonly [resource: string]: any;",
+          "}"
+        ]
+      }
+    },
+    {
+      "name": "GetInvokingResource",
+      "kind": "function",
+      "doc": "Inside an export: the name of the calling resource.",
+      "params": [],
+      "returns": ["string?"],
+      "js": { "doc": "Valid in the synchronous part of the export only." }
+    },
+    {
+      "name": "RegisterCommand",
+      "kind": "function",
+      "capability": "commands",
+      "doc": "Registers a console or chat command. Names match ^[A-Za-z0-9_.:-]+$ and are case-insensitive; the handler runs on the next tick; restricted commands need the command.<name> privilege.",
+      "params": [{ "name": "name", "type": "string" }, { "name": "fn", "type": "CommandHandler" }, { "name": "restricted", "type": "boolean?" }],
+      "returns": ["boolean"],
+      "errors": ["capability_unavailable:<capability>@<environment>", "invalid_command_name", "duplicate command '<name>'"],
+      "lua": { "failure": "raise" },
+      "js": { "failure": "throw" }
+    },
+    {
+      "name": "GetCurrentResourceName",
+      "kind": "function",
+      "params": [],
+      "returns": ["string"]
+    },
+    {
+      "name": "GetResourceState",
+      "kind": "function",
+      "params": [{ "name": "name", "type": "string" }],
+      "returns": ["ResourceState"]
+    },
+    {
+      "name": "GetConvar",
+      "kind": "function",
+      "doc": "A host configuration value, or the default.",
+      "params": [{ "name": "name", "type": "string" }, { "name": "fallback", "type": "value?" }],
+      "returns": ["value"]
+    },
+    {
+      "name": "print",
+      "kind": "function",
+      "doc": "Logs at info level, arguments converted to text and joined with a tab.",
+      "params": [{ "name": "args", "type": "any..." }],
+      "returns": []
+    },
+    {
+      "name": "require",
+      "kind": "function",
+      "languages": ["lua"],
+      "doc": "Loads a module of this resource (a.b -> a/b.lua, then a/b/init.lua) or of a declared dependency (@lib, @lib/a.b). TypeScript and JavaScript resources import modules at pack time instead (esbuild bundles each entry).",
+      "params": [{ "name": "module", "type": "string" }],
+      "returns": ["value"],
+      "errors": ["invalid_module_name", "module_not_found:<module>", "module_load_failed: <message>", "dependency_not_declared:<resource>", "invalid_path"],
+      "lua": { "failure": "nil_reason" }
+    },
+    {
+      "name": "Citizen",
+      "kind": "value",
+      "type": "table",
+      "languages": ["lua"],
+      "doc": "Citizen.CreateThread, Citizen.Wait, Citizen.SetTimeout and Citizen.Await(promise), for code written for FiveM-shaped runtimes."
+    },
+    {
+      "name": "promise",
+      "kind": "value",
+      "type": "table",
+      "languages": ["lua"],
+      "doc": "promise.new() -> a LuaPromise."
+    },
+    {
+      "name": "Open77",
+      "kind": "value",
+      "type": "table",
+      "languages": ["lua"],
+      "doc": "An alias of ScriptGo, so resources written for the open77 environment that use the portable subset run unchanged."
+    },
+    {
+      "name": "ScriptGoError",
+      "kind": "class",
+      "languages": ["js"],
+      "extends": "Error",
+      "doc": "The error every failing runtime call throws (or rejects with). code is the reason token.",
+      "params": [{ "name": "code", "type": "string" }, { "name": "message", "type": "string?" }, { "name": "detail", "type": "value?" }],
+      "fields": [
+        { "name": "name", "type": "string", "doc": "\"ScriptGoError\"" },
+        { "name": "code", "type": "string" },
+        { "name": "detail", "type": "value?", "doc": "Extra data: the decoded body of a licensing error, or the detail of a refusal (a codec message, a native's 'expected string, got integer')" }
+      ]
+    },
+    {
+      "name": "console",
+      "kind": "value",
+      "languages": ["js"],
+      "doc": "console.log/info/debug/warn/error: arguments converted to text and joined with a space.",
+      "js": {
+        "signature": "declare const console: { log(...args: unknown[]): void; info(...args: unknown[]): void; debug(...args: unknown[]): void; warn(...args: unknown[]): void; error(...args: unknown[]): void };"
+      }
+    },
+    {
+      "name": "setTimeout",
+      "kind": "function",
+      "languages": ["js"],
+      "doc": "The web-style timer: calls fn(...args) once after ms milliseconds, on the host tick. Same timers as SetTimeout.",
+      "params": [{ "name": "fn", "type": "TimerFn" }, { "name": "ms", "type": "number?" }, { "name": "args", "type": "any..." }],
+      "returns": ["integer"],
+      "errors": ["quota_exceeded:threads"],
+      "js": { "failure": "throw" }
+    },
+    {
+      "name": "clearTimeout",
+      "kind": "function",
+      "languages": ["js"],
+      "params": [{ "name": "id", "type": "integer" }],
+      "returns": []
+    }
+  ],
+  "namespaces": [
+    {
+      "name": "ScriptGo",
+      "doc": "The SCRIPT//GO namespace. Lua also has it under the alias Open77.",
+      "members": [
+        {
+          "name": "values",
+          "kind": "function",
+          "languages": ["js"],
+          "doc": "Wraps several return values for a JavaScript export: return ScriptGo.values(a, b).",
+          "params": [{ "name": "items", "type": "value..." }],
+          "returns": ["Values"]
+        },
+        {
+          "name": "ScriptGoError",
+          "kind": "value",
+          "languages": ["js"],
+          "doc": "The ScriptGoError class.",
+          "js": { "signature": "readonly ScriptGoError: typeof ScriptGoError;" }
+        }
+      ]
+    },
+    {
+      "name": "ScriptGo.log",
+      "doc": "The host log, with the resource and side as origin. Always available.",
+      "members": [
+        { "name": "debug", "kind": "function", "params": [{ "name": "message", "type": "any" }], "returns": [] },
+        { "name": "info", "kind": "function", "params": [{ "name": "message", "type": "any" }], "returns": [] },
+        { "name": "warn", "kind": "function", "params": [{ "name": "message", "type": "any" }], "returns": [] },
+        { "name": "error", "kind": "function", "params": [{ "name": "message", "type": "any" }], "returns": [] }
+      ]
+    },
+    {
+      "name": "ScriptGo.json",
+      "doc": "JSON with sorted object keys: the same value always encodes to the same text.",
+      "members": [
+        { "name": "encode", "kind": "function", "params": [{ "name": "value", "type": "value" }], "returns": ["string"], "lua": { "failure": "raise" }, "js": { "failure": "throw" } },
+        { "name": "decode", "kind": "function", "params": [{ "name": "text", "type": "string" }], "returns": ["value"], "lua": { "failure": "raise" }, "js": { "failure": "throw" } },
+        {
+          "name": "null",
+          "kind": "value",
+          "type": "value",
+          "doc": "JSON null. Lua: a sentinel (nil cannot be stored in a table). JavaScript: null.",
+          "js": { "signature": "readonly null: null;" }
+        },
+        {
+          "name": "object",
+          "kind": "function",
+          "doc": "Marks a table to encode as an object even when it is empty or a sequence (Lua). JavaScript: returns its argument.",
+          "params": [{ "name": "table", "type": "table" }],
+          "returns": ["table"]
+        }
+      ]
+    },
+    {
+      "name": "ScriptGo.time",
+      "members": [
+        { "name": "monotonic", "kind": "function", "doc": "Seconds on the host's tick clock (float).", "params": [], "returns": ["number"] },
+        { "name": "now", "kind": "function", "doc": "Unix seconds; nil where the side has no wall clock (OPEN//77 client).", "params": [], "returns": ["integer?"] }
+      ]
+    },
+    {
+      "name": "ScriptGo.runtime",
+      "members": [
+        { "name": "version", "kind": "function", "doc": "The runtime API version, \"0.1.0\".", "params": [], "returns": ["string"] },
+        { "name": "luaVersion", "kind": "function", "languages": ["lua"], "doc": "The Lua dialect (\"Lua 5.4\", \"LuaJIT\" ...).", "params": [], "returns": ["string"] },
+        { "name": "environment", "kind": "function", "doc": "The environment slug (standalone, dotnet, love2d ...).", "params": [], "returns": ["string"] },
+        { "name": "side", "kind": "function", "params": [], "returns": ["Side"] },
+        { "name": "adapterVersion", "kind": "function", "params": [], "returns": ["string"] },
+        { "name": "language", "kind": "function", "kits": ["dotnet"], "doc": "The guest language of the calling code.", "params": [], "returns": ["Language"] }
+      ]
+    },
+    {
+      "name": "ScriptGo.resource",
+      "members": [
+        { "name": "name", "kind": "function", "params": [], "returns": ["string"] },
+        { "name": "version", "kind": "function", "params": [], "returns": ["string"] },
+        { "name": "generation", "kind": "function", "doc": "How many times a resource (default: this one) has started.", "params": [{ "name": "resource", "type": "string?" }], "returns": ["integer?"] },
+        { "name": "state", "kind": "function", "params": [{ "name": "resource", "type": "string?" }], "returns": ["ResourceState"] },
+        { "name": "hasPermission", "kind": "function", "doc": "Whether this resource's manifest declares the permission.", "params": [{ "name": "permission", "type": "string" }], "returns": ["boolean"] },
+        {
+          "name": "readFile",
+          "kind": "function",
+          "doc": "A file of this resource, confined to its folder.",
+          "params": [{ "name": "path", "type": "string" }],
+          "returns": ["string"],
+          "errors": ["invalid_path", "not_found"],
+          "lua": { "failure": "nil_reason" },
+          "js": { "failure": "throw" }
+        },
+        { "name": "manifest", "kind": "function", "params": [], "returns": ["Manifest?"] }
+      ]
+    },
+    {
+      "name": "ScriptGo.events",
+      "doc": "Aliases of the event globals.",
+      "members": [
+        { "name": "on", "kind": "alias", "of": "AddEventHandler" },
+        { "name": "off", "kind": "alias", "of": "RemoveEventHandler" },
+        { "name": "emit", "kind": "alias", "of": "TriggerEvent" }
+      ]
+    },
+    {
+      "name": "ScriptGo.net",
+      "doc": "Aliases of the network event globals.",
+      "members": [
+        { "name": "on", "kind": "alias", "of": "RegisterNetEvent" },
+        { "name": "register", "kind": "alias", "of": "RegisterNetEvent" },
+        { "name": "emitServer", "kind": "alias", "of": "TriggerServerEvent" },
+        { "name": "emitClient", "kind": "alias", "of": "TriggerClientEvent" }
+      ]
+    },
+    {
+      "name": "ScriptGo.exports",
+      "members": [
+        {
+          "name": "call",
+          "kind": "function",
+          "doc": "Calls an export asynchronously: the provider runs it in its own thread, so it may wait. Values are copied through the codec. The provider does not inherit the caller's source.",
+          "params": [{ "name": "resource", "type": "string" }, { "name": "name", "type": "string" }, { "name": "args", "type": "value..." }],
+          "returns": ["value..."],
+          "errors": ["resource_preparing", "invalid_export_name", "export_resource_unavailable", "export_not_found", "export_arguments_not_serializable", "export_result_not_serializable", "export_failed: <message>", "export_target_stopped"],
+          "lua": { "returns": ["LuaPromise"], "failure": "nil_reason", "doc": "Returns a promise, or nil, reason; p:await() in a thread gives the values or nil, reason. From file scope: nil, \"resource_preparing\"." },
+          "js": { "returns": ["promise<value[]>"], "failure": "reject", "doc": "Returns a promise of every value; it rejects with a ScriptGoError. Unlike Lua, it is not refused at file scope (no resource_preparing)." }
+        },
+        {
+          "name": "invoke",
+          "kind": "function",
+          "languages": ["js"],
+          "doc": "Calls an export synchronously, like exports.res.name(...), and returns every value.",
+          "params": [{ "name": "resource", "type": "string" }, { "name": "name", "type": "string" }, { "name": "args", "type": "value..." }],
+          "returns": ["value[]"],
+          "errors": ["resource_preparing", "export_resource_unavailable", "export_not_found", "export_yielded", "export_recursion_limit", "export_arguments_not_serializable", "export_result_not_serializable"],
+          "js": { "failure": "throw" }
+        }
+      ]
+    },
+    {
+      "name": "ScriptGo.capabilities",
+      "members": [
+        { "name": "has", "kind": "function", "params": [{ "name": "capability", "type": "string" }], "returns": ["boolean"] },
+        { "name": "list", "kind": "function", "params": [], "returns": ["string[]"] },
+        {
+          "name": "require",
+          "kind": "function",
+          "doc": "Fails unless the host provides the capability.",
+          "params": [{ "name": "capability", "type": "string" }],
+          "returns": [],
+          "errors": ["capability_unavailable:<capability>@<environment>"],
+          "lua": { "failure": "raise" },
+          "js": { "failure": "throw" }
+        }
+      ]
+    },
+    {
+      "name": "ScriptGo.storage",
+      "capability": "storage",
+      "doc": "Per-resource key/value storage with JSON values, persisted by the host. The client side has its own store.",
+      "members": [
+        { "name": "get", "kind": "function", "params": [{ "name": "key", "type": "string" }], "returns": ["value"] },
+        {
+          "name": "set",
+          "kind": "function",
+          "doc": "Stores a value; nil deletes the key.",
+          "params": [{ "name": "key", "type": "string" }, { "name": "value", "type": "value" }],
+          "returns": ["boolean"],
+          "errors": ["codec: <reason>"],
+          "lua": { "failure": "false_reason" },
+          "js": { "failure": "throw" }
+        },
+        { "name": "delete", "kind": "function", "params": [{ "name": "key", "type": "string" }], "returns": ["boolean"] },
+        { "name": "keys", "kind": "function", "doc": "Keys in byte order, optionally with a prefix.", "params": [{ "name": "prefix", "type": "string?" }], "returns": ["string[]"] }
+      ]
+    },
+    {
+      "name": "ScriptGo.players",
+      "capability": "players",
+      "doc": "Server side. Invalid ids answer nil or false.",
+      "members": [
+        { "name": "list", "kind": "function", "params": [], "returns": ["PlayerId[]"] },
+        { "name": "name", "kind": "function", "params": [{ "name": "id", "type": "PlayerId" }], "returns": ["string?"] },
+        { "name": "exists", "kind": "function", "params": [{ "name": "id", "type": "PlayerId" }], "returns": ["boolean"] },
+        { "name": "identifier", "kind": "function", "params": [{ "name": "id", "type": "PlayerId" }], "returns": ["string?"] }
+      ]
+    },
+    {
+      "name": "ScriptGo.permissions",
+      "capability": "permissions",
+      "members": [
+        { "name": "has", "kind": "function", "doc": "A host privilege of a player; player 0 (the console) has every privilege.", "params": [{ "name": "playerId", "type": "PlayerId" }, { "name": "privilege", "type": "string" }], "returns": ["boolean"] }
+      ]
+    },
+    {
+      "name": "ScriptGo.ui",
+      "capability": "ui",
+      "members": [
+        {
+          "name": "notify",
+          "kind": "function",
+          "doc": "Server: notify(target, payload) with a player id or -1. Client: notify(payload) for the local player.",
+          "params": [{ "name": "target", "type": "PlayerId|Notification" }, { "name": "payload", "type": "Notification?" }],
+          "returns": ["boolean"],
+          "errors": ["invalid_payload"],
+          "lua": { "failure": "false_reason" },
+          "js": { "failure": "throw" }
+        }
+      ]
+    },
+    {
+      "name": "ScriptGo.config",
+      "capability": "config",
+      "members": [
+        { "name": "get", "kind": "function", "doc": "A per-resource configuration value, or the default.", "params": [{ "name": "key", "type": "string" }, { "name": "fallback", "type": "value?" }], "returns": ["value"] }
+      ]
+    },
+    {
+      "name": "ScriptGo.http",
+      "capability": "http",
+      "sides": ["server"],
+      "members": [
+        {
+          "name": "request",
+          "kind": "function",
+          "doc": "An outbound HTTP request, only where the host allows it. Times out after 30 seconds.",
+          "params": [{ "name": "options", "type": "HttpRequest" }],
+          "returns": ["HttpResponse"],
+          "errors": ["http is server-side only", "invalid_request", "invalid_url", "http_failed: <message>"],
+          "lua": { "failure": "nil_reason", "doc": "Waits for the answer: call it from a thread." },
+          "js": { "returns": ["promise<HttpResponse>"], "failure": "reject" }
+        }
+      ]
+    },
+    {
+      "name": "ScriptGo.licensing",
+      "capability": "licensing",
+      "sides": ["server"],
+      "doc": "POST {scriptgo_api}/v1/licenses/activate|verify. Needs the http capability too.",
+      "members": [
+        {
+          "name": "activate",
+          "kind": "function",
+          "params": [{ "name": "options", "type": "LicenseActivation" }],
+          "returns": ["value"],
+          "errors": ["licensing is server-side only", "capability_unavailable:<capability>@<environment>", "invalid_request", "invalid_response (<status>)", "http_<status>", "http_failed: <message>"],
+          "lua": { "failure": "nil_code_body", "doc": "Waits for the answer: result, or nil, code, body." },
+          "js": { "returns": ["promise<value>"], "failure": "reject", "doc": "Rejects with ScriptGoError(code) whose detail is the decoded body." }
+        },
+        {
+          "name": "verify",
+          "kind": "function",
+          "params": [{ "name": "options", "type": "LicenseVerification" }],
+          "returns": ["value"],
+          "errors": ["licensing is server-side only", "capability_unavailable:<capability>@<environment>", "invalid_request", "invalid_response (<status>)", "http_<status>", "http_failed: <message>"],
+          "lua": { "failure": "nil_code_body", "doc": "Waits for the answer: result, or nil, code, body." },
+          "js": { "returns": ["promise<value>"], "failure": "reject", "doc": "Rejects with ScriptGoError(code) whose detail is the decoded body." }
+        }
+      ]
+    },
+    {
+      "name": "ScriptGo.notifications",
+      "doc": "OPEN//77-compatible names for ScriptGo.ui.notify (the ui capability applies).",
+      "members": [
+        { "name": "send", "kind": "function", "params": [{ "name": "target", "type": "PlayerId" }, { "name": "payload", "type": "Notification" }], "returns": ["boolean"], "lua": { "failure": "false_reason" }, "js": { "failure": "throw" } },
+        { "name": "broadcast", "kind": "function", "params": [{ "name": "payload", "type": "Notification" }], "returns": ["boolean"], "lua": { "failure": "false_reason" }, "js": { "failure": "throw" } }
+      ]
+    },
+    {
+      "name": "ScriptGo.natives",
+      "kits": ["dotnet"],
+      "doc": "Native modules the host integrator registered (docs/spec/native-module.schema.json): ScriptGo.natives.<module>.<function>(...). A module declared with global: true is also a global of its name.",
+      "js": { "type": "Omit<typeof ScriptGoNatives, \"__modules\"> & { invoke(moduleName: string, functionName: string, ...args: unknown[]): any[] }" },
+      "members": [
+        {
+          "name": "<module>.<function>",
+          "kind": "natives",
+          "params": [{ "name": "args", "type": "value..." }],
+          "returns": ["value..."],
+          "errors": ["native_not_found:<module>.<function>", "native_unavailable_on_side:<side>", "permission_denied:<permission>", "invalid_argument_count", "invalid_argument:<name>", "native_arguments_not_serializable", "native_result_not_serializable", "native_failed"],
+          "lua": { "failure": "nil_reason", "doc": "Every value, true when the native returns none, or nil, reason, detail." },
+          "js": {
+            "failure": "throw",
+            "doc": "The first value (undefined when none); throws ScriptGoError(reason) carrying the refusal's detail in detail."
+          }
+        },
+        {
+          "name": "invoke",
+          "kind": "function",
+          "languages": ["js"],
+          "doc": "Calls <module>.<function> and answers every value it returns. A module cannot be named invoke.",
+          "params": [{ "name": "moduleName", "type": "string" }, { "name": "functionName", "type": "string" }, { "name": "args", "type": "value..." }],
+          "returns": ["value[]"],
+          "errors": ["native_not_found:<module>.<function>", "native_unavailable_on_side:<side>", "permission_denied:<permission>", "invalid_argument_count", "invalid_argument:<name>", "native_arguments_not_serializable", "native_result_not_serializable", "native_failed"],
+          "js": { "failure": "throw", "doc": "ScriptGo.natives.invoke(module, fn, ...args) answers every value; throws ScriptGoError(reason)." }
+        }
+      ]
+    }
+  ],
+  "events": [
+    { "name": "onResourceStart", "side": "server", "params": [{ "name": "resource", "type": "string" }], "doc": "A resource started (each started resource receives it, the new one included)." },
+    { "name": "onResourceStop", "side": "server", "params": [{ "name": "resource", "type": "string" }, { "name": "reason", "type": "string" }] },
+    { "name": "onClientResourceStart", "side": "client", "params": [{ "name": "resource", "type": "string" }] },
+    { "name": "onClientResourceStop", "side": "client", "params": [{ "name": "resource", "type": "string" }, { "name": "reason", "type": "string" }] },
+    { "name": "playerJoining", "side": "server", "source": true, "params": [{ "name": "playerId", "type": "PlayerId" }] },
+    { "name": "playerDropped", "side": "server", "source": true, "params": [{ "name": "reason", "type": "string" }] },
+    { "name": "onPlayerConnected", "side": "server", "params": [{ "name": "playerId", "type": "PlayerId" }] },
+    { "name": "onPlayerDisconnected", "side": "server", "params": [{ "name": "playerId", "type": "PlayerId" }, { "name": "reason", "type": "string" }] }
+  ],
+  "codec": {
+    "maxDepth": 32,
+    "maxBytes": 1048576,
+    "maxSafeInteger": 9007199254740991,
+    "kinds": ["nil", "boolean", "integer", "number", "string", "table"],
+    "rules": [
+      "Every value that crosses a boundary (event, export call, native call, storage, host call) is copied; guests never share objects.",
+      "Numbers must be finite. Lua integers stay integers; a JavaScript number with no fractional part within +-2^53 becomes an integer, any other number a float.",
+      "Strings are bytes in Lua and text in JavaScript; they cross as UTF-8 (invalid UTF-8 reaches JavaScript as U+FFFD).",
+      "Table keys are strings or integers. A table whose keys are exactly 1..n reaches JavaScript as an array; an empty table as an empty array; any other table as a plain object, integer keys written as decimal strings, keys in order (integers ascending, then strings in byte order).",
+      "A JavaScript array becomes a sequence (index i -> key i+1; holes and undefined are nil). A plain object (object literal or Object.create(null)) becomes a table: own enumerable data properties only, undefined and null values dropped, keys that are canonical integers (\"0\", \"17\", \"-3\") become integer keys.",
+      "Refused, with the reason: functions, Lua threads and userdata, JavaScript symbols, bigints, class instances, Map, Date, Promise and proxies, accessor properties, non-finite numbers, keys other than strings and integers, cycles (codec: cyclic table), more than 32 levels of nested tables (codec: value nested deeper than 32), more than 1 MiB of encoded data (codec: value exceeds 1 MiB)."
+    ]
+  },
+  "quotas": {
+    "doc": "Defaults of the dotnet kit (HostOptions.Quotas). Budgets are per host-level entry: a resource side gets a fresh budget the first time it runs after the host enters guest code from outside; nested calls in that entry, including calls from other resources, draw on the same budget.",
+    "items": [
+      { "name": "lua.instructions", "default": 1000000, "error": "quota_exceeded:instructions", "effect": "The running Lua thread raises; pcall/xpcall cannot swallow it; the resource keeps running." },
+      { "name": "lua.memory", "default": 67108864, "error": "quota_exceeded:memory", "effect": "Allocations past the cap fail inside the guest; the resource stops (state failed)." },
+      { "name": "js.statements", "default": 1000000, "error": "quota_exceeded:instructions", "effect": "The entry is abandoned; try/catch and finally do not run; the resource keeps running." },
+      { "name": "js.time", "default": 2000, "unit": "ms", "error": "quota_exceeded:time", "effect": "As js.statements." },
+      { "name": "js.allocation", "default": 67108864, "error": "quota_exceeded:memory", "effect": "As js.statements. Measured as .NET allocations on the host thread during the entry, the host's own marshalling included." },
+      { "name": "js.recursion", "default": 256, "error": "recursion limit: <message>", "effect": "The entry is abandoned." },
+      { "name": "threads", "default": 1024, "error": "quota_exceeded:threads", "effect": "CreateThread, Wait and timers fail." },
+      { "name": "handlers", "default": 2048, "error": "quota_exceeded:handlers", "effect": "AddEventHandler fails." },
+      { "name": "exports", "default": 256, "error": "quota_exceeded:exports", "effect": "exports(name, fn) fails." },
+      { "name": "eventQueue", "default": 4096, "error": "event_queue_limit", "effect": "TriggerEvent and network events fail until the next tick." },
+      { "name": "syncExportDepth", "default": 32, "error": "export_recursion_limit", "effect": "The nested synchronous export call fails." }
+    ]
+  }
+}

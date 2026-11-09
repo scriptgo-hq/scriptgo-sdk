@@ -1,0 +1,14 @@
+{
+  "resource": "sg_probe_ts",
+  "version": "0.1.0",
+  "title": "Conformance probe (TypeScript)",
+  "description": "The sg_probe checks written in TypeScript: same names, same SGCHECK lines, run against the three Lua base packages.",
+  "author": "scriptgo",
+  "license": "MIT",
+  "category": "library",
+  "scriptgo_version": ">=0.1.0",
+  "environments": ["dotnet"],
+  "capabilities": ["events", "logging", "storage", "players", "permissions", "config"],
+  "dependencies": ["sg_eventbus >=1.0.0", "sg_inventory >=1.0.0", "sg_permissions >=1.0.0"],
+  "server_scripts": ["server/probe.ts"]
+}

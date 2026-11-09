@@ -1,0 +1,5 @@
+{
+  "//": "The TypeScript conformance resource sg_xlang_ts, type-checked against these declarations (one program per resource: scripts share the global scope).",
+  "compilerOptions": { "target": "ES2022", "lib": ["ES2022"], "types": [], "strict": true, "noEmit": true },
+  "files": ["../../index.d.ts", "../../../../sdk/conformance/sg_xlang_ts/server/xlang.ts"]
+}

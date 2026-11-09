@@ -39,9 +39,14 @@ the value codec, so isolation rules are identical to a real network.
 | `require(module)` | Confined to the resource: `a.b` → `a/b.lua` or `a/b/init.lua`; `@lib/mod` reads a declared dependency. Returns `nil, reason` on failure. **Client-only on OPEN//77**: portable server code keeps to one file per concern or shared scripts |
 | `print(...)` | Routed to the host log with the resource name |
 
-Lifecycle events: `onResourceStart(name)`, `onResourceStop(name)` (server side),
-`onClientResourceStart(name)`, `onClientResourceStop(name)` (client side),
-`playerJoining(playerId)`, `playerDropped(playerId, reason)` (server side, capability `players`).
+Lifecycle events: `onResourceStart(name)`, `onResourceStop(name, reason)` (server side),
+`onClientResourceStart(name)`, `onClientResourceStop(name, reason)` (client side). Player events
+(server side): `playerJoining(playerId)` and `playerDropped(reason)`, both with the player in
+`source`; `onPlayerConnected(playerId)` and `onPlayerDisconnected(playerId, reason)`.
+
+Every global, namespace member and host event, with its failure tokens, is listed in
+[runtime-idl.json](runtime-idl.json) ([format](runtime-idl.md)). JavaScript and TypeScript
+resources, and resources that mix languages, are covered in [multi-language.md](multi-language.md).
 
 ## `ScriptGo` namespace
 

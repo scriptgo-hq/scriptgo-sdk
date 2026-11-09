@@ -151,7 +151,7 @@ public sealed partial class ScriptGoHost : IDisposable
         var m = parsed.Manifest!;
         var folder = Path.GetFileName(root);
         if (checkFolderName && folder != m.Name) { error = $"resource name '{m.Name}' must match its folder '{folder}'"; return false; }
-        if (_resources.ContainsKey(m.Name)) { error = $"resource '{m.Name}' is already loaded"; return false; }
+        if (_resources.ContainsKey(m.Name)) { name = m.Name; error = $"resource '{m.Name}' is already loaded"; return false; }
         _resources[m.Name] = new Resource(m.Name, m, root, parsed.Warnings);
         _order.Add(m.Name);
         name = m.Name;
@@ -241,7 +241,10 @@ public sealed partial class ScriptGoHost : IDisposable
                 if (ManifestParser.IsGlob(p))
                 {
                     listing ??= Services.Files.List(res.Root);
-                    scripts.AddRange(ManifestParser.ExpandGlob(p, listing));
+                    // A compiled TypeScript output (x.ts.js next to x.ts) is not a script of its own.
+                    var known = listing;
+                    scripts.AddRange(ManifestParser.ExpandGlob(p, listing)
+                        .Where(f => !(f.EndsWith(".ts.js", StringComparison.Ordinal) && known.Contains(f[..^3]))));
                 }
                 else scripts.Add(p);
             }
@@ -558,6 +561,12 @@ public sealed partial class ScriptGoHost : IDisposable
         FlushDeferred();
         return call;
     }
+
+    /// <summary>The exports a started resource registered on a side, sorted.</summary>
+    public IReadOnlyList<string> ExportNames(string resource, string side = "server") =>
+        _resources.TryGetValue(resource, out var r) && r.Sides.TryGetValue(side, out var s)
+            ? s.Exports.Keys.Order(StringComparer.Ordinal).ToList()
+            : [];
 
     /// <summary>Same, ticking simulated time until the call settles (synchronous callers only).</summary>
     public ExportCall CallExportSync(string resource, string export, string side = "server", double timeoutMs = 5000, params SgValue[] args)

@@ -31,11 +31,12 @@ interface Release {
 }
 
 /** The upload archive: deterministic, so the same sources always give the same SHA-256. */
-export function buildArchive(dir: string): { zip: Uint8Array; name: string; version: string; title: string | null; description: string | null; category: string | null; license: string | null; files: string[] } {
+export async function buildArchive(dir: string): Promise<{ zip: Uint8Array; name: string; version: string; title: string | null; description: string | null; category: string | null; license: string | null; files: string[] }> {
   const res = readResource(dir);
   if (!res.result.ok) throw new Error(res.result.errors.map((e) => `${e.code}: ${e.message}`).join("\n"));
   const m = res.result.manifest;
-  const { zip, files } = scriptgoArchive(m, listFiles(res.root), res.root, res.manifestFile);
+  const { zip, files, errors } = await scriptgoArchive(m, listFiles(res.root), res.root, res.manifestFile);
+  if (errors.length > 0) throw new Error(errors.map((e) => `${e.code}: ${e.message}`).join("\n"));
   return { zip, name: m.name, version: m.version, title: m.title, description: m.description, category: m.category, license: m.license, files };
 }
 
@@ -59,7 +60,7 @@ export async function run(args: string[]): Promise<number> {
     console.error(`scriptgo publish: ${dir} does not exist`);
     return 2;
   }
-  const pack = buildArchive(dir);
+  const pack = await buildArchive(dir);
   const sha256 = createHash("sha256").update(pack.zip).digest("hex");
   const slug = a.flags.package ?? pack.name.replace(/_/g, "-");
   console.log(`packed ${pack.name} ${pack.version}: ${pack.files.length} files, ${pack.zip.byteLength} bytes, sha256 ${sha256}`);

@@ -134,6 +134,7 @@ public sealed partial class NativeModule
     {
         var problems = new List<string>();
         if (!NamePattern().IsMatch(Name)) problems.Add($"module name '{Name}' must match ^[A-Za-z][A-Za-z0-9_]{{0,63}}$");
+        if (Name == "invoke") problems.Add("module name 'invoke' is reserved (ScriptGo.natives.invoke)");
         if (Capability is not null && !Regex.IsMatch(Capability, "^x-[a-z0-9-]+$")) problems.Add($"capability '{Capability}' must be an x- extension");
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var f in Functions)

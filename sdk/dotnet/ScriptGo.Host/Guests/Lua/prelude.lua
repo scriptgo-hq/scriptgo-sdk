@@ -652,7 +652,10 @@ for modName, desc in next, ctx.natives do
     for _, fnName in ipairs(desc.functions) do
         m[fnName] = function(...)
             local r = pack(sg_call("native", modName, fnName, ...))
-            if not r[1] then return nil, r[2], r[3] end
+            if not r[1] then
+                if r[3] == nil then return nil, r[2] end
+                return nil, r[2], r[3]
+            end
             if r.n == 1 then return true end
             return unpack(r, 2, r.n)
         end

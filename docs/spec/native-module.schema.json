@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scriptgo.dev/schemas/native-module.json",
+  "title": "SCRIPT//GO native module",
+  "description": "An integrator's natives, described once (name, parameters, results, side, permission). A host kit exposes them to every guest language as ScriptGo.natives.<module>.<function> and generates their typings. Read by ScriptGo.Host NativeModule.FromJson; handlers are bound in code after reading. The kit ignores members it does not know; this schema refuses them to catch typos. Rules the schema cannot express are checked at registration: a module name is registered once per host, function names are unique within a module, a required parameter cannot follow an optional one, every function has a handler bound, and a global module cannot take a name the runtime uses (ScriptGo, Open77, exports, source, print, console, promise, Citizen, json, string, table, math, os, utf8, bit, require, globalThis, JSON, Math, Promise, Object, Array).",
+  "type": "object",
+  "required": ["name"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": {
+      "description": "The module name: ScriptGo.natives.<name>. invoke is reserved (ScriptGo.natives.invoke).",
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+      "not": { "const": "invoke" }
+    },
+    "description": { "type": "string" },
+    "global": {
+      "description": "Also expose the module as a global of that name.",
+      "type": "boolean",
+      "default": false
+    },
+    "capability": {
+      "description": "An extension capability the host gains by registering the module, so manifests can require it.",
+      "type": "string",
+      "pattern": "^x-[a-z0-9-]+$"
+    },
+    "functions": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/function" }
+    }
+  },
+  "$defs": {
+    "type": {
+      "description": "A value type: nil, boolean, integer, number, string, table or any; T[] is a list of T (an empty table passes); T? also accepts nil. Arguments are checked against it before the handler runs (invalid_argument:<name>).",
+      "type": "string",
+      "pattern": "^(nil|boolean|integer|number|string|table|any)(\\[\\])?(\\?)?$"
+    },
+    "param": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "description": "Used in invalid_argument:<name> and in the typings.", "type": "string", "default": "arg" },
+        "type": { "$ref": "#/$defs/type", "default": "any" },
+        "description": { "type": "string" }
+      }
+    },
+    "function": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$" },
+        "description": { "type": "string" },
+        "side": {
+          "description": "Where it may be called; elsewhere the call fails with native_unavailable_on_side:<side>.",
+          "enum": ["server", "client", "both"],
+          "default": "both"
+        },
+        "permission": {
+          "description": "A permission the resource must declare in its manifest and the operator must grant (HostOptions.GrantPermission); otherwise the call fails with permission_denied:<permission>.",
+          "type": "string"
+        },
+        "params": {
+          "description": "In order. A call with more non-nil arguments than declared fails with invalid_argument_count.",
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/param" }
+        },
+        "returns": {
+          "description": "The result types, for the typings: one type, or a list for several values.",
+          "oneOf": [
+            { "$ref": "#/$defs/type" },
+            { "type": "array", "items": { "$ref": "#/$defs/type" } }
+          ]
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "name": "pets",
+      "description": "Pets of the host game.",
+      "global": false,
+      "capability": "x-pets",
+      "functions": [
+        { "name": "count", "side": "server", "params": [{ "name": "owner", "type": "string" }], "returns": "integer" },
+        { "name": "rename", "permission": "pets.rename", "params": [{ "name": "id", "type": "integer" }, { "name": "name", "type": "string" }] }
+      ]
+    }
+  ]
+}

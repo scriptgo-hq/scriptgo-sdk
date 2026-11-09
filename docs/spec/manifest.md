@@ -1,7 +1,7 @@
-# Resource manifest: `scriptgo.lua`
+# Resource manifest: `scriptgo.lua` / `scriptgo.json`
 
 A SCRIPT//GO package is a **resource**: a folder with a declarative manifest, shared/client/server
-Lua scripts, optional files. Anyone who has written a resource for a multiplayer game server already
+scripts (Lua, JavaScript or TypeScript, see [Script languages](#script-languages)), optional files. Anyone who has written a resource for a multiplayer game server already
 knows the format.
 
 ```text
@@ -32,8 +32,9 @@ inventory_pro/
 - **Unknown directives are kept and reported as warnings, never errors**, so directives specific
   to one environment and future ones do not break parsing. Hosts that also ignore directives they
   do not know can share a single manifest.
-- Limits: manifest ≤ 256 KiB; resource name is a lowercase slug `^[a-z0-9][a-z0-9_-]{0,63}$`
-  and must match the folder name when loaded from a folder.
+- Limits: manifest ≤ 256 KiB; the resource name is 3 to 64 lowercase letters, digits or `_`,
+  starting with a letter (`^[a-z][a-z0-9_]{2,63}$`, the OPEN//77 rule), and must match the folder
+  name when loaded from a folder.
 
 ## Core directives
 
@@ -48,13 +49,15 @@ inventory_pro/
 | `dependency/dependencies` | `"name"` or `"name >=1.2.0"` | Required resources, started first |
 | `permission/permissions` | string(s) | Capabilities the resource asks the host for (an environment's own permission strings are accepted verbatim) |
 | `file/files` | glob(s) | Extra files shipped with the resource |
-| `export(s)` / `server_export(s)` | name(s) | Declarative export names |
+| `export(s)` / `server_export(s)` | name(s) | Declarative exports of the client side (`exports`) and of the server side (`server_exports`): global functions of that name, published after the side's last script; a missing one fails the start with `manifest_export_missing:<name>`. Names match `^[a-z0-9][a-z0-9_-]{0,63}$` |
 | `web_ui_page`, `web_file(s)` | path / glob | WebUI (hosts without a WebUI ignore them) |
 | `open77_version` | range | OPEN//77 compatibility, read only by the OPEN//77 environment |
 
 Paths are relative, use `/`, may not contain `..`, a drive letter or a leading `/`.
-Script entries must be explicit `.lua` paths (no globs). Cross-resource includes
-(`@other/file.lua`) are refused: share code through `dependencies` + exports.
+Script entries are `.lua`, `.js` or `.ts` paths or globs (OPEN//77 semantics: `*` and `?` stay in
+one path segment, `**/` needs at least one intermediate directory, a trailing `**` matches
+anything; matches run in sorted order). Cross-resource includes (`@other/file.lua`) are refused:
+share code through `dependencies` + exports.
 
 ## SCRIPT//GO directives
 
@@ -75,11 +78,62 @@ Script entries must be explicit `.lua` paths (no globs). Cross-resource includes
 | `test_script(s)` | path(s) | Test files run by `scriptgo test` in the standalone host |
 | `licensed` | boolean | The resource verifies a license at start (`ScriptGo.licensing`) |
 
+## `scriptgo.json`
+
+`scriptgo.json` is the same manifest in JSON, for tools and languages that would rather not write
+the Lua DSL. Both parsers turn it into the same directive list, so every rule above applies:
+
+- The file holds one JSON object; otherwise `invalid_json` (also for a syntax error).
+- Each member is one directive, its key the directive name (singular and plural forms as in the
+  DSL; a key given twice in both forms accumulates, in member order).
+- A string, number or boolean is the directive's one argument; an array is a list of scalars. An
+  object is accepted only for `environment_script(s)`, mapping each environment to a path or a list
+  of paths. `null`, an object elsewhere, or a nested array or object inside a list is
+  `invalid_value`, as is a value of the wrong type (`"licensed": "yes"`).
+- `$schema` is ignored. Unknown members are kept and reported as `unknown_directive` warnings,
+  like unknown DSL directives.
+- Diagnostics carry no line number.
+
+```json
+{
+  "resource": "inventory_pro",
+  "version": "1.4.1",
+  "scriptgo_version": ">=0.1.0",
+  "capabilities": ["events", "storage"],
+  "shared_script": "shared/core.lua",
+  "server_scripts": ["server/main.ts"],
+  "environment_scripts": { "love2d": "env/love2d/hud.lua" },
+  "test_script": "tests/core_test.lua"
+}
+```
+
+## Script languages
+
+A script's language comes from its extension:
+
+| Extension | Language | Runs as |
+|---|---|---|
+| `.lua` | `lua` | Lua source |
+| `.js` | `js` | JavaScript source |
+| `.ts` | `js` | the JavaScript the CLI compiled from it, `<entry>.js` (see [multi-language.md](multi-language.md#typescript)) |
+
+- Any other extension in a script entry (`.cs` included) is `unsupported_script`. `test_script(s)`
+  must be `.lua` (`unsupported_script` otherwise): `scriptgo test` runs them in the standalone Lua
+  host.
+- A host that cannot run a language one of its scripts uses refuses to start the resource with
+  `language_unavailable:<language>@<environment>`. Only the scripts that host would run count: the
+  shared scripts, the scripts of the sides it runs, and its own environment's scripts. The portable
+  Lua core runs `lua` only; the .NET kit runs `lua` and `js`.
+- A `.ts` entry whose compiled `<entry>.js` is missing fails the start with
+  `typescript_not_compiled:<entry>`. A glob does not pick up `<entry>.ts.js` next to its `.ts`.
+- One resource may mix languages; how values, events and exports cross between them is in
+  [multi-language.md](multi-language.md).
+
 ## Resolution rules
 
-1. A host loads `scriptgo.lua`; if absent, an environment's native manifest name (`open77.lua` for
-   the `open77` environment), so its resources run unchanged as long as they use the portable API
-   subset.
+1. A host looks for `scriptgo.lua`, then `scriptgo.json`, then an environment's native manifest
+   name (`open77.lua` for the `open77` environment), and reads the first it finds; an `open77.lua`
+   resource runs unchanged as long as it uses the portable API subset.
 2. If a required capability is missing in the current environment, the resource **does not
    start**, and the host reports `capability_unavailable:<cap>@<environment>`.
 3. If `environments` is declared and the current environment is not listed, the resource starts

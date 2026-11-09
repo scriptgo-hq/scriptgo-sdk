@@ -43,8 +43,9 @@
   // Answers a bridge result's values, or throws its failure.
   function ok(r, label) {
     if (r[0]) return r;
-    const code = r[1] === 'codec_error' && r[2] !== undefined ? r[2] : r[1];
-    throw new ScriptGoError(code, label === undefined ? code : label + ' ' + code);
+    // A refusal's detail (the codec message, a native's "expected T, got U") rides on e.detail.
+    if (r[1] === 'codec_error' && r[2] !== undefined) throw new ScriptGoError(r[2], label === undefined ? r[2] : label + ' ' + r[2]);
+    throw new ScriptGoError(r[1], label === undefined ? r[1] : label + ' ' + r[1], r[2]);
   }
 
   // Context of the code running now: `source` and the invoking resource are valid in the synchronous
@@ -355,6 +356,11 @@
 
   // Native modules the integrator registered: ScriptGo.natives.<module>.<fn>(...) answers the first
   // value (ScriptGo.natives.invoke answers all of them) and throws ScriptGoError on refusal.
+  // Not enumerable, so Object.keys(ScriptGo.natives) lists the modules only ("invoke" is reserved).
+  Object.defineProperty(ScriptGo.natives, 'invoke', {
+    value: (moduleName, fnName, ...args) => ok(call('native', String(moduleName), String(fnName), ...args), moduleName + '.' + fnName).slice(1),
+    enumerable: false,
+  });
   for (const moduleName of Object.keys(ctx.natives)) {
     const desc = ctx.natives[moduleName];
     const m = {};

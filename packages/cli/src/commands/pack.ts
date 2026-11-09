@@ -1,6 +1,7 @@
 // scriptgo pack <dir> --target scriptgo|open77 [--out dist]
 //
-//   scriptgo  a .zip of the resource for `scriptgo publish` (manifest + every referenced file)
+//   scriptgo  a .zip of the resource for `scriptgo publish` (manifest + every referenced file);
+//             each TypeScript entry x.ts is compiled to x.ts.js inside the archive (lib/typescript.ts)
 //   open77    a folder OPEN//77 loads as is: a generated open77.lua that loads the ScriptGo shim
 //             (sdk/adapters/open77/shim*.lua) before the resource's scripts, and the referenced files.
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -10,6 +11,7 @@ import { expandGlob, parseManifest, scriptLanguage, validateResourceFiles, type 
 import { parseArgs } from "../lib/args.ts";
 import { open77Portability } from "../lib/portability.ts";
 import { listFiles, readResource, sdkRoot, type LoadedResource } from "../lib/sdk.ts";
+import { compileTypeScript, type CompileIssue } from "../lib/typescript.ts";
 
 export const summary = "Package a resource: a publishable .zip, or an OPEN//77 resource folder";
 
@@ -68,18 +70,29 @@ export const DOC_FILES = ["README.md", "CHANGELOG.md", "LICENSE", "LICENSE.md", 
 
 /**
  * The SCRIPT//GO upload archive, shared by `pack --target scriptgo` and `publish`: the referenced
- * files plus test scripts and documents. Deterministic (fixed timestamps), so the same sources
- * always give the same bytes and SHA-256.
+ * files plus test scripts and documents, and for TypeScript the compiled `<entry>.js` with every
+ * source the bundle read. Deterministic (fixed timestamps, pinned esbuild), so the same sources
+ * always give the same bytes and SHA-256. A TypeScript compile error leaves `errors` set and no zip.
  */
-export function scriptgoArchive(m: ParsedManifest, all: string[], root: string, manifestFile: string): { zip: Uint8Array; files: string[] } {
+export async function scriptgoArchive(
+  m: ParsedManifest, all: string[], root: string, manifestFile: string,
+): Promise<{ zip: Uint8Array; files: string[]; errors: CompileIssue[] }> {
   const included = new Set(referencedFiles(m, all, manifestFile));
   for (const t of m.testScripts) for (const f of expandGlob(t, all)) included.add(f);
   for (const d of DOC_FILES) if (all.includes(d)) included.add(d);
+  const ts = await compileTypeScript(root, m, all);
+  if (ts.errors.length > 0) return { zip: new Uint8Array(), files: [], errors: ts.errors };
+  const compiled = new Map<string, Uint8Array>();
+  for (const c of ts.entries) {
+    compiled.set(c.output, c.code);
+    for (const input of c.inputs) included.add(input);
+  }
+  for (const out of compiled.keys()) included.add(out);
   const files = [...included].sort();
   const entries: Record<string, Uint8Array> = {};
-  for (const f of files) entries[`${m.name}/${f}`] = readFileSync(join(root, f));
+  for (const f of files) entries[`${m.name}/${f}`] = compiled.get(f) ?? readFileSync(join(root, f));
   const zip = zipSync(entries, { level: 9, mtime: new Date("2026-01-01T00:00:00Z") });
-  return { zip, files };
+  return { zip, files, errors: [] };
 }
 
 const quote = (s: string): string => JSON.stringify(s);
@@ -249,7 +262,9 @@ export async function run(args: string[]): Promise<number> {
   const out = resolve(a.flags.out ?? "dist");
   if (target === "scriptgo") {
     // Same archive as `scriptgo publish` uploads, so a zip uploaded on the website gets the same page.
-    const { zip, files: packed } = scriptgoArchive(m, files, res.root, res.manifestFile);
+    const { zip, files: packed, errors } = await scriptgoArchive(m, files, res.root, res.manifestFile);
+    for (const e of errors) console.error(`error ${e.code}: ${e.message}`);
+    if (errors.length > 0) return 1;
     mkdirSync(out, { recursive: true });
     const file = join(out, `${m.name}-${m.version}.zip`);
     writeFileSync(file, zip);

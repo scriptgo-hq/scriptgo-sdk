@@ -17,6 +17,15 @@
 //   neovim      runs `nvim --headless --clean -l sdk/adapters/neovim/verify.lua`: the plugin's libuv
 //               timer ticks the host on Neovim's main loop. Needs --nvim, SCRIPTGO_NVIM or
 //               tools/runtimes/neovim. HTTP and licensing through curl, so --stub-api applies.
+//   dotnet      the console host of the .NET kit (sdk/dotnet/ScriptGo.Host.Standalone): Lua guests on
+//               KeraLua, JavaScript guests on Jint. The resource and its dependencies are copied to a
+//               temporary folder where every TypeScript entry is compiled (lib/typescript.ts), then
+//               the host verifies the copy. Needs the .NET 10 SDK (--dotnet, SCRIPTGO_DOTNET or the
+//               default install); the host is built on first use.
+//
+// --lang lua|ts|js names the guest language the run is evidence for (default: the resource's own,
+// ts when it has TypeScript scripts). Reports are tagged per language on the dotnet environment
+// (`dotnet-lua`, `dotnet-ts`); the other environments run Lua only and skip any other language.
 //
 // Everywhere, lines a resource prints as `SGCHECK PASS|FAIL <name>` become checks of the report.
 //
@@ -42,9 +51,11 @@ import { join, resolve } from "node:path";
 import type { ParsedManifest } from "@scriptgo/manifest";
 import { CompatibilityRunSchema, type CompatibilityRun } from "@scriptgo/shared";
 import { parseArgs } from "../lib/args.ts";
-import { defaultSearchPaths, pickInterpreters, readResource, repoRoot, standaloneMain, type LoadedResource } from "../lib/sdk.ts";
+import { defaultSearchPaths, findManifestFile, listFiles, pickInterpreters, readResource, repoRoot, standaloneMain, type LoadedResource } from "../lib/sdk.ts";
 import { writeReadmeExample, type ReadmeExample } from "../lib/readme-example.ts";
 import { startStubApi, type StubRequest } from "../lib/stub-api.ts";
+import { findDotnet, ensureDotnetHost } from "../lib/dotnet.ts";
+import { compileTypeScript, ESBUILD_VERSION } from "../lib/typescript.ts";
 import { packForOpen77 } from "./pack.ts";
 
 export const summary = "Run a resource on its environments and write compatibility reports";
@@ -168,7 +179,7 @@ function open77ServerVersion(server: string): string {
 function findResource(name: string, search: string[]): string | null {
   for (const dir of search) {
     const p = join(dir, name);
-    if (existsSync(join(p, "scriptgo.lua")) || existsSync(join(p, "open77.lua"))) return p;
+    if (existsSync(p) && findManifestFile(p)) return p;
   }
   return null;
 }
@@ -472,6 +483,100 @@ function verifyLuanti(res: LoadedResource, m: ParsedManifest, search: string[], 
   return report;
 }
 
+/** Guest languages a run can be evidence for. C# guests are planned (phase 3). */
+export const RUN_LANGUAGES = ["lua", "ts", "js"] as const;
+export type RunLanguage = (typeof RUN_LANGUAGES)[number];
+
+/** The language a resource is written in, as a run reports it: ts when it has TypeScript scripts. */
+export function resourceLanguage(m: ParsedManifest): RunLanguage {
+  const scripts = [...m.sharedScripts, ...m.serverScripts, ...m.clientScripts, ...Object.values(m.environmentScripts).flat()];
+  if (scripts.some((p) => p.endsWith(".ts"))) return "ts";
+  if (scripts.some((p) => p.endsWith(".js"))) return "js";
+  return "lua";
+}
+
+/**
+ * The .NET kit: copies the resource and its dependencies to a temporary folder, compiles their
+ * TypeScript entries there, and runs `scriptgo-dotnet verify` on the copy. Without the .NET SDK
+ * the run is skipped.
+ */
+async function verifyDotnet(
+  res: LoadedResource, m: ParsedManifest, search: string[],
+  opts: { lang: RunLanguage; dotnet?: string; rebuild?: boolean; stub?: ApiTarget; example?: ReadmeExample | null },
+): Promise<Report> {
+  const started = Date.now();
+  const base = (status: Report["status"], checks: Check[], log = ""): Report => ({
+    package: m.name, version: m.version, environment: "dotnet", status, runtimeVersion: "", adapterVersion: "", luaVersion: "",
+    durationMs: Date.now() - started, checks, log, evidence: { language: opts.lang },
+  });
+  const dotnet = findDotnet(opts.dotnet);
+  if (!dotnet) return base("skipped", [{ name: "host_run", status: "skipped", message: "no .NET SDK: install .NET 10, or pass --dotnet <path> or SCRIPTGO_DOTNET" }]);
+  const host = ensureDotnetHost(dotnet, opts.rebuild);
+  if ("error" in host) return base("failing", [{ name: "host_build", status: "failed", message: host.error }]);
+  const { order, missing } = closure(res, search);
+  if (missing.length > 0) return base("failing", [{ name: "dependencies_resolved", status: "failed", message: missing.join(", ") }]);
+
+  const tmp = mkdtempSync(join(tmpdir(), "scriptgo-dotnet-"));
+  const stage = join(tmp, "resources");
+  const tsChecks: Check[] = [];
+  let compiled = 0;
+  for (const r of order) {
+    if (!r.result.ok) continue;
+    const name = r.result.manifest.name;
+    const dest = join(stage, name);
+    cpSync(r.root, dest, { recursive: true, filter: (src) => !/[\\/](?:node_modules|\.git)(?:[\\/]|$)/.test(src) });
+    const ts = await compileTypeScript(r.root, r.result.manifest, listFiles(r.root));
+    for (const e of ts.errors) tsChecks.push({ name: `typescript:${name}`, status: "failed", message: e.message });
+    for (const c of ts.entries) {
+      writeFileSync(join(dest, c.output), c.code);
+      compiled++;
+    }
+  }
+  if (tsChecks.length > 0) {
+    rmSync(tmp, { recursive: true, force: true });
+    return base("failing", tsChecks);
+  }
+  if (compiled > 0) tsChecks.push({ name: "typescript", status: "passed", message: `${compiled} entr${compiled === 1 ? "y" : "ies"} compiled by esbuild ${ESBUILD_VERSION}` });
+  let exampleDir: string | null = null;
+  if (opts.example) {
+    exampleDir = join(stage, opts.example.name);
+    cpSync(opts.example.dir, exampleDir, { recursive: true });
+  }
+  const reportFile = join(tmp, "report.json");
+  const argv = [host.dll, "verify", join(stage, m.name), "--search", stage, "--report", reportFile, "--settle", "2000", "--lang", opts.lang];
+  if (exampleDir) argv.push("--with", exampleDir);
+  const firstRequest = opts.stub?.requests.length ?? 0;
+  if (opts.stub) {
+    const config = join(tmp, "config.json");
+    writeFileSync(config, JSON.stringify({
+      resources: { [m.name]: { api: opts.stub.url, license_key: opts.stub.licenseKey } },
+      convars: { scriptgo_api: opts.stub.url },
+    }));
+    argv.push("--config", config);
+  }
+  const v = await spawnAsync(dotnet, argv);
+  let report: Report;
+  try {
+    report = JSON.parse(readFileSync(reportFile, "utf8")) as Report;
+  } catch {
+    report = base("failing", [{ name: "host_verify", status: "failed", message: `no report (exit ${v.status})` }], ((v.stdout ?? "") + (v.stderr ?? "")).trim());
+  }
+  rmSync(tmp, { recursive: true, force: true });
+  report.checks.push(...tsChecks, ...selfChecks(report.log));
+  if (opts.stub) {
+    report.checks.push(...apiChecks(opts.stub.requests, firstRequest, "dotnet", report.adapterVersion));
+    report.log = report.log.split(opts.stub.licenseKey).join("<license_key>").split(opts.stub.url).join("<stub-api>");
+  }
+  report.environment = "dotnet";
+  report.evidence = {
+    ...report.evidence, language: opts.lang, ...(compiled > 0 ? { typescript: `esbuild ${ESBUILD_VERSION}` } : {}),
+    ...(opts.stub ? { api: opts.stub.label } : {}), ...exampleEvidence(opts.example),
+  };
+  report.status = statusOf(report.checks);
+  report.durationMs = Date.now() - started;
+  return report;
+}
+
 function exampleEvidence(example?: ReadmeExample | null): Record<string, string> {
   return example ? { readme_example: `${example.name}: the runnable Lua block of README.md` } : {};
 }
@@ -588,10 +693,18 @@ async function verifyEngine(
   return report;
 }
 
+/** The report's tag: standalone per interpreter, dotnet per guest language, else the environment. */
+function runTag(r: Report): string {
+  if (r.environment === "standalone") return `standalone-${String(r.evidence.interpreter ?? "lua")}`;
+  if (r.environment === "dotnet") return `dotnet-${String(r.evidence.language ?? "lua")}`;
+  return r.environment;
+}
+
 export async function run(args: string[]): Promise<number> {
-  const a = parseArgs(args, { booleans: ["help", "json", "stub-api", "no-readme-example"], repeatable: ["search"] });
+  const a = parseArgs(args, { booleans: ["help", "json", "stub-api", "no-readme-example", "rebuild-dotnet"], repeatable: ["search"] });
   if (a.bools.has("help") || a.positional.length === 0) {
-    console.log(`scriptgo verify <resourceDir> [--env standalone|open77|luanti|love2d|godot|neovim|all] [--lua all|lua54|lua51|luajit]
+    console.log(`scriptgo verify <resourceDir> [--env standalone|open77|luanti|love2d|godot|neovim|dotnet|all] [--lua all|lua54|lua51|luajit]
+    [--lang lua|ts|js] [--dotnet path\\to\\dotnet.exe] [--rebuild-dotnet]
     [--luanti-image ${LUANTI_IMAGE}] [--luanti-seconds 3] [--love path\\to\\lovec.exe] [--godot path\\to\\Godot_console.exe]
     [--nvim path\\to\\nvim.exe] [--no-readme-example]
     [--search dir]... [--out verification/reports] [--json]
@@ -618,13 +731,29 @@ export async function run(args: string[]): Promise<number> {
     stub = { url: a.flags.api.replace(/\/+$/, ""), licenseKey: key, requests: [], label: `api ${new URL(a.flags.api).host}` };
   }
 
+  const asked = a.flags.lang ?? resourceLanguage(m);
+  if (!(RUN_LANGUAGES as readonly string[]).includes(asked)) {
+    console.error(asked === "cs" ? "C# guests are planned (phase 3): no host runs them yet" : `unknown language '${asked}' (lua, ts, js)`);
+    return 2;
+  }
+  const lang = asked as RunLanguage;
   const example = a.bools.has("no-readme-example") ? null : writeReadmeExample(res.root, m);
   if (example) console.log(`README example: ${example.name} (runnable Lua block of README.md) runs next to ${m.name}`);
 
-  if (env === "standalone" || env === "all") {
+  // Every environment but dotnet runs Lua only: another language is reported as skipped there.
+  const luaOnly = ["standalone", "open77", "luanti", "love2d", "godot", "neovim"];
+  if (lang !== "lua") {
+    for (const e of luaOnly.filter((x) => env === x || env === "all")) {
+      reports.push({
+        package: m.name, version: m.version, environment: e, status: "skipped", runtimeVersion: "", adapterVersion: "", luaVersion: "",
+        durationMs: 0, checks: [{ name: "language", status: "skipped", message: `${e} runs Lua resources only (asked: ${lang})` }], log: "", evidence: { language: lang },
+      });
+    }
+  }
+  if (lang === "lua" && (env === "standalone" || env === "all")) {
     for (const lua of pickInterpreters(a.flags.lua ?? "all")) reports.push(await verifyStandalone(res.root, m, lua, search, stub, example));
   }
-  if (env === "open77" || env === "all") {
+  if (lang === "lua" && (env === "open77" || env === "all")) {
     reports.push(await verifyOpen77(res, m, search, {
       server: a.flags["open77-server"] ? resolve(a.flags["open77-server"]) : undefined,
       port: Number(a.flags.port ?? 11861),
@@ -634,21 +763,24 @@ export async function run(args: string[]): Promise<number> {
       example,
     }));
   }
-  if (env === "luanti" || env === "all") {
+  if (lang === "lua" && (env === "luanti" || env === "all")) {
     reports.push(verifyLuanti(res, m, search, {
       image: a.flags["luanti-image"] ?? LUANTI_IMAGE,
       seconds: Number(a.flags["luanti-seconds"] ?? 3),
       example,
     }));
   }
-  if (env === "love2d" || env === "all") {
+  if (lang === "lua" && (env === "love2d" || env === "all")) {
     reports.push(await verifyEngine("love2d", findLove(a.flags.love), res, m, search, example, stub));
   }
-  if (env === "godot" || env === "all") {
+  if (lang === "lua" && (env === "godot" || env === "all")) {
     reports.push(await verifyEngine("godot", findGodot(a.flags.godot), res, m, search, example));
   }
-  if (env === "neovim" || env === "all") {
+  if (lang === "lua" && (env === "neovim" || env === "all")) {
     reports.push(await verifyEngine("neovim", findNeovim(a.flags.nvim), res, m, search, example, stub));
+  }
+  if (env === "dotnet" || env === "all") {
+    reports.push(await verifyDotnet(res, m, search, { lang, dotnet: a.flags.dotnet, rebuild: a.bools.has("rebuild-dotnet"), stub, example }));
   }
   await stubServer?.close();
   example?.cleanup();
@@ -664,14 +796,14 @@ export async function run(args: string[]): Promise<number> {
     for (const c of r.checks) c.message = scrub(c.message);
   }
   if (reports.length === 0) {
-    console.error(`unknown environment '${env}' (standalone, open77, luanti, love2d, godot, neovim, all)`);
+    console.error(`unknown environment '${env}' (standalone, open77, luanti, love2d, godot, neovim, dotnet, all)`);
     return 2;
   }
 
   mkdirSync(out, { recursive: true });
   const ranAt = new Date().toISOString();
   for (const r of reports) {
-    const tag = r.environment === "standalone" ? `standalone-${String(r.evidence.interpreter ?? "lua")}` : r.environment;
+    const tag = runTag(r);
     if (r.status === "skipped") continue;
     writeFileSync(join(out, `${r.package}-${r.version}-${tag}.json`), JSON.stringify(toCompatibilityRun(r, tag, ranAt), null, 2) + "\n");
   }
@@ -679,7 +811,7 @@ export async function run(args: string[]): Promise<number> {
     console.log(JSON.stringify(reports, null, 2));
   } else {
     for (const r of reports) {
-      const tag = r.environment === "standalone" ? `standalone/${String(r.evidence.interpreter)}` : r.environment;
+      const tag = runTag(r).replace("-", "/");
       console.log(`${r.package} ${r.version} on ${tag}: ${r.status}`);
       for (const c of r.checks) console.log(`  ${c.status === "passed" ? "ok  " : c.status === "skipped" ? "skip" : "FAIL"} ${c.name}${c.message ? `  ${c.message}` : ""}`);
     }
