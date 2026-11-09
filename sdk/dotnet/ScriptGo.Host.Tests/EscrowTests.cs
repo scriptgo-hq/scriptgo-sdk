@@ -182,6 +182,36 @@ public sealed class EscrowTests
         public Task<EscrowKeyResult> RequestKeyAsync(EscrowManifest manifest, EscrowServerIdentity identity, CancellationToken ct = default) => Task.FromResult(result);
     }
 
+    // ---------------- Option A: materialize to a resources root and run from disk (as OPEN//77 does)
+
+    [TestMethod]
+    public async Task MaterializesAndRunsFromDiskLikeOpen77()
+    {
+        var v = Load();
+        using var identity = EscrowServerIdentity.Generate();
+        var resourcesRoot = Path.Combine(Path.GetTempPath(), "sg-escrow-materialize", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(resourcesRoot);
+        try
+        {
+            var (ok, reason, dir) = await EscrowMaterializer.MaterializeAsync(
+                Convert.FromBase64String(v.bundleB64), resourcesRoot, identity,
+                new FakeKeyService(Convert.FromHexString(v.contentKeyHex), valid: true), v.signerPublicKeyB64Url);
+            Assert.IsTrue(ok, "materialize must succeed: " + reason);
+            Assert.AreEqual("demo", Path.GetFileName(dir));
+            Assert.IsTrue(File.Exists(Path.Combine(dir!, "scriptgo.lua")), "the manifest must be on disk for a disk-reading host.");
+
+            // A fresh host with the default FolderFiles loads the materialized folder from disk and runs it
+            // — the same path OPEN//77's ServerResourceHost.Discover/ReadFromDisk uses. No core change.
+            var log = new CaptureLog();
+            using var host = new ScriptGoHost(new HostServices { Log = log }, new HostOptions { Environment = "dotnet" });
+            var name = host.AddResource(dir!);
+            Assert.IsTrue(host.Start(name).Ok, log.ToString());
+            host.RunFor(50);
+            Assert.IsTrue(log.Has("escrow secret ok"), "the decrypted script must run from the materialized folder.\n" + log);
+        }
+        finally { try { Directory.Delete(resourcesRoot, recursive: true); } catch (IOException) { } }
+    }
+
     private sealed class EscrowBundleManifestProbe
     {
         public EscrowManifest Manifest { get; }

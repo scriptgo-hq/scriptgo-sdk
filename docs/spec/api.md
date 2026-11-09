@@ -53,7 +53,7 @@ POST /v1/reports  (multipart: fields + evidence[]) → { caseId: "RPT-2026-00012
 GET  /v1/stats                                   → { packages, creators, environmentsVerified }  (real counts only: demo
                                                    data excluded, environmentsVerified counts listed environments)
 GET  /v1/compatibility-runs/:runId/evidence/:index → stored evidence file (screenshot or log)
-POST /v1/licenses/verify, /v1/licenses/activate, /v1/licenses/deactivate, GET /v1/licenses/public-key  (see Licensing)
+POST /v1/licenses/verify, /v1/licenses/activate, /v1/licenses/key, /v1/licenses/deactivate, GET /v1/licenses/public-key  (see Licensing)
 ```
 
 `PackageDetail.compatibility` has one entry per environment the latest release declares or was
@@ -207,14 +207,21 @@ Store = { id, provider, status: StoreStatus, approved: boolean,
 ## Licensing (called by deployments)
 
 ```
-POST /v1/licenses/activate   { licenseKey, package, environment, deploymentName, adapterVersion }
+POST /v1/licenses/activate   { licenseKey, package, environment, deploymentName, adapterVersion, serverPublicKey? }
                              → 201 { activationId, deploymentToken }
                                404 unknown_key, 409 deployment_limit | deployment_exists | <license status, e.g. expired>,
                                422 environment_not_covered   (activating the same name again rotates its token)
+                               // serverPublicKey: the server's X25519 public key (base64url) for escrow binding
 POST /v1/licenses/verify     { licenseKey | deploymentToken, package, environment, adapterVersion }
                              → 200 { valid, reason: VerifyFailureReason | null, status: LicenseStatus | null,
                                      activationStatus: ActivationStatus | null, expiresAt, offlineGraceUntil,
                                      environments: string[], token: string }   // ed25519-signed, short-lived
+POST /v1/licenses/key        { licenseKey | deploymentToken, package, version?, environment, adapterVersion, serverPublicKey? }
+                             → 200 { valid, reason: KeyReleaseFailureReason | null, wrappedKey: {epk,nonce,wrapped} | null,
+                                     aad, signerPublicKey, deliveryWatermark, offlineGraceUntil, expiresAt }
+                               // escrow: content key wrapped to the bound server. Gated like verify, plus binding +
+                               // escrowed release. Reasons add unbound, not_escrowed. 4xx/5xx → loader offline grace.
+                               // See docs/spec/escrow.md.
 POST /v1/licenses/deactivate { licenseKey, activationId }  → { ok: true }
 GET  /v1/licenses/:id        (owner session only)          → LicenseDetail
 GET  /v1/licenses/public-key                               → { alg: "ed25519", publicKey, kid }

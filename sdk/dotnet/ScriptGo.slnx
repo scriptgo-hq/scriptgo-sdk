@@ -2,4 +2,5 @@
   <Project Path="ScriptGo.Host.Standalone/ScriptGo.Host.Standalone.csproj" />
   <Project Path="ScriptGo.Host.Tests/ScriptGo.Host.Tests.csproj" />
   <Project Path="ScriptGo.Host/ScriptGo.Host.csproj" />
+  <Project Path="../adapters/open77/escrow/runner/ScriptGo.Open77.Escrow.Runner.csproj" />
 </Solution>

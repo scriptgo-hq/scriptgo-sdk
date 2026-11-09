@@ -41,6 +41,10 @@ public sealed class EscrowServerIdentity : IDisposable
         return new EscrowServerIdentity((byte[])privateRaw.Clone(), (byte[])publicRaw.Clone());
     }
 
+    /// <summary>The raw 32-byte private key, for the operator to persist securely (e.g. a protected
+    /// file, DPAPI, a secrets manager). SECRET: never log it, ship it, or store it where others read it.</summary>
+    public byte[] ExportPrivateKey() => (byte[])_privateRaw.Clone();
+
     /// <summary>Unwraps a content key the master wrapped to this server, binding it to the release aad.</summary>
     internal byte[] Unwrap(WrappedKey wrapped, ReadOnlySpan<byte> aad) =>
         EscrowCrypto.UnwrapContentKey(wrapped, _privateRaw, PublicKey, aad);

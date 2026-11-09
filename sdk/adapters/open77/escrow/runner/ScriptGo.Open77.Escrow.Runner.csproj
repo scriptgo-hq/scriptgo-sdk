@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Outside sdk/dotnet/Directory.Build.props, so these are set explicitly. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>scriptgo-open77-escrow</AssemblyName>
+    <RootNamespace>ScriptGo.Open77.Escrow.Runner</RootNamespace>
+    <Description>Option A loader (CREATOR-PROTECTION §4): fetches a SCRIPT//GO escrow release, decrypts in C#, and materializes it into an OPEN//77 resources root as a normal local resource. No OPEN//77 change.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../../dotnet/ScriptGo.Host/ScriptGo.Host.csproj" />
+  </ItemGroup>
+</Project>
