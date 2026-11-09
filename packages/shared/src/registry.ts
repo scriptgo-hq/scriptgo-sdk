@@ -182,7 +182,12 @@ export const Stats = z.object({
 });
 export type Stats = z.infer<typeof Stats>;
 
-export const Health = z.object({ ok: z.literal(true), version: z.string() });
+export const Health = z.object({
+  ok: z.literal(true),
+  version: z.string(),
+  /** Whether the platform delivers e-mail (SMTP configured). The site words its promises on it. */
+  mail: z.boolean(),
+});
 
 // ---------------------------------------------------------------- creator: packages and releases
 
