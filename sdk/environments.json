@@ -427,16 +427,40 @@
       "sales": "review",
       "salesNote": "No published rule on selling mods: free packages only until the rights holder confirms in writing.",
       "luaDialects": [
-        "5.3",
-        "LuaJIT"
+        "5.3"
       ],
       "runtimeVersions": [],
       "adapterVersion": "",
-      "summary": "BeamMP server plugins and BeamNG.drive client mods, for driving and roleplay servers.",
-      "capabilities": {},
-      "capabilityNotes": {},
+      "summary": "One BeamMP server plugin runs SCRIPT//GO packages on BeamMP servers (BeamNG.drive multiplayer), for driving and roleplay servers.",
+      "capabilities": {
+        "commands": "supported",
+        "config": "supported",
+        "events": "partial",
+        "http": "partial",
+        "licensing": "partial",
+        "logging": "supported",
+        "permissions": "supported",
+        "players": "supported",
+        "storage": "supported",
+        "ui": "partial"
+      },
+      "capabilityNotes": {
+        "commands": "Chat commands (/name ...; the line is not broadcast) and the server console, where they run as the console.",
+        "config": "scriptgo.json resources and convars.",
+        "events": "Server side only: the plugin runs no client scripts, and TriggerClientEvent answers network_unavailable.",
+        "http": "curl started in the background through os.execute and polled each tick, so a request never blocks the plugin; needs curl on the server's PATH. BeamMP's own Http.CreateConnection has no POST and drops the response.",
+        "licensing": "Works over the same curl path, but paid listings stay off: no published BeamNG or BeamMP rule on selling mods, so packages stay free until the rights holder confirms in writing.",
+        "permissions": "Grants in scriptgo.json, by beammp:<account id>, or by name for players logged in to BeamMP: BeamMP has no server-side roles.",
+        "players": "MP.GetPlayers and the join and disconnect events. BeamMP id n is SCRIPT//GO player n + 1 (0 is the console); identifier is beammp:<account id>, beammp-guest:<name> for guests.",
+        "storage": "JSON files in the plugin's data/storage folder (scriptgo.json dataDir), replaced atomically.",
+        "ui": "MP.SendNotification (a toast in the BeamMP client); its display is not verified, as no game client runs here."
+      },
       "setupMarkdown": "",
-      "limitations": [],
+      "limitations": [
+        "Not verified on a real server yet: BeamMP-Server (3.9.3) refuses to start without an AuthKey from keymaster.beammp.com, which only the server owner can get. Until then the adapter has passed unit tests on a mock of BeamMP's Lua API only.",
+        "Server side only: BeamNG.drive client mods are out of scope, and no game client is run.",
+        "HTTP, and so online license checks, needs curl on the server's PATH."
+      ],
       "listed": true,
       "sortOrder": 120,
       "adapters": []

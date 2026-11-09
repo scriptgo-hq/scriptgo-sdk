@@ -3,6 +3,8 @@
 //   scriptgo  a .zip of the resource for `scriptgo publish` (manifest + every referenced file)
 //   open77    a folder OPEN//77 loads as is: a generated open77.lua that loads the ScriptGo shim
 //             (sdk/adapters/open77/shim*.lua) before the resource's scripts, and the referenced files.
+//   beammp    Resources/Server/scriptgo/: the BeamMP plugin with the resource and its dependencies
+//             (lib/beammp.ts).
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { zipSync } from "fflate";
@@ -10,6 +12,7 @@ import { expandGlob, parseManifest, validateResourceFiles, type ParsedManifest }
 import { parseArgs } from "../lib/args.ts";
 import { open77Portability } from "../lib/portability.ts";
 import { listFiles, readResource, sdkRoot, type LoadedResource } from "../lib/sdk.ts";
+import { packBeamMPCommand } from "../lib/beammp.ts";
 
 export const summary = "Package a resource: a publishable .zip, or an OPEN//77 resource folder";
 
@@ -224,7 +227,7 @@ export function packForOpen77(
 export async function run(args: string[]): Promise<number> {
   const a = parseArgs(args, { booleans: ["help", "allow-unportable"] });
   if (a.bools.has("help") || a.positional.length === 0) {
-    console.log("scriptgo pack <resourceDir> [--target scriptgo|open77] [--out dist] [--allow-unportable]");
+    console.log("scriptgo pack <resourceDir> [--target scriptgo|open77|beammp] [--out dist] [--allow-unportable]");
     return a.bools.has("help") ? 0 : 2;
   }
   const res = readResource(a.positional[0]!);
@@ -260,6 +263,8 @@ export async function run(args: string[]): Promise<number> {
     return 0;
   }
 
-  console.error(`unknown target '${target}' (scriptgo, open77)`);
+  if (target === "beammp") return packBeamMPCommand(res, join(out, "beammp"));
+
+  console.error(`unknown target '${target}' (scriptgo, open77, beammp)`);
   return 2;
 }

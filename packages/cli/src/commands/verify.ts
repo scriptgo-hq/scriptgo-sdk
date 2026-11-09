@@ -17,6 +17,9 @@
 //   neovim      runs `nvim --headless --clean -l sdk/adapters/neovim/verify.lua`: the plugin's libuv
 //               timer ticks the host on Neovim's main loop. Needs --nvim, SCRIPTGO_NVIM or
 //               tools/runtimes/neovim. HTTP and licensing through curl, so --stub-api applies.
+//   beammp      starts a real BeamMP-Server on loopback with the SCRIPT//GO plugin in verify mode
+//               (lib/beammp.ts). Needs the server (--beammp-server, SCRIPTGO_BEAMMP_SERVER or
+//               tools/runtimes/beammp) and the owner's AuthKey in BEAMMP_AUTH_KEY; else skipped.
 //
 // Everywhere, lines a resource prints as `SGCHECK PASS|FAIL <name>` become checks of the report.
 //
@@ -46,6 +49,7 @@ import { defaultSearchPaths, pickInterpreters, readResource, repoRoot, standalon
 import { writeReadmeExample, type ReadmeExample } from "../lib/readme-example.ts";
 import { startStubApi, type StubRequest } from "../lib/stub-api.ts";
 import { packForOpen77 } from "./pack.ts";
+import { BEAMMP_PORT, findBeamMPServer, verifyBeamMP } from "../lib/beammp.ts";
 
 export const summary = "Run a resource on its environments and write compatibility reports";
 
@@ -591,9 +595,10 @@ async function verifyEngine(
 export async function run(args: string[]): Promise<number> {
   const a = parseArgs(args, { booleans: ["help", "json", "stub-api", "no-readme-example"], repeatable: ["search"] });
   if (a.bools.has("help") || a.positional.length === 0) {
-    console.log(`scriptgo verify <resourceDir> [--env standalone|open77|luanti|love2d|godot|neovim|all] [--lua all|lua54|lua51|luajit]
+    console.log(`scriptgo verify <resourceDir> [--env standalone|open77|luanti|love2d|godot|neovim|beammp|all] [--lua all|lua54|lua51|luajit]
     [--luanti-image ${LUANTI_IMAGE}] [--luanti-seconds 3] [--love path\\to\\lovec.exe] [--godot path\\to\\Godot_console.exe]
     [--nvim path\\to\\nvim.exe] [--no-readme-example]
+    [--beammp-server path\\to\\BeamMP-Server.exe] [--beammp-port ${BEAMMP_PORT}] [--beammp-seconds 3]  (AuthKey: BEAMMP_AUTH_KEY)
     [--search dir]... [--out verification/reports] [--json]
     [--stub-api | --api <url> --license-key <sg_live_...>]
     [--open77-server path\\to\\Open77.Server.exe] [--port 11861] [--settle 1500] [--timeout 30000]`);
@@ -650,6 +655,10 @@ export async function run(args: string[]): Promise<number> {
   if (env === "neovim" || env === "all") {
     reports.push(await verifyEngine("neovim", findNeovim(a.flags.nvim), res, m, search, example, stub));
   }
+  if (env === "beammp" || env === "all") {
+    const server = findBeamMPServer(a.flags["beammp-server"]);
+    reports.push(await verifyBeamMP(res, m, search, { server, port: Number(a.flags["beammp-port"] ?? BEAMMP_PORT), seconds: Number(a.flags["beammp-seconds"] ?? 3), stub, example }));
+  }
   await stubServer?.close();
   example?.cleanup();
   // Stored logs never carry local paths (they hold the user name): temporary folders and home.
@@ -664,7 +673,7 @@ export async function run(args: string[]): Promise<number> {
     for (const c of r.checks) c.message = scrub(c.message);
   }
   if (reports.length === 0) {
-    console.error(`unknown environment '${env}' (standalone, open77, luanti, love2d, godot, neovim, all)`);
+    console.error(`unknown environment '${env}' (standalone, open77, luanti, love2d, godot, neovim, beammp, all)`);
     return 2;
   }
 

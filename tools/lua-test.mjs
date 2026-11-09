@@ -21,7 +21,7 @@ const opt = (name) => {
 
 const exe = process.platform === "win32" ? ".exe" : "";
 const binDir = join(root, "tools", "runtimes", "bin");
-let interpreters = ["lua54", "lua51", "luajit"]
+let interpreters = ["lua54", "lua53", "lua51", "luajit"]
   .map((name) => ({ name, path: join(binDir, name + exe) }))
   .filter((i) => existsSync(i.path));
 if (opt("--lua")) interpreters = [{ name: "custom", path: opt("--lua") }];

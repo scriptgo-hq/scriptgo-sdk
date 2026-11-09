@@ -5,7 +5,7 @@ local semver = R("semver")
 local M = {}
 
 M.CAPABILITIES = { "events", "logging", "storage", "players", "permissions", "commands", "config", "ui", "http", "licensing" }
-M.KNOWN_ENVIRONMENTS = { "standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim" }
+M.KNOWN_ENVIRONMENTS = { "standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim", "beammp" }
 M.LUA_DIALECTS = { "5.1", "5.2", "5.3", "5.4", "luajit" }
 M.CATEGORIES = { "inventory", "permissions", "economy", "events", "ui", "admin", "framework", "vehicles", "housing", "quests", "library", "other" }
 M.MAX_MANIFEST_BYTES = 256 * 1024
