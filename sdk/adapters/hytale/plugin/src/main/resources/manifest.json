@@ -1,0 +1,17 @@
+{
+  "Group": "ScriptGo",
+  "Name": "ScriptGo",
+  "Version": "${project.version}",
+  "Description": "Runs SCRIPT//GO Lua resources on this server. Players install nothing.",
+  "Authors": [
+    {
+      "Name": "SCRIPT//GO"
+    }
+  ],
+  "Main": "scriptgo.hytale.ScriptGoPlugin",
+  "ServerVersion": ">=0.7.0",
+  "Dependencies": {},
+  "OptionalDependencies": {},
+  "DisabledByDefault": false,
+  "IncludesAssetPack": false
+}

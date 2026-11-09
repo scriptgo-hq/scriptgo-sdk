@@ -249,10 +249,35 @@ M.ENVIRONMENTS = {
     -- Planned mod platforms (docs/research/game-modding-landscape.md). No adapter yet: no
     -- capabilities, no install steps. `sales` says whether paid packages are possible there.
     hytale = {
-        name = "Hytale", kind = "mod_platform", status = "planned", dialects = {}, sides = { "server" },
+        -- The plugin is built (sdk/adapters/hytale, ADR-0017) but has not run on a real Hytale server:
+        -- the server files need the owner's Hytale account. Planned until a real run passes.
+        name = "Hytale", kind = "mod_platform", status = "planned", dialects = { "5.2" }, sides = { "server" },
         summary = "A server plugin that runs SCRIPT//GO packages on Hytale servers; players install nothing.",
         sales = "allowed", salesNote = "The game's terms allow paid mods and plugins.",
-        capabilities = {}, notes = {}, limitations = {},
+        capabilities = {
+            events = "partial", logging = "supported", storage = "supported", players = "supported",
+            permissions = "supported", commands = "partial", config = "supported", ui = "fallback",
+            http = "partial", licensing = "partial",
+        },
+        notes = {
+            events = "Server side only: Hytale plugins run on the server and players install nothing.",
+            logging = "The server log, through the plugin's logger.",
+            storage = "JSON files in the plugin's data folder (mods/ScriptGo_ScriptGo/storage/<key>.json).",
+            players = "Connect and disconnect events; session ids, names, identifier hytale:<uuid>.",
+            permissions = "Hytale permission nodes scriptgo.admin or scriptgo.<privilege>, then the grants in scriptgo.json.",
+            commands = "Commands known when the server starts become /commands; any command also runs as /sg <command>.",
+            config = "Per-resource values and convars from scriptgo.json in the plugin's data folder.",
+            ui = "Notifications are sent as chat messages.",
+            http = "java.net.http, off until the operator lists hosts in scriptgo.json http.allowedHosts; redirects are never followed.",
+            licensing = "Available exactly when http is.",
+        },
+        limitations = {
+            "Not run on a real Hytale server yet: the bridge passes the conformance probe on a plain JVM only (Cobalt, Lua 5.2).",
+            "No client side.",
+            "Lua 5.2 in the JVM (Cobalt): no io library and no C modules; os has time, clock, date and difftime.",
+            "Commands a resource registers after the server has started are reached through /sg <command>.",
+            "HTTP, and so online license checks, only to hosts the operator allows.",
+        },
     },
     garrysmod = {
         name = "Garry's Mod", kind = "mod_platform", status = "beta", dialects = { "luajit" }, sides = { "server" },

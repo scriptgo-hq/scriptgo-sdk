@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Hand-written stand-ins for the few Hytale server API members the plugin uses, so the plugin's
+  Java compiles on any JDK 21 without the proprietary server jar. They contain no Hytale code,
+  mirror the shapes seen in public 0.7.x plugins, and prove nothing about the real API: a plugin
+  jar compiled against them is named ...-STUBS-DO-NOT-INSTALL and must never go on a server.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>scriptgo</groupId>
+    <artifactId>scriptgo-hytale-parent</artifactId>
+    <version>0.1.0</version>
+  </parent>
+  <artifactId>hytale-api-stubs</artifactId>
+  <name>Hytale API stand-ins (compile check only)</name>
+</project>
