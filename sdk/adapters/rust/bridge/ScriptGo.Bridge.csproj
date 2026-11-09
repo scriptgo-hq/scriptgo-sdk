@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The SCRIPT//GO bridge for .NET game servers that cannot wait for the full .NET kit: one KeraLua
+    (Lua 5.4) state running the portable Lua core, behind host-service interfaces named like the
+    planned ScriptGo.Host kit (docs/plan/MULTI-LANGUAGE-SANDBOX.md), so a plugin's services move to
+    the kit with few changes. Used by the Rust (Oxide/Carbon) plugin in ../plugin/ScriptGo.cs.
+
+    netstandard2.0: Rust's dedicated server runs Unity's Mono, which loads netstandard2.0 assemblies.
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <RootNamespace>ScriptGo.Bridge</RootNamespace>
+    <AssemblyName>ScriptGo.Bridge</AssemblyName>
+    <Version>0.1.0</Version>
+    <Deterministic>true</Deterministic>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <Description>Runs SCRIPT//GO Lua resources in an embedded Lua 5.4 (KeraLua) for .NET game server plugins.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The same Lua engine as the OPEN//77 server and the planned ScriptGo.Host kit. -->
+    <PackageReference Include="KeraLua" Version="1.4.9" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The portable core, unchanged, and the Rust glue. Loaded from memory: no file is unpacked. -->
+    <EmbeddedResource Include="../../../lua/scriptgo/*.lua" LogicalName="scriptgo/%(Filename).lua" />
+    <EmbeddedResource Include="../lua/*.lua" LogicalName="rust/%(Filename).lua" />
+  </ItemGroup>
+</Project>

@@ -31,6 +31,8 @@
 //               default install); the host is built on first use.
 //   hytale      runs the owner's Hytale dedicated server on loopback with the plugin in verify
 //               mode (commands/verify-hytale.ts). Skipped without the server files and a Java 25.
+//   rust        a Rust dedicated server with Oxide or Carbon runs the plugin's verify mode on loopback
+//               (commands/verify-rust.ts). Needs --rust-server or SCRIPTGO_RUST_SERVER; else skipped.
 //
 // --lang lua|ts|js names the guest language the run is evidence for (default: the resource's own,
 // ts when it has TypeScript scripts). Reports are tagged per language on the dotnet environment
@@ -69,6 +71,7 @@ import { compileTypeScript, ESBUILD_VERSION } from "../lib/typescript.ts";
 import { packForOpen77 } from "./pack.ts";
 import { verifyGarrysmod } from "./verify-garrysmod.ts";
 import { HYTALE_HELP, verifyHytale } from "./verify-hytale.ts";
+import { verifyRust } from "./verify-rust.ts";
 
 export const summary = "Run a resource on its environments and write compatibility reports";
 
@@ -741,10 +744,10 @@ function runTag(r: Report): string {
 export async function run(args: string[]): Promise<number> {
   const a = parseArgs(args, { booleans: ["help", "json", "stub-api", "no-readme-example", "accept-minecraft-eula", "rebuild-dotnet"], repeatable: ["search"] });
   if (a.bools.has("help") || a.positional.length === 0) {
-    console.log(`scriptgo verify <resourceDir> [--env standalone|open77|luanti|love2d|godot|neovim|cctweaked|dotnet|garrysmod|hytale|all] [--lua all|lua54|lua51|luajit]
+    console.log(`scriptgo verify <resourceDir> [--env standalone|open77|luanti|love2d|godot|neovim|cctweaked|dotnet|garrysmod|hytale|rust|all] [--lua all|lua54|lua51|luajit]
     [--lang lua|ts|js] [--dotnet path\\to\\dotnet.exe] [--rebuild-dotnet]
     [--luanti-image ${LUANTI_IMAGE}] [--luanti-seconds 3] [--love path\\to\\lovec.exe] [--godot path\\to\\Godot_console.exe]
-    [--nvim path\\to\\nvim.exe] [--cctweaked-seconds 3] [--cctweaked-timeout 600] [--accept-minecraft-eula] [--no-readme-example]
+    [--nvim path\\to\\nvim.exe] [--cctweaked-seconds 3] [--cctweaked-timeout 600] [--accept-minecraft-eula] [--rust-server path\\to\\server] [--rust-seconds 15] [--no-readme-example]
     ${HYTALE_HELP}
     [--search dir]... [--out verification/reports] [--json]
     [--stub-api | --api <url> --license-key <sg_live_...>]
@@ -781,7 +784,7 @@ export async function run(args: string[]): Promise<number> {
   if (example) console.log(`README example: ${example.name} (runnable Lua block of README.md) runs next to ${m.name}`);
 
   // Every environment but dotnet runs Lua only: another language is reported as skipped there.
-  const luaOnly = ["standalone", "open77", "luanti", "love2d", "godot", "neovim", "cctweaked", "garrysmod", "hytale"];
+  const luaOnly = ["standalone", "open77", "luanti", "love2d", "godot", "neovim", "cctweaked", "garrysmod", "hytale", "rust"];
   if (lang !== "lua") {
     for (const e of luaOnly.filter((x) => env === x || env === "all")) {
       reports.push({
@@ -855,6 +858,9 @@ export async function run(args: string[]): Promise<number> {
     }));
   }
   if (lang === "lua" && (env === "hytale" || env === "all")) reports.push(await verifyHytale(res, m, search, a.flags, example, stub));
+  if (lang === "lua" && (env === "rust" || env === "all")) {
+    reports.push(await verifyRust(res, m, search, { server: a.flags["rust-server"], seconds: Number(a.flags["rust-seconds"] ?? 15), timeoutMs: Number(a.flags["rust-timeout"] ?? 1_200_000), example, api: stub, apiChecks }));
+  }
   await stubServer?.close();
   example?.cleanup();
   // Stored logs never carry local paths (they hold the user name): temporary folders and home.
@@ -869,7 +875,7 @@ export async function run(args: string[]): Promise<number> {
     for (const c of r.checks) c.message = scrub(c.message);
   }
   if (reports.length === 0) {
-    console.error(`unknown environment '${env}' (standalone, open77, luanti, love2d, godot, neovim, cctweaked, dotnet, garrysmod, hytale, all)`);
+    console.error(`unknown environment '${env}' (standalone, open77, luanti, love2d, godot, neovim, cctweaked, dotnet, garrysmod, hytale, rust, all)`);
     return 2;
   }
 

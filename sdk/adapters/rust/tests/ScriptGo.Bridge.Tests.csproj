@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Unit tests of the bridge in a plain .NET process. NOT the real environment: no Rust server,
+    no Oxide, no Carbon, no Unity Mono. The host services are fakes; the Lua VM (KeraLua, Lua 5.4)
+    and the portable core are the real ones. A self-contained runner, so no test framework package.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../bridge/ScriptGo.Bridge.csproj" />
+  </ItemGroup>
+</Project>
