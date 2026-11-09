@@ -132,3 +132,19 @@ export const VerifyFailureReason = z.enum([
   "deactivated",
 ]);
 export type VerifyFailureReason = z.infer<typeof VerifyFailureReason>;
+
+/** Why an escrow key release was refused: the verify reasons plus escrow-specific ones. */
+export const KeyReleaseFailureReason = z.enum([
+  "expired",
+  "revoked",
+  "refunded",
+  "environment_not_covered",
+  "deployment_limit",
+  "unknown_key",
+  "deactivated",
+  /** The deployment registered no server public key (not bound); a key cannot be wrapped to it. */
+  "unbound",
+  /** The package/release has no encrypted variant (nothing to release a key for). */
+  "not_escrowed",
+]);
+export type KeyReleaseFailureReason = z.infer<typeof KeyReleaseFailureReason>;

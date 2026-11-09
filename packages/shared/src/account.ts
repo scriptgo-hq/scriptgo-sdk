@@ -11,6 +11,7 @@ import {
   Role,
   StoreStatus,
   VerifyFailureReason,
+  KeyReleaseFailureReason,
 } from "./enums.ts";
 import { Offer, PackageSummary } from "./registry.ts";
 
@@ -122,6 +123,9 @@ export type CheckoutState = z.infer<typeof CheckoutState>;
 
 // ---------------------------------------------------------------- licensing API (deployments)
 
+/** Raw X25519/ed25519 public key, base64url (43 chars for 32 bytes, no padding). */
+export const PublicKeyB64Url = z.string().regex(/^[A-Za-z0-9_-]{43}$/, "expected a 32-byte base64url key");
+
 export const ActivateBody = z.object({
   licenseKey: z.string().min(8).max(200),
   /** "creator//name" identifier or the manifest resource name. */
@@ -129,9 +133,55 @@ export const ActivateBody = z.object({
   environment: z.string().min(1).max(64),
   deploymentName: z.string().trim().min(1).max(64),
   adapterVersion: z.string().max(64).nullable().default(null),
+  /** The server's X25519 public key for escrow binding; the private key stays on the server. */
+  serverPublicKey: PublicKeyB64Url.nullable().default(null),
 });
 export type ActivateBody = z.infer<typeof ActivateBody>;
 export const ActivateResult = z.object({ activationId: z.string(), deploymentToken: z.string() });
+
+/** A content key wrapped to a server's X25519 public key (ECIES). base64url fields. */
+export const WrappedKey = z.object({ epk: z.string(), nonce: z.string(), wrapped: z.string() });
+export type WrappedKey = z.infer<typeof WrappedKey>;
+
+/**
+ * Asks the master to release an escrowed release's content key, wrapped to the bound server. Gated on
+ * the same checks as verify; a definitive refusal is `200 { valid: false, reason }`, a 4xx/5xx means
+ * the API could not answer and the loader applies the license layer's offline grace.
+ */
+export const KeyReleaseBody = z
+  .object({
+    licenseKey: z.string().max(512).optional(),
+    deploymentToken: z.string().max(512).optional(),
+    package: z.string().min(1).max(200),
+    version: z.string().min(1).max(64).nullable().default(null),
+    environment: z.string().min(1).max(64),
+    adapterVersion: z.string().max(64).nullable().default(null),
+    /** Optional: the server's current X25519 public key. When the deployment registered one, it must
+     * match (anti-swap); when it registered none, this one is bound on first use. */
+    serverPublicKey: PublicKeyB64Url.nullable().default(null),
+  })
+  .refine((b) => Boolean(b.licenseKey) !== Boolean(b.deploymentToken), {
+    message: "Send exactly one of licenseKey or deploymentToken.",
+  });
+export type KeyReleaseBody = z.infer<typeof KeyReleaseBody>;
+
+export const KeyReleaseResult = z.object({
+  valid: z.boolean(),
+  reason: KeyReleaseFailureReason.nullable(),
+  /** The content key wrapped to the bound server; null on refusal. Short-lived, never cached at rest. */
+  wrappedKey: WrappedKey.nullable(),
+  /** Release identity the ciphertext and the wrapped key are bound to (`${package}@${version}`). */
+  aad: z.string().nullable(),
+  /** ed25519 public key (raw base64url) the loader checks the release signature against. */
+  signerPublicKey: z.string().nullable(),
+  /** Opaque per-delivery watermark token the loader stamps into the decrypted copy (traceability). */
+  deliveryWatermark: z.string().nullable(),
+  /** Loader offline grace: the last instant the resource may keep running without re-fetching. */
+  offlineGraceUntil: Timestamp.nullable(),
+  /** When this wrapped key stops being accepted; the loader re-fetches before it. */
+  expiresAt: Timestamp.nullable(),
+});
+export type KeyReleaseResult = z.infer<typeof KeyReleaseResult>;
 
 /**
  * Verify never refuses a well-formed request with a 4xx: an unknown, malformed or foreign key is a
