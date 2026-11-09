@@ -56,8 +56,10 @@
       "luaDialects": [
         "LuaJIT"
       ],
-      "runtimeVersions": [],
-      "adapterVersion": "",
+      "runtimeVersions": [
+        "LÖVE 11.5"
+      ],
+      "adapterVersion": "0.1.0",
       "summary": "2D games with LÖVE. Server and local client run in the game process.",
       "capabilities": {
         "commands": "supported",
@@ -72,16 +74,29 @@
         "ui": "supported"
       },
       "capabilityNotes": {
-        "http": "Uses curl through io.popen when LÖVE is not fused; LÖVE 12 lua-https support is planned.",
-        "players": "Single local player."
+        "config": "Per-resource values and convars from the config table the game passes.",
+        "http": "curl through io.popen, run in a love.thread worker so frames keep running; unavailable when io.popen or curl is missing. Status and body only, no response headers.",
+        "licensing": "Available exactly when http is.",
+        "permissions": "Privileges per player id from the config table the game passes.",
+        "players": "Single local player (id 1), the game's own client side.",
+        "storage": "JSON files in the game's save directory (scriptgo/storage/<key>.json).",
+        "ui": "On-screen toasts drawn by sg:draw(); also logged. Without love.graphics (headless) they are only logged."
       },
       "setupMarkdown": "",
       "limitations": [
-        "Single-player only: no real network between server and client."
+        "Single-player only: no real network between server and client.",
+        "HTTP needs io.popen and a curl executable (on the PATH, or opts.curl).",
+        "Measured with LÖVE 11.5 (LuaJIT 2.1) on Windows, as a folder and as a .love archive, through lovec.exe; macOS, Linux, mobile and fused builds are not measured yet."
       ],
       "listed": true,
       "sortOrder": 20,
-      "adapters": []
+      "adapters": [
+        {
+          "version": "0.1.0",
+          "status": "beta",
+          "notes": "measured by verification reports"
+        }
+      ]
     },
     {
       "slug": "godot",
@@ -91,9 +106,11 @@
         "5.4",
         "LuaJIT"
       ],
-      "runtimeVersions": [],
-      "adapterVersion": "",
-      "summary": "Godot 4 projects through the lua-gdextension bridge.",
+      "runtimeVersions": [
+        "Godot 4.5.2-stable"
+      ],
+      "adapterVersion": "godot-0.1.0",
+      "summary": "Godot 4 projects through the lua-gdextension bridge. Server and local client run in the game process, ticked from _process.",
       "capabilities": {
         "commands": "supported",
         "config": "supported",
@@ -107,17 +124,30 @@
         "ui": "supported"
       },
       "capabilityNotes": {
-        "http": "Planned through HTTPRequest.",
-        "players": "Single local player."
+        "config": "Per-resource values and convars from the config passed to ScriptGoHost.boot.",
+        "http": "Not implemented: no outbound HTTP from resources yet.",
+        "licensing": "Needs http.",
+        "permissions": "Privileges per player id from the config passed to ScriptGoHost.boot.",
+        "players": "Single local player (id 1) joined by the scene; ScriptGoHost.join adds simulated ones.",
+        "storage": "JSON files at user://scriptgo/storage/<key>.json, written with FileAccess.",
+        "ui": "Queued for the scene (ScriptGoHost.notified signal) and logged; the demo draws them as toasts."
       },
       "setupMarkdown": "",
       "limitations": [
-        "Requires the lua-gdextension addon.",
-        "No HTTP yet, so no online license checks."
+        "Needs the lua-gdextension addon, 0.7.0 for Godot 4.5 (it declares 4.4 as its minimum; the 0.8.x binaries are built for Godot 4.6 and refuse 4.5.2).",
+        "No HTTP, so no online license checks.",
+        "Single-player only: no real network between server and client.",
+        "Measured with Godot 4.5.2 on Windows x86_64, headless and windowed, with the Lua 5.4 and LuaJIT builds of lua-gdextension 0.7.0; exported builds, macOS, Linux, mobile and Web are not measured yet."
       ],
       "listed": true,
       "sortOrder": 30,
-      "adapters": []
+      "adapters": [
+        {
+          "version": "godot-0.1.0",
+          "status": "beta",
+          "notes": "measured by verification reports"
+        }
+      ]
     },
     {
       "slug": "luanti",
@@ -178,14 +208,14 @@
       "runtimeVersions": [
         "OPEN//77 server 1.0.0+5282e21c"
       ],
-      "adapterVersion": "open77-shim-0.1.0",
+      "adapterVersion": "open77-shim-0.3.0",
       "summary": "OPEN//77 runs the resource format natively. `scriptgo pack --target open77` adds a shim that maps ScriptGo.* onto Open77.*.",
       "capabilities": {
         "commands": "supported",
         "config": "supported",
         "events": "supported",
-        "http": "unavailable",
-        "licensing": "unavailable",
+        "http": "partial",
+        "licensing": "partial",
         "logging": "supported",
         "permissions": "supported",
         "players": "supported",
@@ -194,6 +224,8 @@
       },
       "capabilityNotes": {
         "config": "Server side: convar <resource>:<key>, then the resource's tunables.",
+        "http": "Server side, through Open77.http.request (permission http.request). Off until the operator sets server.jsonc http.enabled and lists each host in http.allowedHosts; redirects are never followed.",
+        "licensing": "Server side, over Open77.http.request to the scriptgo_api convar; the operator allows the API host.",
         "permissions": "Server side: the server ACL (Open77.acl.isAllowed, permission acl.read).",
         "players": "Server side: GetPlayers, GetPlayerName, Open77.players.identifier.",
         "storage": "Open77.kvp on both sides, values stored as JSON text.",
@@ -202,7 +234,7 @@
       "setupMarkdown": "",
       "limitations": [
         "Experimental: pending technical and legal review.",
-        "No outbound HTTP for SCRIPT//GO resources, so no online license checks.",
+        "Outbound HTTP, and so licensing, needs the operator's allow-list; no HTTP from the client.",
         "No wall clock on the client: ScriptGo.time.now() is nil there.",
         "Verified on a dedicated server (server half); the client half is not verified yet."
       ],
@@ -210,7 +242,7 @@
       "sortOrder": 50,
       "adapters": [
         {
-          "version": "open77-shim-0.1.0",
+          "version": "open77-shim-0.3.0",
           "status": "experimental",
           "notes": "measured by verification reports"
         }
