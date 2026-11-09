@@ -123,6 +123,9 @@ M.ENVIRONMENTS = {
     },
     open77 = {
         name = "OPEN//77",
+        -- A layer on top of an existing game (players need the game); every other entry is an engine
+        -- or runtime that hosts Lua itself.
+        kind = "mod_platform",
         status = "experimental",
         dialects = { "5.4" },
         summary = "OPEN//77 runs the resource format natively. `scriptgo pack --target open77` adds a shim that maps ScriptGo.* onto Open77.*.",

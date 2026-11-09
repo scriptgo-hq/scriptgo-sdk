@@ -4,6 +4,7 @@
     {
       "slug": "standalone",
       "name": "Lua Standalone",
+      "kind": "runtime",
       "status": "available",
       "luaDialects": [
         "5.1",
@@ -52,6 +53,7 @@
     {
       "slug": "love2d",
       "name": "LÖVE",
+      "kind": "runtime",
       "status": "beta",
       "luaDialects": [
         "LuaJIT"
@@ -101,6 +103,7 @@
     {
       "slug": "godot",
       "name": "Godot 4",
+      "kind": "runtime",
       "status": "beta",
       "luaDialects": [
         "5.4",
@@ -152,6 +155,7 @@
     {
       "slug": "luanti",
       "name": "Luanti",
+      "kind": "runtime",
       "status": "beta",
       "luaDialects": [
         "5.1",
@@ -201,6 +205,7 @@
     {
       "slug": "open77",
       "name": "OPEN//77",
+      "kind": "mod_platform",
       "status": "experimental",
       "luaDialects": [
         "5.4"
@@ -238,7 +243,7 @@
         "No wall clock on the client: ScriptGo.time.now() is nil there.",
         "Verified on a dedicated server (server half); the client half is not verified yet."
       ],
-      "listed": false,
+      "listed": true,
       "sortOrder": 50,
       "adapters": [
         {
@@ -251,6 +256,7 @@
     {
       "slug": "openresty",
       "name": "OpenResty",
+      "kind": "runtime",
       "status": "planned",
       "luaDialects": [
         "LuaJIT"
@@ -269,6 +275,7 @@
     {
       "slug": "defold",
       "name": "Defold",
+      "kind": "runtime",
       "status": "planned",
       "luaDialects": [
         "LuaJIT"
@@ -287,6 +294,7 @@
     {
       "slug": "neovim",
       "name": "Neovim",
+      "kind": "runtime",
       "status": "beta",
       "luaDialects": [
         "LuaJIT"

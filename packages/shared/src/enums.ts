@@ -4,6 +4,9 @@ import { z } from "zod";
 
 export const EnvironmentStatus = z.enum(["available", "beta", "experimental", "planned"]);
 export type EnvironmentStatus = z.infer<typeof EnvironmentStatus>;
+/** runtime: an engine or runtime that hosts Lua itself. mod_platform: a layer on top of an existing game. */
+export const EnvironmentKind = z.enum(["runtime", "mod_platform"]);
+export type EnvironmentKind = z.infer<typeof EnvironmentKind>;
 
 export const CapabilitySupport = z.enum(["supported", "partial", "fallback", "unavailable"]);
 export type CapabilitySupport = z.infer<typeof CapabilitySupport>;

@@ -19,6 +19,7 @@ file in the same change.**
 
 ```ts
 EnvironmentStatus   = "available" | "beta" | "experimental" | "planned"
+EnvironmentKind     = "runtime" | "mod_platform"   // mod_platform: a layer on top of an existing game
 CapabilitySupport   = "supported" | "partial" | "fallback" | "unavailable"
 CompatibilityStatus = "verified" | "failing" | "stale" | "not_tested" | "unsupported"
 ReleaseStatus       = "draft" | "validating" | "validation_failed" | "ready" | "published" | "deprecated" | "yanked"
@@ -63,6 +64,7 @@ newest run of each runtime counts, the entry is `failing` if any of them fails (
 Environment = {
   slug: "standalone" | "love2d" | "godot" | "luanti" | "open77" | string,
   name: string,                       // "LÖVE"
+  kind: EnvironmentKind,
   status: EnvironmentStatus,
   luaDialects: string[],              // as sdk/environments.json writes them: "5.1", "5.4", "LuaJIT"
   runtimeVersions: string[],          // ["11.5"]
