@@ -381,22 +381,57 @@
       "slug": "garrysmod",
       "name": "Garry's Mod",
       "kind": "mod_platform",
-      "status": "planned",
+      "status": "beta",
       "sales": "allowed",
       "salesNote": "The developer allows selling mods you own, outside the Steam Workshop.",
       "luaDialects": [
         "LuaJIT"
       ],
-      "runtimeVersions": [],
-      "adapterVersion": "",
-      "summary": "Packages on Garry's Mod servers and clients (roleplay, sandbox, game modes), through its Lua.",
-      "capabilities": {},
-      "capabilityNotes": {},
-      "setupMarkdown": "",
-      "limitations": [],
+      "runtimeVersions": [
+        "Garry's Mod 2026.09.17 (x86)"
+      ],
+      "adapterVersion": "garrysmod-0.1.0",
+      "summary": "Packages on Garry's Mod dedicated servers (roleplay, sandbox, game modes): one server addon runs them in GLua (`scriptgo pack --target garrysmod`).",
+      "capabilities": {
+        "commands": "supported",
+        "config": "supported",
+        "events": "partial",
+        "http": "supported",
+        "licensing": "supported",
+        "logging": "supported",
+        "permissions": "supported",
+        "players": "supported",
+        "storage": "supported",
+        "ui": "fallback"
+      },
+      "capabilityNotes": {
+        "commands": "Chat /name or !name for commands a resource registered; console `scriptgo run <line>`.",
+        "config": "data/scriptgo/config.json per resource; GetConvar reads its convars, then the server's convars.",
+        "events": "Server side only; client scripts do not run yet. The scheduler ticks on the Think hook, every server frame.",
+        "http": "The engine's asynchronous HTTP(): any method, status, body and headers. Loopback and private addresses need srcds -allowlocalhttp.",
+        "licensing": "Over HTTP() to the scriptgo_api convar (default http://localhost:4100).",
+        "logging": "The server console (and garrysmod/console.log with -condebug).",
+        "permissions": "superadmin, then CAMI (privilege scriptgo.<name>, for ULX, SAM and other admin mods), then grants by usergroup, SteamID64 or SteamID in data/scriptgo/config.json.",
+        "players": "The player's UserID() is its id; identifier steam:<SteamID64>, bot:<id> for bots. Join and drop come from PlayerInitialSpawn and player_disconnect.",
+        "storage": "JSON files under garrysmod/data/scriptgo/storage/.",
+        "ui": "Notifications are chat lines (ChatPrint, PrintMessage)."
+      },
+      "setupMarkdown": "1. Build the runtime addon, optionally with resources bundled in:\n\n   ```bash\n   node sdk/adapters/garrysmod/build.mjs --with sdk/packages/sg_inventory --with sdk/packages/sg_eventbus\n   ```\n\n   or pack each resource as its own addon (the runtime addon comes with it, `--no-runtime` leaves\n   it out):\n\n   ```bash\n   scriptgo pack sdk/packages/sg_inventory --target garrysmod   # -> dist/garrysmod/scriptgo_sg_inventory/ + dist/garrysmod/scriptgo/\n   ```\n\n2. Copy the folders into the server's `garrysmod/addons/` and restart the map. Every resource with\n   `auto_start true` starts once the map has loaded, dependencies first. Server owners can also put\n   resources in `garrysmod/data/scriptgo/resources/<name>/`.\n3. Optional `garrysmod/data/scriptgo/config.json`:\n\n   ```json\n   {\n     \"resources\": { \"sg_inventory\": { \"slots\": 30 } },\n     \"permissions\": { \"admin\": [\"command.giveitem\"], \"76561198000000000\": [\"shop.*\"] }\n   }\n   ```\n\n   Permissions also come from superadmin and, with an admin mod such as ULX or SAM, from the CAMI\n   privileges `scriptgo.<name>`.\n4. For licensed packages, point `scriptgo_api` at the SCRIPT//GO API in `server.cfg`\n   (`scriptgo_api \"https://api.example.com\"`). An API on a loopback or private address also needs\n   `-allowlocalhttp` on the srcds command line.\n\nOnly the server side runs: client scripts are not executed yet. Keep `sv_hibernate_think 1` if\nresources must keep running while the server is empty. Resource commands are typed in chat as\n`/name` or `!name`; the server console has `scriptgo`, `scriptgo restart <name>` and\n`scriptgo run <command line>`.\n\nTo check a resource on your own server folder (a copy, not a live server):\n\n```bash\nscriptgo verify <resourceDir> --env garrysmod --gmod-server <folder with srcds.exe>\n```\n\nThe server itself is the free Garry's Mod Dedicated Server (Steam app 4020), installed with\nSteamCMD and an anonymous login: `steamcmd +force_install_dir <dir> +login anonymous +app_update 4020 validate +quit`.\nOn Windows it takes about 7 GB.\n",
+      "limitations": [
+        "Server side only: client scripts (HUD, Derma) need a game client and are not run yet.",
+        "Verified on the Windows dedicated server (public branch, 32-bit LuaJIT 2.0.4 and 64-bit LuaJIT 2.1), headless, with a bot as the player; Linux servers and real Steam players are not measured yet.",
+        "An empty server hibernates and stops ticking unless sv_hibernate_think is 1.",
+        "CAMI is implemented but not yet run with a real admin mod."
+      ],
       "listed": true,
       "sortOrder": 100,
-      "adapters": []
+      "adapters": [
+        {
+          "version": "garrysmod-0.1.0",
+          "status": "beta",
+          "notes": "measured by verification reports"
+        }
+      ]
     },
     {
       "slug": "rust",

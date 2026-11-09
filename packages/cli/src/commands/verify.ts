@@ -46,6 +46,7 @@ import { defaultSearchPaths, pickInterpreters, readResource, repoRoot, standalon
 import { writeReadmeExample, type ReadmeExample } from "../lib/readme-example.ts";
 import { startStubApi, type StubRequest } from "../lib/stub-api.ts";
 import { packForOpen77 } from "./pack.ts";
+import { verifyGarrysmod } from "./verify-garrysmod.ts";
 
 export const summary = "Run a resource on its environments and write compatibility reports";
 
@@ -174,7 +175,7 @@ function findResource(name: string, search: string[]): string | null {
 }
 
 /** The resource and its dependency closure, dependencies first. */
-function closure(root: LoadedResource, search: string[]): { order: LoadedResource[]; missing: string[] } {
+export function closure(root: LoadedResource, search: string[]): { order: LoadedResource[]; missing: string[] } {
   const order: LoadedResource[] = [];
   const missing: string[] = [];
   const seen = new Set<string>();
@@ -591,12 +592,13 @@ async function verifyEngine(
 export async function run(args: string[]): Promise<number> {
   const a = parseArgs(args, { booleans: ["help", "json", "stub-api", "no-readme-example"], repeatable: ["search"] });
   if (a.bools.has("help") || a.positional.length === 0) {
-    console.log(`scriptgo verify <resourceDir> [--env standalone|open77|luanti|love2d|godot|neovim|all] [--lua all|lua54|lua51|luajit]
+    console.log(`scriptgo verify <resourceDir> [--env standalone|open77|luanti|love2d|godot|neovim|garrysmod|all] [--lua all|lua54|lua51|luajit]
     [--luanti-image ${LUANTI_IMAGE}] [--luanti-seconds 3] [--love path\\to\\lovec.exe] [--godot path\\to\\Godot_console.exe]
     [--nvim path\\to\\nvim.exe] [--no-readme-example]
     [--search dir]... [--out verification/reports] [--json]
     [--stub-api | --api <url> --license-key <sg_live_...>]
-    [--open77-server path\\to\\Open77.Server.exe] [--port 11861] [--settle 1500] [--timeout 30000]`);
+    [--open77-server path\\to\\Open77.Server.exe] [--port 11861] [--settle 1500] [--timeout 30000]
+    [--gmod-server <dir>] [--gmod-binary srcds.exe] [--gmod-port 27115] [--gmod-seconds 4] [--gmod-timeout 120000] [--gmod-verify extra.json]`);
     return a.bools.has("help") ? 0 : 2;
   }
   const res = readResource(a.positional[0]!);
@@ -650,6 +652,13 @@ export async function run(args: string[]): Promise<number> {
   if (env === "neovim" || env === "all") {
     reports.push(await verifyEngine("neovim", findNeovim(a.flags.nvim), res, m, search, example, stub));
   }
+  if (env === "garrysmod" || env === "all") {
+    reports.push(await verifyGarrysmod(res, m, search, {
+      server: a.flags["gmod-server"], binary: a.flags["gmod-binary"], port: Number(a.flags["gmod-port"] ?? 27115),
+      seconds: Number(a.flags["gmod-seconds"] ?? 4), timeoutMs: Number(a.flags["gmod-timeout"] ?? 120000), stub, example,
+      extra: a.flags["gmod-verify"] ? JSON.parse(readFileSync(resolve(a.flags["gmod-verify"]), "utf8")) : undefined,
+    }));
+  }
   await stubServer?.close();
   example?.cleanup();
   // Stored logs never carry local paths (they hold the user name): temporary folders and home.
@@ -664,7 +673,7 @@ export async function run(args: string[]): Promise<number> {
     for (const c of r.checks) c.message = scrub(c.message);
   }
   if (reports.length === 0) {
-    console.error(`unknown environment '${env}' (standalone, open77, luanti, love2d, godot, neovim, all)`);
+    console.error(`unknown environment '${env}' (standalone, open77, luanti, love2d, godot, neovim, garrysmod, all)`);
     return 2;
   }
 

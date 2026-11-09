@@ -1,0 +1,6 @@
+{
+  "title": "SCRIPT//GO runtime",
+  "type": "servercontent",
+  "tags": ["build", "roleplay"],
+  "ignore": ["*.md", ".scriptgo-verify"]
+}
