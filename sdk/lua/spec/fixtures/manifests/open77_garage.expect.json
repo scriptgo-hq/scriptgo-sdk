@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "fileName": "open77.lua",
+  "warnings": [
+    "unknown_directive",
+    "unknown_directive"
+  ],
+  "manifest": {
+    "format": "open77",
+    "name": "garage",
+    "version": "1.0.0",
+    "autoStart": true,
+    "category": "other",
+    "sharedScripts": [
+      "shared/config.lua"
+    ],
+    "serverScripts": [
+      "server/main.lua"
+    ],
+    "clientScripts": [
+      "client/main.lua"
+    ],
+    "files": [
+      "assets/**/*.png"
+    ],
+    "webUiPage": "web/index.html",
+    "webFiles": [
+      "web/**"
+    ],
+    "permissions": [
+      "local.events",
+      "network.events"
+    ]
+  }
+}

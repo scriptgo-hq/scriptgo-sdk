@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "warnings": [],
+  "manifest": {
+    "name": "strs",
+    "version": "2.0.0-beta.2",
+    "description": "long \"quoted\" text",
+    "title": "Tab\there AB",
+    "serverScripts": [
+      "a.lua",
+      "b/c.lua"
+    ],
+    "licensed": true,
+    "autoStart": false,
+    "lua": [
+      "5.4"
+    ]
+  }
+}
