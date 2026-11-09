@@ -76,16 +76,17 @@ import { verifyGarrysmod } from "./verify-garrysmod.ts";
 import { HYTALE_HELP, verifyHytale } from "./verify-hytale.ts";
 import { verifyRust } from "./verify-rust.ts";
 import { BEAMMP_PORT, findBeamMPServer, verifyBeamMP } from "../lib/beammp.ts";
+import { fivemOptions, verifyFivem } from "../lib/fivem-verify.ts";
 
 export const summary = "Run a resource on its environments and write compatibility reports";
 
-interface Check {
+export interface Check {
   name: string;
   status: "passed" | "failed" | "skipped";
   message: string;
 }
 
-interface Report {
+export interface Report {
   package: string;
   version: string;
   environment: string;
@@ -789,7 +790,7 @@ export async function run(args: string[]): Promise<number> {
   if (example) console.log(`README example: ${example.name} (runnable Lua block of README.md) runs next to ${m.name}`);
 
   // Every environment but dotnet runs Lua only: another language is reported as skipped there.
-  const luaOnly = ["standalone", "open77", "luanti", "love2d", "godot", "neovim", "cctweaked", "garrysmod", "hytale", "rust", "beammp"];
+  const luaOnly = ["standalone", "open77", "luanti", "love2d", "godot", "neovim", "cctweaked", "garrysmod", "hytale", "rust", "beammp", "fivem"];
   if (lang !== "lua") {
     for (const e of luaOnly.filter((x) => env === x || env === "all")) {
       reports.push({
@@ -870,6 +871,8 @@ export async function run(args: string[]): Promise<number> {
     const server = findBeamMPServer(a.flags["beammp-server"]);
     reports.push(await verifyBeamMP(res, m, search, { server, port: Number(a.flags["beammp-port"] ?? BEAMMP_PORT), seconds: Number(a.flags["beammp-seconds"] ?? 3), stub, example }));
   }
+  // FiveM: lib/fivem-verify.ts (--fivem-server, --fivem-port, SCRIPTGO_FIVEM_LICENSE_KEY).
+  if (lang === "lua" && (env === "fivem" || env === "all")) reports.push(await verifyFivem(res, m, search, fivemOptions(a.flags, stub, example)));
   await stubServer?.close();
   example?.cleanup();
   // Stored logs never carry local paths (they hold the user name): temporary folders and home.

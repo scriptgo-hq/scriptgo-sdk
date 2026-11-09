@@ -1,0 +1,206 @@
+// `scriptgo pack --target fivem`: a SCRIPT//GO resource as a FiveM resource folder.
+//
+// FiveM already runs this resource shape (CreateThread, Wait, events, exports, RegisterCommand),
+// so the pack is a generated fxmanifest.lua plus one shim file (sdk/adapters/fivem/shim.lua)
+// listed as the first shared_script: FXServer loads every shared_script before the side scripts
+// (citizenfx/fivem, citizen-scripting-core ResourceScriptingComponent.cpp), so `ScriptGo` exists
+// before any script of the resource runs, on both sides.
+//
+// FiveM is a free-only environment (ADR-0020): the Rockstar Games Creator Platform License
+// Agreement (2026-09-10, §3.1(6)) forbids a third-party marketplace that sells or licenses other
+// creators' server content to server admins. A licensed package, or one that requires the
+// `licensing` capability, is refused.
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { expandGlob, validateResourceFiles, type ParsedManifest } from "@scriptgo/manifest";
+import { scanSource, type PortabilityIssue } from "./portability.ts";
+import { listFiles, sdkRoot, type LoadedResource } from "./sdk.ts";
+
+export const FIVEM_SHIM_FILE = "scriptgo_shim.lua";
+export const FREE_ONLY_RULE =
+  "FiveM is free-only on SCRIPT//GO: the Rockstar Games Creator Platform License Agreement (2026-09-10, §3.1(6)) forbids a third-party marketplace that sells or licenses server content to server admins";
+
+export interface FivemIssue {
+  code: string;
+  message: string;
+}
+
+/** The adapter version the shim reports at runtime. */
+export function fivemShimVersion(): string {
+  const text = readFileSync(join(sdkRoot, "adapters", "fivem", "shim.lua"), "utf8");
+  return /ADAPTER_VERSION = "([^"]+)"/.exec(text)?.[1] ?? "fivem-shim-0.0.0";
+}
+
+/** A Lua string literal (fxmanifest.lua is executed as Lua, not parsed like scriptgo.lua). */
+export function luaString(s: string): string {
+  let out = '"';
+  for (const ch of s) {
+    const code = ch.codePointAt(0)!;
+    if (ch === "\\") out += "\\\\";
+    else if (ch === '"') out += '\\"';
+    else if (ch === "\n") out += "\\n";
+    else if (ch === "\r") out += "\\r";
+    else if (ch === "\t") out += "\\t";
+    else if (code < 32 || code === 127) out += `\\${String(code).padStart(3, "0")}`;
+    else out += ch;
+  }
+  return out + '"';
+}
+
+const luaList = (items: string[]): string => `{ ${items.map(luaString).join(", ")} }`;
+
+/**
+ * What FiveM's Lua runtime lacks, from its source (citizenfx/fivem citizen-scripting-lua
+ * LuaScriptRuntime.cpp): `require` resolves only the runtime's built-in modules, so a resource's
+ * own modules are "not found"; `os` and `io` exist only on the server.
+ */
+const FIVEM_RULES = [
+  {
+    code: "fivem_no_require",
+    pattern: /(?<![\w.:])require\s*[("'[]/,
+    sides: ["shared", "server", "client"] as ("shared" | "server" | "client")[],
+    message: "FiveM's `require` finds no resource module: list the module as a shared/server/client script and share it through a global or an export",
+  },
+  {
+    code: "fivem_client_no_os",
+    pattern: /(?<![\w.:])os\s*\.\s*[A-Za-z_]+/,
+    sides: ["shared", "client"] as ("shared" | "server" | "client")[],
+    message: "`os` is nil in FiveM's client Lua: use ScriptGo.time.monotonic() (ScriptGo.time.now() is nil on the client)",
+  },
+];
+
+/** Portability issues for every script of a resource that declares (or does not restrict) fivem. */
+export function fivemPortability(root: string, m: ParsedManifest, files: string[]): PortabilityIssue[] {
+  if (m.environments.length > 0 && !m.environments.includes("fivem")) return [];
+  const bySide: ["shared" | "server" | "client", string[]][] = [
+    ["shared", m.sharedScripts],
+    ["server", m.serverScripts],
+    ["client", m.clientScripts],
+    // Environment scripts run on both sides, after the side scripts.
+    ["shared", m.environmentScripts["fivem"] ?? []],
+  ];
+  const issues: PortabilityIssue[] = [];
+  const seen = new Set<string>();
+  for (const [side, patterns] of bySide) {
+    for (const pattern of patterns) {
+      for (const file of expandGlob(pattern, files)) {
+        const key = `${side}:${file}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        issues.push(...scanSource(readFileSync(join(root, file), "utf8"), file, side, FIVEM_RULES));
+      }
+    }
+  }
+  return issues;
+}
+
+/** Refusals that follow from `sales = "free_only"`; optional licensing is only a warning. */
+export function fivemFreeOnly(m: ParsedManifest, warnings: string[]): FivemIssue[] {
+  const errors: FivemIssue[] = [];
+  if (m.licensed) errors.push({ code: "fivem_free_only", message: `${m.name} is licensed (licensed true). ${FREE_ONLY_RULE}` });
+  if (m.capabilities.includes("licensing")) {
+    errors.push({ code: "fivem_free_only", message: `${m.name} requires the licensing capability, which FiveM does not provide. ${FREE_ONLY_RULE}` });
+  }
+  if (!m.licensed && m.optionalCapabilities.includes("licensing")) {
+    warnings.push("licensing is unavailable on FiveM (free-only): ScriptGo.licensing raises capability_unavailable:licensing@fivem there");
+  }
+  return errors;
+}
+
+/** The generated fxmanifest.lua. `game` stays gta5: RedM (rdr3) would reuse it but is not built. */
+export function fivemManifest(m: ParsedManifest, warnings: string[]): string {
+  const lines: string[] = [
+    `-- Generated by \`scriptgo pack --target fivem\` from scriptgo.lua ${m.version}. Edit scriptgo.lua, not this file.`,
+    `fx_version "cerulean"`,
+    `game "gta5"`,
+    "",
+    `version ${luaString(m.version)}`,
+  ];
+  if (m.author) lines.push(`author ${luaString(m.author)}`);
+  if (m.description ?? m.title) lines.push(`description ${luaString((m.description ?? m.title)!)}`);
+  if (m.repository) lines.push(`repository ${luaString(m.repository)}`);
+  // Read back by ScriptGo.resource.hasPermission (FiveM keeps unknown keys as metadata).
+  for (const p of m.permissions) lines.push(`scriptgo_permission ${luaString(p)}`);
+  if (m.dependencies.length > 0) {
+    // FiveM's `dependency` only names a resource that must load first; version ranges are dropped.
+    const ranged = m.dependencies.filter((d) => d.range && d.range !== "*");
+    if (ranged.length > 0) {
+      warnings.push(`FiveM dependencies carry no version: ${ranged.map((d) => `${d.name} ${d.range}`).join(", ")} became plain resource names`);
+    }
+    lines.push(`dependencies ${luaList(m.dependencies.map((d) => d.name))}`);
+  }
+  lines.push("", `shared_script ${luaString(FIVEM_SHIM_FILE)}`);
+  for (const p of m.sharedScripts) lines.push(`shared_script ${luaString(p)}`);
+  const envScripts = m.environmentScripts["fivem"] ?? [];
+  for (const p of [...m.serverScripts, ...envScripts]) lines.push(`server_script ${luaString(p)}`);
+  for (const p of [...m.clientScripts, ...envScripts]) lines.push(`client_script ${luaString(p)}`);
+  const files = [...m.files, ...m.webFiles, ...(m.webUiPage ? [m.webUiPage] : [])];
+  if (files.length > 0) lines.push(`files ${luaList(files)}`);
+  if (m.webUiPage) lines.push(`ui_page ${luaString(m.webUiPage)}`);
+  // Declarative exports: a global function of that name, exported by FiveM itself.
+  for (const e of m.exports) lines.push(`export ${luaString(e)}`);
+  for (const e of m.serverExports) lines.push(`server_export ${luaString(e)}`);
+  for (const env of Object.keys(m.environmentScripts)) {
+    if (env !== "fivem") warnings.push(`environment_script "${env}" is not shipped to FiveM`);
+  }
+  if (m.environments.length > 0 && !m.environments.includes("fivem")) {
+    warnings.push("the manifest does not list fivem in environments; the package is untested there");
+  }
+  return lines.join("\n") + "\n";
+}
+
+/**
+ * Writes `<parent>/<name>/` as a FiveM resource: the referenced files, the shim and a generated
+ * fxmanifest.lua. Refuses licensed packages (free-only) and code FiveM's Lua cannot run, unless
+ * `allowUnportable` turns the portability findings into warnings.
+ */
+export function packForFivem(
+  res: LoadedResource,
+  parent: string,
+  opts: { allowUnportable?: boolean } = {},
+): { dest: string; warnings: string[]; errors: FivemIssue[] } {
+  const warnings: string[] = [];
+  if (!res.result.ok) return { dest: "", warnings, errors: res.result.errors };
+  const m = res.result.manifest;
+  const files = listFiles(res.root);
+  const problems = validateResourceFiles(m, files);
+  if (problems.length > 0) return { dest: "", warnings, errors: problems };
+  if (m.format === "open77") {
+    return { dest: "", warnings, errors: [{ code: "fivem_open77_format", message: "an open77.lua resource uses OPEN//77 natives; give it a scriptgo.lua to pack it for FiveM" }] };
+  }
+  const freeOnly = fivemFreeOnly(m, warnings);
+  if (freeOnly.length > 0) return { dest: "", warnings, errors: freeOnly };
+  const portability = fivemPortability(res.root, m, files);
+  if (portability.length > 0 && !opts.allowUnportable) {
+    return { dest: "", warnings, errors: portability.map((p) => ({ code: p.code, message: `${p.file}:${p.line} ${p.message}` })) };
+  }
+  for (const p of portability) warnings.push(`${p.file}:${p.line} ${p.message}`);
+
+  const dest = join(parent, m.name);
+  if (existsSync(dest)) rmSync(dest, { recursive: true });
+  mkdirSync(dest, { recursive: true });
+  const included = new Set<string>();
+  const add = (pattern: string): void => {
+    for (const f of expandGlob(pattern, files)) included.add(f);
+  };
+  for (const p of [...m.sharedScripts, ...m.serverScripts, ...m.clientScripts, ...(m.environmentScripts["fivem"] ?? [])]) add(p);
+  for (const p of [...m.files, ...m.webFiles]) add(p);
+  if (m.webUiPage) add(m.webUiPage);
+  for (const f of [...included].sort()) {
+    mkdirSync(dirname(join(dest, f)), { recursive: true });
+    copyFileSync(join(res.root, f), join(dest, f));
+  }
+  copyFileSync(join(sdkRoot, "adapters", "fivem", "shim.lua"), join(dest, FIVEM_SHIM_FILE));
+  writeFileSync(join(dest, "fxmanifest.lua"), fivemManifest(m, warnings));
+  return { dest, warnings, errors: [] };
+}
+
+/** `scriptgo pack <dir> --target fivem [--out dist]`: prints warnings and errors, returns the exit code. */
+export function packFivemTarget(res: LoadedResource, out: string, allowUnportable: boolean): number {
+  const r = packForFivem(res, join(out, "fivem"), { allowUnportable });
+  for (const w of r.warnings) console.log(`warning ${w}`);
+  for (const e of r.errors) console.error(`error ${e.code}: ${e.message}`);
+  if (r.errors.length > 0) return 1;
+  console.log(`packed for FiveM -> ${r.dest}`);
+  return 0;
+}

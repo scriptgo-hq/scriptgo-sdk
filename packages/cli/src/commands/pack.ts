@@ -15,6 +15,7 @@ import { expandGlob, parseManifest, scriptLanguage, validateResourceFiles, type 
 import { parseArgs } from "../lib/args.ts";
 import { packForGarrysmod } from "../lib/garrysmod.ts";
 import { open77Portability } from "../lib/portability.ts";
+import { packFivemTarget } from "../lib/fivem-pack.ts";
 import { listFiles, readResource, sdkRoot, type LoadedResource } from "../lib/sdk.ts";
 import { compileTypeScript, type CompileIssue } from "../lib/typescript.ts";
 import { packBeamMPCommand } from "../lib/beammp.ts";
@@ -298,6 +299,7 @@ export async function run(args: string[]): Promise<number> {
 
   if (target === "beammp") return packBeamMPCommand(res, join(out, "beammp"));
 
-  console.error(`unknown target '${target}' (scriptgo, open77, garrysmod, beammp)`);
+  if (target === "fivem") return packFivemTarget(res, out, a.bools.has("allow-unportable")); // lib/fivem-pack.ts
+  console.error(`unknown target '${target}' (scriptgo, open77, garrysmod, beammp, fivem)`);
   return 2;
 }
