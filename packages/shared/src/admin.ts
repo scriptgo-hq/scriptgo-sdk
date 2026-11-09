@@ -70,13 +70,18 @@ export const ModerationDecision = z.object({
   scope: z.string(),
   escalated: z.boolean(),
   decidedAt: Timestamp,
+  /** User id of the reviewer (compare with /v1/me to recognise one's own decision). */
   decidedBy: z.string().nullable(),
+  /** "Name (email)" of that reviewer, for display. */
+  decidedByName: z.string().nullable(),
   reversedAt: Timestamp.nullable(),
 });
 export type ModerationDecision = z.infer<typeof ModerationDecision>;
 
 export const CaseAppeal = z.object({
   id: z.string(),
+  /** The decision (CaseDetail.decisions[].id) under appeal. Its reviewer cannot decide the appeal. */
+  decisionId: z.string(),
   status: AppealStatus,
   statement: z.string(),
   createdAt: Timestamp,

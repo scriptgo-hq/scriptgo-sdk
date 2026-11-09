@@ -260,6 +260,8 @@ POST /v1/admin/reports/:id/decision    { action: "no_action" | "restrict_release
                                          reasons: string, escalate: boolean }  → CaseDetail
 GET  /v1/admin/reports/:id/evidence/:evidenceId        → file (attachment, nosniff)
 POST /v1/admin/appeals/:id/decision { outcome: "upheld" | "reversed", reasons } → CaseDetail
+                                       409 same_reviewer when the caller took the decision under appeal
+                                       (CaseDetail.appeals[].decisionId → decisions[].decidedBy)
 GET  /v1/admin/audit?subject=<type>:<id>&actor&action&limit               → AuditEntry[]
 GET  /v1/admin/payment-events?status&provider&limit    (admin) → PaymentEventRow[]
 GET  /v1/admin/errors?limit                            (admin) → OperationalError[]
