@@ -181,7 +181,7 @@ return function(sdkRoot, optionsJson, clockUsec, logSink)
         return ok
     end
 
-    function ctl.verifyBegin(resourceDir, searchJson)
+    function ctl.verifyBegin(resourceDir, searchJson, withDir)
         for _, dir in ipairs(decodeArgs(searchJson)) do search[#search + 1] = normalize(dir) end
         local root = normalize(resourceDir)
         verify.root = root
@@ -205,6 +205,14 @@ return function(sdkRoot, optionsJson, clockUsec, logSink)
         local side = host:getResource(m.name).sides.server
         for _, e in ipairs(m.serverExports or {}) do
             check("export:" .. e, side ~= nil and side.exports[e] ~= nil, "")
+        end
+        -- withDir: one more resource started next to it (the README example).
+        if type(withDir) == "string" and withDir ~= "" then
+            local wres, werr = addWithDeps(host, normalize(withDir))
+            local wname = type(wres) == "table" and wres.name or nil
+            local wok, wwhy = false, werr or "not loaded"
+            if wname then wok, wwhy = host:start(wname) end
+            check("readme_example", wok == true, wok and (wname .. " started") or tostring(wwhy))
         end
         host:tick(adapter.now())
         host:playerJoin(localPlayer.id, localPlayer.name)

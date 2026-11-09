@@ -312,6 +312,31 @@ describe("exports and promises", function()
         expect(reason).toBe("export_not_found")
     end)
 
+    test("exports called from file scope are refused with resource_preparing, as on Open77", function()
+        local h = harness({
+            ["bank/scriptgo.lua"] = manifestFor("bank", 'server_script "s.lua"\n'),
+            ["bank/s.lua"] = 'exports("balance", function() return 100 end)',
+            ["shop/scriptgo.lua"] = manifestFor("shop", 'server_script "s.lua"\ndependency "bank"\n'),
+            ["shop/s.lua"] = [[
+                local p, reason = Open77.exports.call("bank", "balance")
+                atLoad = tostring(p) .. ":" .. tostring(reason)
+                CreateThread(function() inThread = exports.bank:balance() end)
+                exports("seen", function() return atLoad, inThread end)
+            ]],
+            ["eager/scriptgo.lua"] = manifestFor("eager", 'server_script "s.lua"\ndependency "bank"\n'),
+            ["eager/s.lua"] = "local b = exports.bank:balance()",
+        })
+        h:add("bank"); h:add("shop"); h:add("eager")
+        expect(h:start("shop")).toBe(true)
+        h:tick(10)
+        local atLoad, inThread = h:call("shop", "seen")
+        expect(atLoad).toBe("nil:resource_preparing")
+        expect(inThread).toBe(100)
+        local ok, why = h:start("eager")
+        expect(ok).toBe(false)
+        expect(why:find("export bank:balance resource_preparing", 1, true) ~= nil).toBe(true)
+    end)
+
     test("promise.new, Citizen.Await and await outside a thread", function()
         local h = harness({
             ["res_p/scriptgo.lua"] = manifestFor("res_p", 'server_script "s.lua"\n'),

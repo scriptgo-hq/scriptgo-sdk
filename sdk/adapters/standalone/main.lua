@@ -4,6 +4,7 @@
 --                       [--script file] [--for ms] [--realtime] [--log debug|info|warn|error]
 --   lua main.lua test   <resourceDir> [--search dir]...
 --   lua main.lua verify <resourceDir> [--search dir]... [--report out.json] [--environment id]
+--                       [--with exampleDir]
 --
 -- A run script is a text file of steps, one per line ('#' comments):
 --   wait 250                     advance time (simulated unless --realtime)
@@ -302,6 +303,15 @@ local function verify()
                 local side = h.host:getResource(m.name).sides.server
                 for _, e in ipairs(m.serverExports or {}) do
                     check("export:" .. e, side and side.exports[e] ~= nil, "")
+                end
+                -- --with <dir>: one more resource started next to it (the README example).
+                if flags.with then
+                    local wroot = normalize(flags.with)
+                    local wres, werr = addWithDeps(h.host, wroot)
+                    local wname = type(wres) == "table" and wres.name or nil
+                    local wok, wwhy = false, werr or "not loaded"
+                    if wname then wok, wwhy = h:start(wname) end
+                    check("readme_example", wok == true, wok and (wname .. " started") or tostring(wwhy))
                 end
                 h:join(2, "Verifier")
                 -- Simulated time: long enough for start-up threads and self-checks (SGCHECK lines).

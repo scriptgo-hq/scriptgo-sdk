@@ -1,6 +1,6 @@
 -- InventoryKit: slot and weight inventories with stacking, persistence and a client mirror.
 resource "sg_inventory"
-version "1.0.0"
+version "1.0.1"
 title "InventoryKit"
 description "Slot and weight inventories with stacking, unique items, moves, use events and persistence."
 author "scriptgo"

@@ -7,3 +7,6 @@ scriptgo_verify_seconds (Verify duration) int 3 1 120
 
 # Report file name, written in the world folder.
 scriptgo_verify_report (Verify report file) string
+
+# Resource started after the one under test, in verify runs (the README example).
+scriptgo_verify_with (Verify example resource) string

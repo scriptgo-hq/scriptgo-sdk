@@ -1,6 +1,6 @@
 -- EventBus Kit: typed, validated topics on top of the host event bus.
 resource "sg_eventbus"
-version "1.0.0"
+version "1.0.1"
 title "EventBus Kit"
 description "Typed topics with schema validation, retained values, rate limits and opt-in client delivery."
 author "scriptgo"

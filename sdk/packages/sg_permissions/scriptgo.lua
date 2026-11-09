@@ -1,6 +1,6 @@
 -- PermissionsKit: roles with inheritance and wildcard privileges, persisted per player.
 resource "sg_permissions"
-version "1.0.0"
+version "1.0.1"
 title "PermissionsKit"
 description "Roles, inheritance, wildcard privileges and grants that survive restarts."
 author "scriptgo"

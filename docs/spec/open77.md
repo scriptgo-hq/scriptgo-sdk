@@ -135,5 +135,18 @@ activate refused with `unknown_key`, and on OPEN//77 the allow-list refusal of a
 dedicated server; the sample paid package Inventory Pro reached `license active` through the same
 path on both.
 
+The README example of each official package (EventBus 1.0.1, Permissions 1.0.1, Inventory 1.0.1)
+and of Inventory Pro 1.4.2 ran next to its package on the same server, and its output is in the
+stored reports. The first attempt found a real difference: the examples called exports at file
+scope, which OPEN//77 refuses with `resource_preparing` while the caller is still loading. Every
+SCRIPT//GO host now refuses it the same way (`sdk/lua/spec/host_spec.lua`), so the mistake shows up
+on the standalone host before it reaches an OPEN//77 server.
+
+The acceptance journey (`tools/acceptance.mjs`) ends on OPEN//77 too: a key bought through the
+mock provider, issued by the real API and given to the server as a convar, puts Inventory Pro in
+`license active` on a real dedicated server, with the API host as the only host in
+`http.allowedHosts`.
+
 Not yet measured: the client half on OPEN//77 (it needs a running game client), and packages
-whose behaviour depends on connected players.
+whose behaviour depends on connected players (no player joins a verify run on OPEN//77, so the
+README examples that react to `playerJoining` show only their start-up output there).

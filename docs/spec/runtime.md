@@ -31,6 +31,7 @@ the value codec, so isolation rules are identical to a real network.
 | `TriggerClientEvent(name, target, ...)` | Server → client; `target = -1` for every player |
 | `source` | Inside a network handler on the server: the sending player id |
 | `exports(name, fn)` | Publishes an export of this resource side |
+| `exports.other:name(...)` | Calls another resource's export inline and returns its values; failures raise `export other:name <reason>`. From file scope, while the calling resource is still loading, it raises `resource_preparing` (as on OPEN//77): call exports from a thread, a handler or `onResourceStart` |
 | `GetInvokingResource()` | Inside an export: the calling resource |
 | `RegisterCommand(name, fn(source, args, raw), restricted?)` | Case-insensitive, runs on the next tick, a duplicate name raises; `restricted` checks `command.<name>`; `source = 0` for the console |
 | `GetCurrentResourceName()`, `GetResourceState(name)` | `started`, `stopped`, `missing` ... |
@@ -56,7 +57,7 @@ subset run unchanged on every host.
 | `resource.name()`, `resource.version()`, `resource.state(n)`, `resource.hasPermission(p)`, `resource.readFile(path)` | — | `readFile` is confined to the resource |
 | `events.on/off/emit` | `events` | Aliases of the globals |
 | `net.emitServer(name, ...)`, `net.emitClient(name, target, ...)` | `events` | Aliases |
-| `exports.call(resource, name, ...)` → promise or `nil, reason`; `promise:await()` → `result, err` | — | Values are copied through the codec |
+| `exports.call(resource, name, ...)` → promise or `nil, reason`; `promise:await()` → `result, err` | — | Values are copied through the codec; `nil, "resource_preparing"` from file scope |
 | `capabilities.has(c)`, `capabilities.list()`, `capabilities.require(c)` | — | `require` raises `capability_unavailable:<c>@<env>` |
 | `storage.get(key)`, `storage.set(key, value)`, `storage.delete(key)`, `storage.keys(prefix?)` | `storage` | Per-resource, JSON values, persisted by the host |
 | `players.list()`, `players.name(id)`, `players.exists(id)`, `players.identifier(id)` | `players` | Server side. Ids are integers ≥ 1; invalid ids answer `nil`/`false` |

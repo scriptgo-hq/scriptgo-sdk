@@ -115,11 +115,22 @@ end
 -- Start ----------------------------------------------------------------------------------------------
 local verifyName = core.settings:get("scriptgo_verify")
 if verifyName == "" then verifyName = nil end
+local verifyWith = core.settings:get("scriptgo_verify_with")
+if verifyWith == "" then verifyWith = nil end
+local withStarted, withWhy = false, nil
 
 if verifyName then
-    -- Verify runs start the resource under test (and its dependencies) only.
+    -- Verify runs start the resource under test (and its dependencies) only, then the example
+    -- resource named by scriptgo_verify_with, if any (the package's README example).
     local ok, why = host:getResource(verifyName) and host:start(verifyName)
     if not ok then core.log("error", "[scriptgo] verify: " .. verifyName .. " did not start: " .. tostring(why)) end
+    if ok and verifyWith then
+        if host:getResource(verifyWith) then
+            withStarted, withWhy = host:start(verifyWith)
+        else
+            withWhy = "not found"
+        end
+    end
 elseif type(cfg.start) == "table" then
     for _, name in ipairs(cfg.start) do
         local ok, why = host:start(name)
@@ -189,6 +200,7 @@ core.register_chatcommand("scriptgo", {
 -- scriptgo_verify = <resource>        resource under test (from the search dirs)
 -- scriptgo_verify_seconds = 3         how long to let it run
 -- scriptgo_verify_report = <file>     report file name, written in the world folder
+-- scriptgo_verify_with = <resource>   started after it (the README example)
 -- The report has the same schema as `scriptgo verify` on the standalone host; the server shuts
 -- down when it is written.
 if verifyName then
@@ -218,6 +230,9 @@ if verifyName then
             local side = res.sides and res.sides.server
             for _, e in ipairs(m.serverExports or {}) do
                 check("export:" .. e, side ~= nil and side.exports[e] ~= nil, "")
+            end
+            if verifyWith then
+                check("readme_example", withStarted == true, withStarted == true and (verifyWith .. " started") or tostring(withWhy))
             end
         end
         local errors = {}

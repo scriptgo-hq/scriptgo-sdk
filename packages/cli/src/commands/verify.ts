@@ -10,8 +10,17 @@
 //   luanti      builds the Luanti mod into a throwaway game and runs the official Luanti server
 //               image (Docker, no network) in the mod's verify mode; the mod writes the report.
 //               Without Docker or the image the run is skipped.
+//   love2d      runs LÖVE (lovec) headless on examples/love2d/demo in its verify mode, ticked by
+//               real love.update frames. Needs --love, SCRIPTGO_LOVE or tools/runtimes/love.
+//   godot       runs Godot headless on examples/godot/demo (lua-gdextension) in its verify mode,
+//               ticked by real frames. Needs --godot, SCRIPTGO_GODOT or tools/runtimes/godot.
 //
 // Everywhere, lines a resource prints as `SGCHECK PASS|FAIL <name>` become checks of the report.
+//
+// README example: when the package's README.md has a fenced block marked `lua runnable`, every run
+// also starts it as a resource `<package>_readme` that depends on the package (lib/readme-example.ts).
+// Its output is part of the run's log and the check `readme_example` says whether it started; its
+// errors count in `no_runtime_errors`. --no-readme-example leaves it out.
 //
 // --stub-api starts a loopback stand-in for the licensing API (lib/stub-api.ts) that validates
 // every request with the API's own schemas, and hands the resource its URL and a valid license key:
@@ -21,15 +30,17 @@
 // --api <url> --license-key <key> does the same against a real SCRIPT//GO API (no api:* checks:
 // only the stub sees the requests).
 import { spawn, spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 // @ts-expect-error plain ESM build script without type declarations
 import { buildMod } from "../../../../sdk/adapters/luanti/build.mjs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { ParsedManifest } from "@scriptgo/manifest";
 import { CompatibilityRunSchema, type CompatibilityRun } from "@scriptgo/shared";
 import { parseArgs } from "../lib/args.ts";
 import { defaultSearchPaths, pickInterpreters, readResource, repoRoot, standaloneMain, type LoadedResource } from "../lib/sdk.ts";
+import { writeReadmeExample, type ReadmeExample } from "../lib/readme-example.ts";
 import { startStubApi, type StubRequest } from "../lib/stub-api.ts";
 import { packForOpen77 } from "./pack.ts";
 
@@ -197,12 +208,15 @@ function spawnAsync(cmd: string, argv: string[]): Promise<{ status: number | nul
   });
 }
 
-async function verifyStandalone(dir: string, m: ParsedManifest, lua: { name: string; path: string }, search: string[], stub?: ApiTarget): Promise<Report> {
+async function verifyStandalone(
+  dir: string, m: ParsedManifest, lua: { name: string; path: string }, search: string[], stub?: ApiTarget, example?: ReadmeExample | null,
+): Promise<Report> {
   const started = Date.now();
   const tmp = mkdtempSync(join(tmpdir(), "scriptgo-verify-"));
   const reportFile = join(tmp, "report.json");
   const argv = [standaloneMain, "verify", dir, "--report", reportFile, "--settle", "2000"];
   for (const s of search) argv.push("--search", s);
+  if (example) argv.push("--with", example.dir);
   const firstRequest = stub?.requests.length ?? 0;
   if (stub) {
     const config = join(tmp, "config.json");
@@ -237,7 +251,7 @@ async function verifyStandalone(dir: string, m: ParsedManifest, lua: { name: str
   }
   rmSync(tmp, { recursive: true, force: true });
   report.environment = "standalone";
-  report.evidence = { ...report.evidence, interpreter: lua.name, ...(stub ? { api: stub.label } : {}) };
+  report.evidence = { ...report.evidence, interpreter: lua.name, ...(stub ? { api: stub.label } : {}), ...exampleEvidence(example) };
   report.status = statusOf(report.checks);
   report.durationMs = Date.now() - started;
   return report;
@@ -269,7 +283,7 @@ async function verifyOpen77(
   res: LoadedResource,
   m: ParsedManifest,
   search: string[],
-  opts: { server?: string; port: number; settleMs: number; timeoutMs: number; stub?: ApiTarget },
+  opts: { server?: string; port: number; settleMs: number; timeoutMs: number; stub?: ApiTarget; example?: ReadmeExample | null },
 ): Promise<Report> {
   const started = Date.now();
   const checks: Check[] = [];
@@ -291,6 +305,7 @@ async function verifyOpen77(
   const { order, missing } = closure(res, search);
   checks.push({ name: "dependencies_resolved", status: missing.length === 0 ? "passed" : "failed", message: missing.join(", ") });
   if (missing.length > 0) return report("");
+  if (opts.example) order.push(readResource(opts.example.dir));
 
   const run = mkdtempSync(join(tmpdir(), "scriptgo-open77-"));
   const names: string[] = [];
@@ -338,7 +353,9 @@ async function verifyOpen77(
       lines.push(line);
       const st = /\[resource:([a-z0-9_]+)\] started generation=/.exec(line);
       if (st) startedNames.add(st[1]!);
-      const bad = /\[(?:ERR|FTL)\].*\[resource:([a-z0-9_]+)\]\s*(.*)$/.exec(line);
+      // A resource's error is tagged [resource:name], or names its chunk (@name/file.lua) when the
+      // server's automatic start reports it: "Automatic resource start failed: Lua @name/...".
+      const bad = /\[(?:ERR|FTL)\].*\[resource:([a-z0-9_]+)\]\s*(.*)$/.exec(line) ?? /\[(?:ERR|FTL)\].*?@([a-z0-9_]+)\/(.*)$/.exec(line);
       if (bad && !failedStarts.has(bad[1]!)) failedStarts.set(bad[1]!, bad[2]!);
       if (/resource host ready/.test(line)) ready = true;
     }
@@ -360,9 +377,14 @@ async function verifyOpen77(
 
   checks.push({ name: "server_run", status: ready ? "passed" : "failed", message: ready ? "resource host ready" : `server exited (${exitCode}) or timed out before the resource host was ready` });
   for (const n of names) {
+    if (opts.example && n === opts.example.name) continue;
     checks.push({ name: `starts:${n}`, status: startedNames.has(n) ? "passed" : "failed", message: failedStarts.get(n) ?? "" });
   }
-  const errorLines = lines.filter((l) => /\[(?:ERR|FTL)\]/.test(l) && names.some((n) => l.includes(`[resource:${n}]`)));
+  if (opts.example) {
+    const n = opts.example.name;
+    checks.push({ name: "readme_example", status: startedNames.has(n) ? "passed" : "failed", message: startedNames.has(n) ? `${n} started` : failedStarts.get(n) ?? "did not start" });
+  }
+  const errorLines = lines.filter((l) => /\[(?:ERR|FTL)\]/.test(l) && names.some((n) => l.includes(`[resource:${n}]`) || l.includes(`@${n}/`)));
   checks.push({ name: "no_runtime_errors", status: errorLines.length === 0 ? "passed" : "failed", message: errorLines[0] ?? "" });
   checks.push(...selfChecks(lines.join("\n")));
   if (stub) checks.push(...apiChecks(stub.requests, firstRequest, "open77", open77ShimVersion()));
@@ -371,7 +393,7 @@ async function verifyOpen77(
   runtimeVersion = open77ServerVersion(server);
   // The license key and the stub's port are throwaway, but keep them out of the stored log anyway.
   const scrubbed = stub ? log.split(stub.licenseKey).join("<license_key>").split(stub.url).join("<stub-api>") : log;
-  return report(scrubbed, { serverBinary: server.split(/[\\/]/).slice(-1)[0], resources: names, ...(stub ? { api: stub.label } : {}) });
+  return report(scrubbed, { serverBinary: server.split(/[\\/]/).slice(-1)[0], resources: names, ...(stub ? { api: stub.label } : {}), ...exampleEvidence(opts.example) });
 }
 
 export const LUANTI_IMAGE = "ghcr.io/luanti-org/luanti:latest";
@@ -382,7 +404,7 @@ export const LUANTI_IMAGE = "ghcr.io/luanti-org/luanti:latest";
  * verify mode (no port published: nothing can connect). The mod writes the report and shuts the
  * server down. Without Docker the run is skipped.
  */
-function verifyLuanti(res: LoadedResource, m: ParsedManifest, search: string[], opts: { image: string; seconds: number }): Report {
+function verifyLuanti(res: LoadedResource, m: ParsedManifest, search: string[], opts: { image: string; seconds: number; example?: ReadmeExample | null }): Report {
   const started = Date.now();
   const skipped = (message: string, checks: Check[] = []): Report => ({
     package: m.name, version: m.version, environment: "luanti",
@@ -409,6 +431,7 @@ function verifyLuanti(res: LoadedResource, m: ParsedManifest, search: string[], 
     if (!r.result.ok) continue;
     cpSync(r.root, join(world, "scriptgo", "resources", r.result.manifest.name), { recursive: true });
   }
+  if (opts.example) cpSync(opts.example.dir, join(world, "scriptgo", "resources", opts.example.name), { recursive: true });
   writeFileSync(join(world, "world.mt"), "gameid = sgverify\nbackend = sqlite3\nplayer_backend = sqlite3\nauth_backend = sqlite3\nmod_storage_backend = sqlite3\n");
   const reportName = "scriptgo-verify-report.json";
   writeFileSync(join(conf, "luanti.conf"), [
@@ -418,6 +441,7 @@ function verifyLuanti(res: LoadedResource, m: ParsedManifest, search: string[], 
     `scriptgo_verify = ${m.name}`,
     `scriptgo_verify_seconds = ${opts.seconds}`,
     `scriptgo_verify_report = ${reportName}`,
+    ...(opts.example ? [`scriptgo_verify_with = ${opts.example.name}`] : []),
   ].join("\n") + "\n");
   const mount = (p: string): string => p.split("\\").join("/");
   const r = spawnSync("docker", [
@@ -432,7 +456,7 @@ function verifyLuanti(res: LoadedResource, m: ParsedManifest, search: string[], 
   try {
     report = JSON.parse(readFileSync(join(world, reportName), "utf8")) as Report;
     report.log = [report.log, "--- engine", engineLog].filter(Boolean).join("\n");
-    report.evidence = { ...report.evidence, image: digest };
+    report.evidence = { ...report.evidence, image: digest, ...exampleEvidence(opts.example) };
   } catch {
     report = skipped("", []);
     report.checks = [{ name: "server_run", status: "failed", message: `no report written (exit ${r.status ?? r.signal})` }];
@@ -445,11 +469,101 @@ function verifyLuanti(res: LoadedResource, m: ParsedManifest, search: string[], 
   return report;
 }
 
+function exampleEvidence(example?: ReadmeExample | null): Record<string, string> {
+  return example ? { readme_example: `${example.name}: the runnable Lua block of README.md` } : {};
+}
+
+/** First file under `dir` (depth-first, sorted) whose name matches. */
+function findFile(dir: string, re: RegExp, depth = 3): string | null {
+  if (!existsSync(dir) || depth < 0) return null;
+  for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    const p = join(dir, entry.name);
+    if (entry.isFile() && re.test(entry.name)) return p;
+    if (entry.isDirectory()) {
+      const found = findFile(p, re, depth - 1);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+export function findLove(flag?: string): string | null {
+  const p = flag ?? process.env.SCRIPTGO_LOVE ?? findFile(join(repoRoot, "tools", "runtimes", "love"), /^lovec(\.exe)?$|^love$/);
+  return p && existsSync(p) ? resolve(p) : null;
+}
+
+export function findGodot(flag?: string): string | null {
+  const p = flag ?? process.env.SCRIPTGO_GODOT ?? findFile(join(repoRoot, "tools", "runtimes", "godot"), /^Godot_.*_console\.exe$|^Godot_.*\.x86_64$/);
+  return p && existsSync(p) ? resolve(p) : null;
+}
+
+function sha256File(p: string): string {
+  return createHash("sha256").update(readFileSync(p)).digest("hex");
+}
+
+/**
+ * LÖVE and Godot: the engine runs headless with the demo project in its verify mode and writes a
+ * CompatibilityRun itself; this reads it back. Without the engine binary the run is skipped.
+ */
+async function verifyEngine(
+  environment: "love2d" | "godot", exe: string | null, res: LoadedResource, m: ParsedManifest, search: string[], example?: ReadmeExample | null,
+): Promise<Report> {
+  const started = Date.now();
+  const base = (status: Report["status"], checks: Check[], log = ""): Report => ({
+    package: m.name, version: m.version, environment, status, runtimeVersion: "", adapterVersion: "", luaVersion: "",
+    durationMs: Date.now() - started, checks, log, evidence: {},
+  });
+  if (!exe) {
+    const how = environment === "love2d" ? "--love <lovec>, SCRIPTGO_LOVE or tools/runtimes/love" : "--godot <console exe>, SCRIPTGO_GODOT or tools/runtimes/godot";
+    return base("skipped", [{ name: "engine_run", status: "skipped", message: `no ${environment} binary: pass ${how}` }]);
+  }
+  if (environment === "godot") {
+    // The demo project holds copies of the GDScript host (examples/godot/demo/setup.ps1); a stale
+    // copy would run an older verify mode than the SDK's, so refresh them before every run.
+    const addon = join(repoRoot, "examples", "godot", "demo", "addons");
+    if (!existsSync(join(addon, "lua-gdextension"))) {
+      return base("skipped", [{ name: "engine_run", status: "skipped", message: "examples/godot/demo is not set up: run examples/godot/demo/setup.ps1" }]);
+    }
+    mkdirSync(join(addon, "scriptgo"), { recursive: true });
+    for (const f of ["scriptgo_host.gd", "scriptgo_watchdog.gd"]) {
+      cpSync(join(repoRoot, "sdk", "adapters", "godot", f), join(addon, "scriptgo", f));
+    }
+  }
+  const tmp = mkdtempSync(join(tmpdir(), `scriptgo-${environment}-`));
+  const reportFile = join(tmp, "report.json");
+  const verifyArgs = ["--scriptgo-verify", res.root, "--report", reportFile, "--settle", "2000"];
+  for (const s of search) if (existsSync(s)) verifyArgs.push("--search", s);
+  if (example) verifyArgs.push("--with", example.dir);
+  const argv = environment === "love2d"
+    ? [join(repoRoot, "examples", "love2d", "demo"), ...verifyArgs, "--evidence", `engine-sha256=${sha256File(exe)}`]
+    : ["--headless", "--path", join(repoRoot, "examples", "godot", "demo"), "--", ...verifyArgs];
+  const r = await spawnAsync(exe, argv);
+  let report: Report;
+  try {
+    const run = CompatibilityRunSchema.parse(JSON.parse(readFileSync(reportFile, "utf8")));
+    report = {
+      package: run.package, version: run.version, environment, status: run.status as Report["status"],
+      runtimeVersion: run.runtimeVersion ?? "", adapterVersion: run.adapterVersion ?? "", luaVersion: run.luaVersion ?? "",
+      durationMs: run.durationMs ?? 0, checks: run.checks.map((c) => ({ name: c.name, status: c.status as Check["status"], message: c.message ?? "" })),
+      log: run.log ?? "", evidence: Object.fromEntries(run.evidence.map((e) => [e.kind, e.path])),
+    };
+  } catch (e) {
+    const tail = ((r.stdout ?? "") + (r.stderr ?? "")).split(/\r?\n/).slice(-40).join("\n");
+    report = base("failing", [{ name: "engine_run", status: "failed", message: `no valid report (exit ${r.status}): ${e instanceof Error ? e.message.split("\n")[0] : String(e)}` }], tail);
+  }
+  rmSync(tmp, { recursive: true, force: true });
+  report.evidence = { ...report.evidence, ...exampleEvidence(example) };
+  report.status = statusOf(report.checks);
+  report.durationMs = Date.now() - started;
+  return report;
+}
+
 export async function run(args: string[]): Promise<number> {
-  const a = parseArgs(args, { booleans: ["help", "json", "stub-api"], repeatable: ["search"] });
+  const a = parseArgs(args, { booleans: ["help", "json", "stub-api", "no-readme-example"], repeatable: ["search"] });
   if (a.bools.has("help") || a.positional.length === 0) {
-    console.log(`scriptgo verify <resourceDir> [--env standalone|open77|luanti|all] [--lua all|lua54|lua51|luajit]
-    [--luanti-image ${LUANTI_IMAGE}] [--luanti-seconds 3]
+    console.log(`scriptgo verify <resourceDir> [--env standalone|open77|luanti|love2d|godot|all] [--lua all|lua54|lua51|luajit]
+    [--luanti-image ${LUANTI_IMAGE}] [--luanti-seconds 3] [--love path\\to\\lovec.exe] [--godot path\\to\\Godot_console.exe]
+    [--no-readme-example]
     [--search dir]... [--out verification/reports] [--json]
     [--stub-api | --api <url> --license-key <sg_live_...>]
     [--open77-server path\\to\\Open77.Server.exe] [--port 11861] [--settle 1500] [--timeout 30000]`);
@@ -474,8 +588,11 @@ export async function run(args: string[]): Promise<number> {
     stub = { url: a.flags.api.replace(/\/+$/, ""), licenseKey: key, requests: [], label: `api ${new URL(a.flags.api).host}` };
   }
 
+  const example = a.bools.has("no-readme-example") ? null : writeReadmeExample(res.root, m);
+  if (example) console.log(`README example: ${example.name} (runnable Lua block of README.md) runs next to ${m.name}`);
+
   if (env === "standalone" || env === "all") {
-    for (const lua of pickInterpreters(a.flags.lua ?? "all")) reports.push(await verifyStandalone(res.root, m, lua, search, stub));
+    for (const lua of pickInterpreters(a.flags.lua ?? "all")) reports.push(await verifyStandalone(res.root, m, lua, search, stub, example));
   }
   if (env === "open77" || env === "all") {
     reports.push(await verifyOpen77(res, m, search, {
@@ -484,17 +601,37 @@ export async function run(args: string[]): Promise<number> {
       settleMs: Number(a.flags.settle ?? 1500),
       timeoutMs: Number(a.flags.timeout ?? 30000),
       stub,
+      example,
     }));
   }
   if (env === "luanti" || env === "all") {
     reports.push(verifyLuanti(res, m, search, {
       image: a.flags["luanti-image"] ?? LUANTI_IMAGE,
       seconds: Number(a.flags["luanti-seconds"] ?? 3),
+      example,
     }));
   }
+  if (env === "love2d" || env === "all") {
+    reports.push(await verifyEngine("love2d", findLove(a.flags.love), res, m, search, example));
+  }
+  if (env === "godot" || env === "all") {
+    reports.push(await verifyEngine("godot", findGodot(a.flags.godot), res, m, search, example));
+  }
   await stubServer?.close();
+  example?.cleanup();
+  // Stored logs never carry local paths (they hold the user name): temporary folders and home.
+  const scrubs: [string, string][] = [];
+  for (const [p, label] of [[repoRoot, "<repo>"], [tmpdir(), "<tmp>"], [homedir(), "~"]] as const) {
+    if (p.length < 4) continue;
+    scrubs.push([p, label], [p.split("\\").join("/"), label], [p.split("/").join("\\"), label]);
+  }
+  const scrub = (s: string): string => scrubs.reduce((acc, [from, to]) => acc.split(from).join(to), s);
+  for (const r of reports) {
+    r.log = scrub(r.log);
+    for (const c of r.checks) c.message = scrub(c.message);
+  }
   if (reports.length === 0) {
-    console.error(`unknown environment '${env}' (standalone, open77, luanti, all)`);
+    console.error(`unknown environment '${env}' (standalone, open77, luanti, love2d, godot, all)`);
     return 2;
   }
 

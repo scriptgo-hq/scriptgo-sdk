@@ -1,7 +1,7 @@
 -- Headless verification inside a real LÖVE process (loaded by scriptgo_love.verify):
 --
 --   lovec <game> --scriptgo-verify <resourceDir> [--search <dir>]... [--report <out.json>]
---                [--settle <ms>] [--evidence <kind>=<value>]...
+--                [--settle <ms>] [--evidence <kind>=<value>]... [--with <exampleDir>]
 --
 -- Starts the resource and its dependencies through the love2d adapter, ticks them from real
 -- love.update frames for --settle ms (default 2000), stops them, and writes a compatibility report
@@ -23,7 +23,7 @@ return function(sgl, argv)
             if a == "--scriptgo-verify" then flags.resource = v; i = i + 2
             elseif a == "--search" then search[#search + 1] = v; i = i + 2
             elseif a == "--evidence" then extraEvidence[#extraEvidence + 1] = v; i = i + 2
-            elseif a == "--report" or a == "--settle" then flags[a:sub(3)] = v; i = i + 2
+            elseif a == "--report" or a == "--settle" or a == "--with" then flags[a:sub(3)] = v; i = i + 2
             else i = i + 1 end
         end
     end
@@ -126,6 +126,14 @@ return function(sgl, argv)
                 local side = sg.host:getResource(m.name).sides.server
                 for _, e in ipairs(m.serverExports or {}) do
                     check("export:" .. e, side ~= nil and side.exports[e] ~= nil, "")
+                end
+                -- --with <dir>: one more resource started next to it (the README example).
+                if flags.with then
+                    local wres, werr = sg:add(sgl.absolute(flags.with))
+                    local wname = type(wres) == "table" and wres.name or nil
+                    local wok, wwhy = false, werr or "not loaded"
+                    if wname then wok, wwhy = sg.host:start(wname) end
+                    check("readme_example", wok == true, wok and (wname .. " started") or tostring(wwhy))
                 end
                 sg:join()
                 phase = "running"

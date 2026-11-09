@@ -850,10 +850,13 @@ function Host:_buildEnv(side)
     end
     -- exports(name, fn) registers; exports.other:name(...) is Open77's synchronous proxy: the export
     -- runs inline and errors are raised as "export other:name <reason>" (FiveM behaviour).
+    -- Like Open77, a resource cannot call exports from file scope while its own scripts are still
+    -- loading: "resource_preparing". Calls belong in CreateThread, handlers or onResourceStart.
     local function syncProxy(target)
         return setmetatable({}, {
             __index = function(_, exportName)
                 return function(_, ...)
+                    if res.state == "starting" and side.current == nil then error("export " .. target .. ":" .. exportName .. " resource_preparing", 2) end
                     local tr = host.resources[target]
                     local tside = tr and tr.state == "started" and tr.sides[side.name]
                     if not tside then error("export " .. target .. ":" .. exportName .. " export_resource_unavailable", 2) end
@@ -886,6 +889,7 @@ function Host:_buildEnv(side)
 
     -- The provider runs the export in its own thread; it does not inherit the caller's `source`.
     local function callExport(target, exportName, ...)
+        if res.state == "starting" and side.current == nil then return nil, "resource_preparing" end
         return host:_callExport(res.name, side.name, target, exportName, ...)
     end
     env.promise = { new = function() return newPromise(host) end }

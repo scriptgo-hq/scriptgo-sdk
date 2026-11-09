@@ -12,8 +12,8 @@ If you have written an OPEN//77 or FiveM resource before, you already know the f
 SCRIPT//GO package is a folder with a declarative manifest and shared, server and client scripts.
 
 > [!WARNING]
-> The `scriptgo` CLI and the environment adapters are in preview. Commands shown here come from
-> the specs and may gain flags. See [CLI](/docs/cli) for the current state.
+> The `scriptgo` CLI and the environment adapters are in preview. Commands may gain flags. See
+> [CLI](/docs/cli) for the current state.
 
 ## 1. Lay out the folder
 
@@ -27,9 +27,12 @@ inventory_pro/
 ```
 
 The folder name must match the `resource` name in the manifest when a host loads it from disk.
-Resource names are lowercase slugs: `a-z`, `0-9`, `_` and `-`, up to 64 characters.
+Resource names are 3 to 64 characters of `a-z`, `0-9` and `_`, starting with a letter (the
+OPEN//77 rule). A `-` is refused.
 
-`scriptgo init` creates this layout for you. Writing it by hand is just as valid.
+`scriptgo init inventory_pro` creates a similar starting folder: a manifest, `shared/config.lua`,
+`server/main.lua`, `client/main.lua` and `tests/main_test.lua`. Writing it by hand is just as
+valid.
 
 ## 2. Write the manifest
 
@@ -135,69 +138,72 @@ capability needs no check: the host refuses to start the resource without it.
 
 ```lua
 -- tests/core_test.lua
-local inv = Inventory.new()
-assert(Inventory.add(inv, "sword") == 1)
-assert(Inventory.add(inv, "sword", 2) == 3)
-assert(Inventory.count(inv, "shield") == 0)
+describe("inventory_pro", function()
+  test("adds and counts items", function()
+    local h = load()   -- a host with the resource started
+    expect(h:call("inventory_pro", "give", "bob", "sword", 1)).toBe(1)
+    expect(h:call("inventory_pro", "give", "bob", "sword", 2)).toBe(3)
+    expect(h:call("inventory_pro", "count", "bob", "shield")).toBe(0)
+  end)
+end)
 ```
 
 ```bash
-scriptgo test
+scriptgo test inventory_pro
 ```
 
-`scriptgo test` runs every `test_script` in the standalone host. A failed `assert` fails the run.
+A test file does not see the resource's globals. It gets `describe`, `test`, `expect` and
+`load()`, which starts the resource in an in-memory standalone host and returns a harness;
+`h:call(resource, export, ...)` calls a server export. `scriptgo test` runs every `test_script` on
+each Lua interpreter it finds (Lua 5.4, 5.1, LuaJIT). A failed expectation or an error fails the
+run.
 
 ## 6. Run it in other environments
 
 The resource folder does not change between environments. Only the host around it does. Each
-host loads the SCRIPT//GO runtime (`sdk/lua/scriptgo`) with one adapter and ticks it from the
-engine's own loop.
-
-> [!WARNING]
-> The adapters in `sdk/adapters/` are not published yet. The entry points below (`scriptgo.host`,
-> `host:load`, `host:tick`) show the intended shape. Check each adapter's README for the exact
-> calls once it ships.
+host loads the SCRIPT//GO runtime (`sdk/lua/scriptgo`) with one adapter from `sdk/adapters/` and
+ticks it from the engine's own loop. Each adapter's README has the full setup.
 
 ```bash env=standalone
-# The standalone host is the CLI adapter. Run the resource's tests in it:
-scriptgo test
+# The standalone host is the CLI. Run the tests, or run the resource for one simulated second:
+scriptgo test inventory_pro
+scriptgo run inventory_pro --for 1000
 ```
 
 ```lua env=love2d
--- main.lua of your LÖVE game. LÖVE runs LuaJIT.
-local scriptgo = require("scriptgo")
-local host = scriptgo.host(require("scriptgo.adapters.love2d"))
+-- main.lua of your LÖVE game (LuaJIT). Copy scriptgo_love.lua, adapter.lua and verify.lua from
+-- sdk/adapters/love2d into lib/, and the core (sdk/lua/scriptgo) into lib/scriptgo/.
+local scriptgoLove = require("lib.scriptgo_love")
+local sg
 
 function love.load()
-  host:load("resources/inventory_pro")
+  sg = scriptgoLove.new({ resources = { "inventory_pro" }, search = { "resources" } })
 end
 
 function love.update(dt)
-  host:tick(dt)
+  sg:update(dt)   -- ticks the host
+end
+
+function love.draw()
+  sg:draw()       -- notification toasts
 end
 ```
 
-```lua env=godot
--- Runs inside lua-gdextension (Lua 5.4). A GDScript autoload calls
--- tick(delta) from _process(delta).
-local scriptgo = require("scriptgo")
-local host = scriptgo.host(require("scriptgo.adapters.godot"))
-host:load("res://resources/inventory_pro")
-
-function tick(delta)
-  host:tick(delta)
-end
+```gdscript env=godot
+# Godot 4 with the lua-gdextension addon (Lua 5.4 or LuaJIT build). ScriptGoHost is the autoload
+# from sdk/adapters/godot; it ticks the host from _process.
+func _ready():
+    ScriptGoHost.boot({})
+    ScriptGoHost.add_resource("res://resources/inventory_pro")
+    ScriptGoHost.start_all()
+    ScriptGoHost.join(1, "Player")
 ```
 
-```lua env=luanti
--- init.lua of a Luanti mod. Luanti mods are server-side only.
-local scriptgo = dofile(core.get_modpath(core.get_current_modname()) .. "/scriptgo/init.lua")
-local host = scriptgo.host(dofile(core.get_modpath("scriptgo_luanti") .. "/adapter.lua"))
-host:load(core.get_modpath(core.get_current_modname()) .. "/resources/inventory_pro")
-
-core.register_globalstep(function(dtime)
-  host:tick(dtime)
-end)
+```bash env=luanti
+# Luanti mods are server-side only. Build the `scriptgo` mod with the resource bundled, copy
+# dist/luanti/scriptgo/ into the server's mods/ folder and set load_mod_scriptgo = true in world.mt.
+# Resources can also go in <world>/scriptgo/resources/<name>/.
+node sdk/adapters/luanti/build.mjs --with path/to/inventory_pro
 ```
 
 In single-process hosts (standalone, LÖVE, Godot) the client side is player `1`, and network
@@ -211,15 +217,17 @@ resource requires one an environment lacks, the host reports
 
 1. Create a personal access token in [Dashboard → Settings](/dashboard/settings). It starts with
    `sg_pat_` and is shown once.
-2. Publish from the resource folder:
+2. Give it to the CLI, then publish from the resource folder:
 
 ```bash
-scriptgo publish
+scriptgo login --token sg_pat_...
+scriptgo publish --owns-code
 ```
 
 The archive is uploaded, its manifest parsed and its files hashed. Validation then runs: archive
-safety, manifest, integrity, static checks, unit tests, and one run per declared environment.
-You declare your rights to the code before the release can be published.
+safety, manifest, integrity and a Lua syntax check. SCRIPT//GO does not execute uploaded code yet,
+so your test scripts are not run there: run `scriptgo test` yourself. `--owns-code` declares your
+rights to the code; without it the release is validated but not published.
 
 A published version is immutable. To fix `0.1.0`, publish `0.1.1`.
 

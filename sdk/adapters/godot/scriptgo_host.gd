@@ -8,6 +8,7 @@
 ## Headless verification (writes the same report as `scriptgo verify`, environment "godot"):
 ##   Godot_v4.5.2-stable_win64_console.exe --headless --path <project> -- \
 ##       --scriptgo-verify <resourceDir> [--search <dir>]... [--report <out.json>] [--settle 2000]
+##       [--with <exampleDir>]
 ## Exit code 0 = verified, 1 = failing, 2 = setup error (no report written).
 extends Node
 
@@ -298,7 +299,15 @@ func _verify_start(args: PackedStringArray) -> void:
 		[ProjectSettings.globalize_path("user://").trim_suffix("/"), "<user>"]]
 	for k in range(search.size()):
 		_verify.redact.append([search[k], "<search%d>" % k])
-	var begin = JSON.parse_string(String(_call("verifyBegin", [resource_dir, JSON.stringify(search)])))
+	var with_dir := ""
+	var with_values := _arg_values(args, "--with")
+	if with_values.size() > 0:
+		with_dir = _resolve(String(with_values[0]))
+		if with_dir == "":
+			_verify_abort("example folder not found: " + String(with_values[0]))
+			return
+		_verify.redact.append([with_dir.get_base_dir(), "<example>"])
+	var begin = JSON.parse_string(String(_call("verifyBegin", [resource_dir, JSON.stringify(search), with_dir])))
 	_verify.resources = begin.get("resources", []) if begin is Dictionary else []
 	_verify.run_usec = Time.get_ticks_usec()
 	if not (begin is Dictionary and begin.get("ok", false)):
