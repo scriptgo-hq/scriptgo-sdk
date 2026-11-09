@@ -52,6 +52,12 @@ const fixtures = readdirSync(join(specDir, "fixtures", "manifests"))
   .map((f) => f.slice(0, -4))
   .sort()
   .join(",");
+// scriptgo.json fixtures, shared with packages/manifest like the DSL ones.
+const jsonFixtures = readdirSync(join(specDir, "fixtures", "manifests-json"))
+  .filter((f) => f.endsWith(".json") && !f.endsWith(".expect.json"))
+  .map((f) => f.slice(0, -5))
+  .sort()
+  .join(",");
 
 // The single-file bundle, built fresh for this run.
 const bundleDir = mkdtempSync(join(tmpdir(), "scriptgo-bundle-"));
@@ -63,7 +69,7 @@ const summary = [];
 let failed = false;
 for (const lua of interpreters) {
   const started = Date.now();
-  const r = spawnSync(lua.path, [join(specDir, "run.lua"), root, fixtures, ...specs], {
+  const r = spawnSync(lua.path, [join(specDir, "run.lua"), root, fixtures, jsonFixtures, ...specs], {
     cwd: root,
     encoding: "utf8",
   });

@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="ScriptGo.Host.Standalone/ScriptGo.Host.Standalone.csproj" />
+  <Project Path="ScriptGo.Host.Tests/ScriptGo.Host.Tests.csproj" />
+  <Project Path="ScriptGo.Host/ScriptGo.Host.csproj" />
+</Solution>

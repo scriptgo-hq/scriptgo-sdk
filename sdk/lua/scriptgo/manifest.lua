@@ -1,14 +1,17 @@
--- Resource manifest parser (scriptgo.lua / open77.lua). The manifest is parsed, never executed.
--- Mirrors packages/manifest (TypeScript): same grammar, same diagnostics, same fixtures.
+-- Resource manifest parser (scriptgo.lua / scriptgo.json / open77.lua). The manifest is parsed,
+-- never executed. Mirrors packages/manifest (TypeScript): same grammar, same diagnostics, same fixtures.
 local R = ...
 local semver = R("semver")
+local json = R("json")
 local M = {}
 
 M.CAPABILITIES = { "events", "logging", "storage", "players", "permissions", "commands", "config", "ui", "http", "licensing" }
-M.KNOWN_ENVIRONMENTS = { "standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim" }
+M.KNOWN_ENVIRONMENTS = { "standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim", "dotnet" }
 M.LUA_DIALECTS = { "5.1", "5.2", "5.3", "5.4", "luajit" }
 M.CATEGORIES = { "inventory", "permissions", "economy", "events", "ui", "admin", "framework", "vehicles", "housing", "quests", "library", "other" }
 M.MAX_MANIFEST_BYTES = 256 * 1024
+-- Manifest file names, in the order a host looks for them in a resource folder.
+M.MANIFEST_FILES = { "scriptgo.lua", "scriptgo.json", "open77.lua" }
 
 local function set(list)
     local s = {}
@@ -324,6 +327,106 @@ function M.unsafePathReason(p)
     return nil
 end
 
+-- The guest language a script entry runs in: .lua -> "lua", .js / .ts -> "js" (TypeScript is
+-- compiled to JavaScript at pack time); nil for anything else.
+function M.scriptLanguage(p)
+    if p:match("%.lua$") then return "lua" end
+    if p:match("%.js$") or p:match("%.ts$") then return "js" end
+    return nil
+end
+
+-- Languages of the shared, server, client and environment scripts, sorted and unique.
+function M.scriptLanguages(m)
+    local seen, out = {}, {}
+    local function add(paths)
+        for _, p in ipairs(paths or {}) do
+            local lang = M.scriptLanguage(p)
+            if lang and not seen[lang] then seen[lang] = true; out[#out + 1] = lang end
+        end
+    end
+    add(m.sharedScripts); add(m.serverScripts); add(m.clientScripts)
+    for _, paths in pairs(m.environmentScripts or {}) do add(paths) end
+    table.sort(out)
+    return out
+end
+
+-- scriptgo.json -------------------------------------------------------------------------------
+-- The same directive list the DSL produces: each member is a directive (key = directive name), a
+-- scalar is one argument, an array one list argument, and an object is only accepted for
+-- environment_script(s) (one directive per environment). "$schema" is ignored.
+local function newTable() return { kind = "table", list = {}, map = {}, order = {} } end
+
+local function jsonValue(v)
+    if v == json.null then return nil end
+    if type(v) == "table" and v.kind == "array" then
+        local t = newTable()
+        for i = 1, v.n do t.list[i] = jsonValue(v.items[i]) end
+        return t
+    end
+    if type(v) == "table" and v.kind == "object" then
+        local t = newTable()
+        for _, k in ipairs(v.keys) do t.map[k] = jsonValue(v.map[k]); t.order[#t.order + 1] = k end
+        return t
+    end
+    return v
+end
+
+local function isScalar(v)
+    local t = type(v)
+    return t == "string" or t == "number" or t == "boolean"
+end
+
+local function jsonDirectives(source, errors)
+    local ok, data = pcall(json.decodeOrdered, source)
+    if not ok then return nil, { code = "invalid_json", message = "scriptgo.json is not valid JSON: " .. tostring(data) } end
+    if type(data) ~= "table" or data.kind ~= "object" then
+        return nil, { code = "invalid_json", message = "scriptgo.json must hold one JSON object." }
+    end
+    local function bad(message) errors[#errors + 1] = { code = "invalid_value", message = message } end
+    -- Like a DSL list: scalar items are kept, each nested array, object or null is reported.
+    local function list(key, arr)
+        local t = newTable()
+        for i = 1, arr.n do
+            local item = arr.items[i]
+            if isScalar(item) then t.list[#t.list + 1] = item
+            else bad("'" .. key .. "' entries must be strings, not arrays, objects or null.") end
+        end
+        return t
+    end
+    local out = {}
+    for _, key in ipairs(data.keys) do
+        local value = data.map[key]
+        local spec = DIRECTIVES[key]
+        if key == "$schema" then
+            -- ignored
+        elseif not spec then
+            out[#out + 1] = { name = key, args = { jsonValue(value) }, line = 0 }
+        elseif value == json.null then
+            bad("'" .. key .. "' cannot be null.")
+        elseif type(value) == "table" and value.kind == "array" then
+            out[#out + 1] = { name = key, args = { list(key, value) }, line = 0 }
+        elseif type(value) == "table" then
+            if spec.kind ~= "envlist" then
+                bad("'" .. key .. "' does not take an object; only environment_scripts maps environments to scripts.")
+            else
+                for _, env in ipairs(value.keys) do
+                    local paths = value.map[env]
+                    if type(paths) == "string" then
+                        out[#out + 1] = { name = key, args = { env, paths }, line = 0 }
+                    elseif type(paths) == "table" and paths.kind == "array" then
+                        out[#out + 1] = { name = key, args = { env, list(key, paths) }, line = 0 }
+                    else
+                        bad("'" .. key .. "' maps each environment to a script path or a list of paths.")
+                    end
+                end
+            end
+        else
+            out[#out + 1] = { name = key, args = { value }, line = 0 }
+        end
+    end
+    return out
+end
+
 local function flatten(args, d, errors)
     local out = {}
     local function bad(msg) errors[#errors + 1] = { code = "invalid_value", message = msg, line = d.line } end
@@ -348,16 +451,25 @@ function M.parse(source, fileName)
     local function err(code, message, line) errors[#errors + 1] = { code = code, message = message, line = line } end
     local function warn(code, message, line) warnings[#warnings + 1] = { code = code, message = message, line = line } end
     local format = (fileName and fileName:match("open77%.lua$")) and "open77" or "scriptgo"
+    local isJson = fileName ~= nil and fileName:match("%.json$") ~= nil
 
     if #source > M.MAX_MANIFEST_BYTES then
         return { ok = false, errors = { { code = "manifest_too_large", message = "The manifest exceeds 256 KiB." } }, warnings = warnings }
     end
-    local okParse, directives = pcall(parseDirectives, source)
-    if not okParse then
-        if getmetatable(directives) == SyntaxError then
-            return { ok = false, errors = { { code = directives.code, message = directives.message, line = directives.line } }, warnings = warnings }
+    local directives
+    if isJson then
+        local jerr
+        directives, jerr = jsonDirectives(source, errors)
+        if not directives then return { ok = false, errors = { jerr }, warnings = warnings } end
+    else
+        local okParse
+        okParse, directives = pcall(parseDirectives, source)
+        if not okParse then
+            if getmetatable(directives) == SyntaxError then
+                return { ok = false, errors = { { code = directives.code, message = directives.message, line = directives.line } }, warnings = warnings }
+            end
+            error(directives, 0)
         end
-        error(directives, 0)
     end
 
     local scalars, lists, envScripts, envOrder, unknown = {}, {}, {}, {}, {}
@@ -374,7 +486,8 @@ function M.parse(source, fileName)
             elseif spec.kind == "string" and type(v) ~= "string" then err("invalid_value", "'" .. d.name .. "' must be a string.", d.line)
             elseif spec.kind == "boolean" and type(v) ~= "boolean" then err("invalid_value", "'" .. d.name .. "' must be true or false.", d.line)
             elseif scalars[spec.key] then
-                err("duplicate_directive", "'" .. d.name .. "' is declared more than once (first on line " .. scalars[spec.key].line .. ").", d.line)
+                local first = isJson and "" or (" (first on line " .. scalars[spec.key].line .. ")")
+                err("duplicate_directive", "'" .. d.name .. "' is declared more than once" .. first .. ".", d.line)
             else
                 scalars[spec.key] = { value = v, line = d.line }
             end
@@ -421,7 +534,11 @@ function M.parse(source, fileName)
         end
         local reason = M.unsafePathReason(p)
         if reason then err("unsafe_path", "'" .. p .. "' in " .. where .. ": " .. reason .. ".")
-        elseif not p:match("%.lua$") then err("script_not_lua", "'" .. p .. "' in " .. where .. ": script entries must be .lua files.") end
+        elseif where == "test_scripts" and not p:match("%.lua$") then
+            err("unsupported_script", "'" .. p .. "' in " .. where .. ": test scripts must be .lua files.")
+        elseif not M.scriptLanguage(p) then
+            err("unsupported_script", "'" .. p .. "' in " .. where .. ": script entries must be .lua, .js or .ts files.")
+        end
     end
     for _, k in ipairs({ "shared_scripts", "server_scripts", "client_scripts", "test_scripts" }) do
         for _, p in ipairs(list(k)) do checkScript(p, k) end
@@ -493,6 +610,11 @@ function M.parse(source, fileName)
     local hasCode = #list("shared_scripts") > 0 or #list("server_scripts") > 0 or #list("client_scripts") > 0 or #envOrder > 0
     if not hasCode and #list("files") == 0 then err("empty_resource", "The resource declares no scripts and no files.") end
 
+    -- scriptgo.json has no line numbers to report.
+    if isJson then
+        for _, d in ipairs(errors) do d.line = nil end
+        for _, d in ipairs(warnings) do d.line = nil end
+    end
     if #errors > 0 then return { ok = false, errors = errors, warnings = warnings } end
     return {
         ok = true,

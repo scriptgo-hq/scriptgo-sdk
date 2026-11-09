@@ -55,6 +55,56 @@ suite.describe("manifest fixtures (shared with TypeScript)", function()
     end
 end)
 
+suite.describe("scriptgo.json fixtures (shared with TypeScript)", function()
+    test("has fixtures", function() expect(#ctx.jsonFixtures > 8).toBe(true) end)
+    for _, name in ipairs(ctx.jsonFixtures) do
+        test(name, function()
+            local dir = ctx.root .. "/sdk/lua/spec/fixtures/manifests-json/"
+            local source = assert(ctx.readFile(dir .. name .. ".json"))
+            local exp = json.decode(assert(ctx.readFile(dir .. name .. ".expect.json")))
+            local result = manifest.parse(source, exp.fileName or "scriptgo.json")
+            expect(result.ok).toBe(exp.ok)
+            if exp.errors then
+                local codes = {}
+                for _, e in ipairs(result.errors or {}) do codes[#codes + 1] = e.code end
+                expect(codes).toEqual(exp.errors)
+            end
+            if exp.warnings then
+                local codes = {}
+                for _, w in ipairs(result.warnings) do codes[#codes + 1] = w.code end
+                expect(codes).toEqual(exp.warnings)
+            end
+            if exp.manifest and result.ok then
+                local ok, why = matches(result.manifest, exp.manifest, "manifest")
+                if not ok then error(why, 0) end
+            end
+            -- JSON diagnostics carry no line.
+            for _, d in ipairs(result.errors or {}) do expect(d.line).toBe(nil) end
+            for _, d in ipairs(result.warnings) do expect(d.line).toBe(nil) end
+        end)
+    end
+end)
+
+suite.describe("script languages", function()
+    test("maps extensions to guest languages", function()
+        expect(manifest.scriptLanguage("server/main.lua")).toBe("lua")
+        expect(manifest.scriptLanguage("server/main.ts")).toBe("js")
+        expect(manifest.scriptLanguage("client/ui.js")).toBe("js")
+        expect(manifest.scriptLanguage("server/main.cs")).toBe(nil)
+    end)
+    test("lists the languages of every script entry, sorted", function()
+        local r = manifest.parse([[resource "mixed"
+version "1.0.0"
+scriptgo_version ">=0.1.0"
+shared_script "shared/a.lua"
+server_script "server/b.ts"
+environment_script "love2d" "env/c.js"
+]], "scriptgo.lua")
+        expect(r.ok).toBe(true)
+        expect(manifest.scriptLanguages(r.manifest)).toEqual({ "js", "lua" })
+    end)
+end)
+
 suite.describe("semver (same table as the TypeScript tests)", function()
     local cases = {
         { "1.4.1", ">=1.0.0", true }, { "0.9.9", ">=1.0.0", false }, { "1.9.0", "^1.2.0", true },

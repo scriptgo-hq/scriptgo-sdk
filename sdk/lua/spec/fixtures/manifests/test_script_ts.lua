@@ -1,0 +1,5 @@
+resource "ts_tests"
+version "1.0.0"
+scriptgo_version ">=0.1.0"
+server_script "server/main.ts"
+test_script "tests/main_test.ts"

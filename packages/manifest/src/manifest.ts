@@ -16,7 +16,7 @@ export const CAPABILITIES = [
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
-export const KNOWN_ENVIRONMENTS = ["standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim"] as const;
+export const KNOWN_ENVIRONMENTS = ["standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim", "dotnet"] as const;
 export const LUA_DIALECTS = ["5.1", "5.2", "5.3", "5.4", "luajit"] as const;
 export const CATEGORIES = [
   "inventory",
@@ -39,6 +39,10 @@ export const RESOURCE_NAME = /^[a-z][a-z0-9_]{2,63}$/;
 export const SLUG = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 export const EXPORT_NAME = SLUG;
 export const MAX_MANIFEST_BYTES = 256 * 1024;
+/** Manifest file names, in the order a host looks for them in a resource folder. */
+export const MANIFEST_FILES = ["scriptgo.lua", "scriptgo.json", "open77.lua"] as const;
+/** Script entries: Lua, or JavaScript / TypeScript (compiled to JavaScript at pack time). */
+export const SCRIPT_EXTENSION = /\.(lua|js|ts)$/;
 
 export interface Diagnostic {
   code: string;
@@ -167,6 +171,93 @@ export function unsafePathReason(p: string): string | null {
   return null;
 }
 
+/** The guest language a script entry runs in: `.lua` -> "lua", `.js` / `.ts` -> "js". */
+export function scriptLanguage(path: string): "lua" | "js" | null {
+  if (path.endsWith(".lua")) return "lua";
+  if (path.endsWith(".js") || path.endsWith(".ts")) return "js";
+  return null;
+}
+
+/** Languages of the shared, server, client and environment scripts, sorted and unique. */
+export function scriptLanguages(m: ParsedManifest): string[] {
+  const out = new Set<string>();
+  const paths = [...m.sharedScripts, ...m.serverScripts, ...m.clientScripts, ...Object.values(m.environmentScripts).flat()];
+  for (const p of paths) {
+    const lang = scriptLanguage(p);
+    if (lang) out.add(lang);
+  }
+  return [...out].sort();
+}
+
+function jsonValue(v: unknown): Value {
+  if (v === null || v === undefined) return null;
+  if (Array.isArray(v)) return { kind: "table", list: v.map(jsonValue), map: {} };
+  if (typeof v === "object") {
+    const map: Record<string, Value> = {};
+    for (const [k, x] of Object.entries(v as Record<string, unknown>)) map[k] = jsonValue(x);
+    return { kind: "table", list: [], map };
+  }
+  return v as string | number | boolean;
+}
+
+const isScalar = (v: unknown): v is string | number | boolean => typeof v === "string" || typeof v === "number" || typeof v === "boolean";
+
+/**
+ * `scriptgo.json` as the same directive list the DSL produces: each member is a directive (key =
+ * directive name), a scalar is one argument, an array is one list argument, and an object is only
+ * accepted for environment_script(s) (one directive per environment). `$schema` is ignored.
+ */
+function jsonDirectives(source: string, errors: Diagnostic[]): RawDirective[] | Diagnostic {
+  let data: unknown;
+  try {
+    data = JSON.parse(source);
+  } catch (e) {
+    return { code: "invalid_json", message: `scriptgo.json is not valid JSON: ${e instanceof Error ? e.message : String(e)}` };
+  }
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    return { code: "invalid_json", message: "scriptgo.json must hold one JSON object." };
+  }
+  const out: RawDirective[] = [];
+  // Like a DSL list: scalar items are kept, each nested array, object or null is reported.
+  const list = (key: string, items: unknown[]): Value => {
+    const values: Value[] = [];
+    for (const item of items) {
+      if (isScalar(item)) values.push(item);
+      else errors.push({ code: "invalid_value", message: `'${key}' entries must be strings, not arrays, objects or null.` });
+    }
+    return { kind: "table", list: values, map: {} };
+  };
+  for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+    if (key === "$schema") continue;
+    const spec = DIRECTIVES[key];
+    if (!spec) {
+      out.push({ name: key, args: [jsonValue(value)], line: 0 });
+      continue;
+    }
+    if (value === null) {
+      errors.push({ code: "invalid_value", message: `'${key}' cannot be null.` });
+    } else if (Array.isArray(value)) {
+      out.push({ name: key, args: [list(key, value)], line: 0 });
+    } else if (typeof value === "object") {
+      if (spec.kind !== "envlist") {
+        errors.push({ code: "invalid_value", message: `'${key}' does not take an object; only environment_scripts maps environments to scripts.` });
+        continue;
+      }
+      for (const [env, paths] of Object.entries(value as Record<string, unknown>)) {
+        if (typeof paths === "string") out.push({ name: key, args: [env, paths], line: 0 });
+        else if (Array.isArray(paths)) {
+          out.push({ name: key, args: [env, list(key, paths)], line: 0 });
+        } else {
+          errors.push({ code: "invalid_value", message: `'${key}' maps each environment to a script path or a list of paths.` });
+        }
+      }
+    } else {
+      out.push({ name: key, args: [value as string | number | boolean], line: 0 });
+    }
+  }
+  return out;
+}
+
 function parseDependency(entry: string): Dependency | null {
   const m = /^\s*([a-z0-9][a-z0-9_-]{0,63})\s*(.*)$/.exec(entry);
   if (!m) return null;
@@ -178,19 +269,26 @@ export function parseManifest(source: string, opts: { fileName?: string } = {}):
   const errors: Diagnostic[] = [];
   const warnings: Diagnostic[] = [];
   const format: ParsedManifest["format"] = opts.fileName?.endsWith("open77.lua") ? "open77" : "scriptgo";
+  const json = opts.fileName?.endsWith(".json") ?? false;
 
   if (Buffer.byteLength(source, "utf8") > MAX_MANIFEST_BYTES) {
     return { ok: false, errors: [{ code: "manifest_too_large", message: "The manifest exceeds 256 KiB." }], warnings };
   }
 
   let directives: RawDirective[];
-  try {
-    directives = parseDirectives(source);
-  } catch (e) {
-    if (e instanceof ManifestSyntaxError) {
-      return { ok: false, errors: [{ code: e.code, message: e.message, line: e.line }], warnings };
+  if (json) {
+    const converted = jsonDirectives(source, errors);
+    if (!Array.isArray(converted)) return { ok: false, errors: [converted], warnings };
+    directives = converted;
+  } else {
+    try {
+      directives = parseDirectives(source);
+    } catch (e) {
+      if (e instanceof ManifestSyntaxError) {
+        return { ok: false, errors: [{ code: e.code, message: e.message, line: e.line }], warnings };
+      }
+      throw e;
     }
-    throw e;
   }
 
   const scalars: Record<string, { value: string | boolean; line: number }> = {};
@@ -220,7 +318,8 @@ export function parseManifest(source: string, opts: { fileName?: string } = {}):
         continue;
       }
       if (scalars[spec.key]) {
-        errors.push({ code: "duplicate_directive", message: `'${d.name}' is declared more than once (first on line ${scalars[spec.key]!.line}).`, line: d.line });
+        const first = json ? "" : ` (first on line ${scalars[spec.key]!.line})`;
+        errors.push({ code: "duplicate_directive", message: `'${d.name}' is declared more than once${first}.`, line: d.line });
         continue;
       }
       scalars[spec.key] = { value: v as string | boolean, line: d.line };
@@ -272,7 +371,8 @@ export function parseManifest(source: string, opts: { fileName?: string } = {}):
     }
     const reason = unsafePathReason(p);
     if (reason) errors.push({ code: "unsafe_path", message: `'${p}' in ${where}: ${reason}.` });
-    else if (!p.endsWith(".lua")) errors.push({ code: "script_not_lua", message: `'${p}' in ${where}: script entries must be .lua files.` });
+    else if (where === "test_scripts" && !p.endsWith(".lua")) errors.push({ code: "unsupported_script", message: `'${p}' in ${where}: test scripts must be .lua files.` });
+    else if (!SCRIPT_EXTENSION.test(p)) errors.push({ code: "unsupported_script", message: `'${p}' in ${where}: script entries must be .lua, .js or .ts files.` });
   };
   for (const key of scriptKeys) for (const p of list(key)) checkScript(p, key);
   for (const [env, paths] of Object.entries(envScripts)) {
@@ -331,6 +431,8 @@ export function parseManifest(source: string, opts: { fileName?: string } = {}):
   const hasCode = scriptKeys.slice(0, 3).some((k) => list(k).length > 0) || Object.keys(envScripts).length > 0;
   if (!hasCode && list("files").length === 0) errors.push({ code: "empty_resource", message: "The resource declares no scripts and no files." });
 
+  // scriptgo.json has no line numbers to report.
+  if (json) for (const d of [...errors, ...warnings]) delete d.line;
   if (errors.length > 0) return { ok: false, errors, warnings };
 
   const manifest: ParsedManifest = {

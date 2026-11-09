@@ -16,6 +16,9 @@ export async function run(args: string[]): Promise<number> {
   const files = listFiles(res.root);
   const errors = res.result.ok ? validateResourceFiles(res.result.manifest, files) : res.result.errors;
   const warnings = res.result.warnings;
+  if (res.manifestFile === "scriptgo.lua" && files.includes("scriptgo.json")) {
+    warnings.push({ code: "manifest_shadowed", message: "Both scriptgo.lua and scriptgo.json exist: hosts read scriptgo.lua and ignore scriptgo.json. Keep one." });
+  }
   const folder = res.root.split(/[\\/]/).pop();
   if (res.result.ok && res.result.manifest.name !== folder) {
     errors.push({ code: "folder_mismatch", message: `Resource '${res.result.manifest.name}' must live in a folder of the same name (found '${folder}').` });

@@ -40,6 +40,28 @@ describe("loading", function()
         expect(h:findLog("hi v")).toBeTruthy()
     end)
 
+    test("loads scriptgo.json when there is no scriptgo.lua", function()
+        local h = harness({
+            ["jsonres/scriptgo.json"] = '{ "resource": "jsonres", "version": "1.2.0", "scriptgo_version": ">=0.1.0", "server_scripts": ["server.lua"] }',
+            ["jsonres/server.lua"] = 'exports("version", function() return ScriptGo.resource.version() end)',
+        })
+        h:add("jsonres")
+        expect(h:start("jsonres")).toBe(true)
+        expect(h:call("jsonres", "version")).toBe("1.2.0")
+    end)
+
+    test("prefers scriptgo.lua over scriptgo.json", function()
+        local h = harness({
+            ["both/scriptgo.lua"] = manifestFor("both", 'server_script "lua.lua"\n'),
+            ["both/scriptgo.json"] = '{ "resource": "both", "version": "9.0.0", "server_scripts": ["json.lua"] }',
+            ["both/lua.lua"] = 'exports("from", function() return "lua" end)',
+            ["both/json.lua"] = 'exports("from", function() return "json" end)',
+        })
+        h:add("both")
+        expect(h:start("both")).toBe(true)
+        expect(h:call("both", "from")).toBe("lua")
+    end)
+
     test("refuses a folder whose name differs from the resource", function()
         local h = harness({ ["dir/scriptgo.lua"] = manifestFor("other", 'server_script "x.lua"\n') })
         local res, err = h.host:addResource("dir")
@@ -406,6 +428,27 @@ describe("dependencies and lifecycle", function()
         local ok, why = h:start("net")
         expect(ok).toBe(false)
         expect(why).toBe("capability_unavailable:http@standalone")
+    end)
+
+    test("a script in a language the host does not run fails with language_unavailable", function()
+        local h = harness({
+            ["tsres/scriptgo.lua"] = manifestFor("tsres", 'server_script "server/main.ts"\n'),
+            ["tsres/server/main.ts"] = "export {};",
+        })
+        h:add("tsres")
+        local ok, why = h:start("tsres")
+        expect(ok).toBe(false)
+        expect(why).toBe("language_unavailable:js@standalone")
+        expect(h.host:resourceState("tsres")).toBe("failed")
+    end)
+
+    test("another environment's .ts script does not stop a Lua resource", function()
+        local h = harness({
+            ["mixed/scriptgo.lua"] = manifestFor("mixed", 'server_script "s.lua"\nenvironment_script "dotnet" "env/dotnet.ts"\n'),
+            ["mixed/s.lua"] = "",
+        })
+        h:add("mixed")
+        expect(h:start("mixed")).toBe(true)
     end)
 
     test("touching an unavailable optional capability raises the same token", function()

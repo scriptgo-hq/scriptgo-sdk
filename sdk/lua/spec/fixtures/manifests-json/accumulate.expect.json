@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "warnings": ["unknown_directive"],
+  "manifest": {
+    "serverScripts": ["server/a.lua", "server/b.lua", "server/c.ts"],
+    "dependencies": [{ "name": "sg_eventbus", "range": ">=1.0.0" }],
+    "files": [],
+    "unknown": [{ "directive": "x_engine_hint", "args": [{ "threads": 2, "names": ["a", "b"] }], "line": 0 }]
+  }
+}

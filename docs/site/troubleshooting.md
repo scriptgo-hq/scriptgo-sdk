@@ -83,13 +83,15 @@ The manifest is parsed, never executed. Errors stop the release; warnings are sh
 | `invalid_range` | `scriptgo_version` or `open77_version` is not a valid range | Use a range such as `">=0.1.0"` |
 | `duplicate_directive` | A single-value directive appears twice | Keep one |
 | `unsafe_path` | A path uses `..`, a leading `/`, a drive letter or `\` | Use resource-relative paths with `/` |
-| `script_not_lua` | A script entry is not a `.lua` file | Point script directives at `.lua` files |
+| `unsupported_script` | A script entry is not a `.lua`, `.js` or `.ts` file (test scripts: `.lua` only) | Point script directives at `.lua`, `.js` or `.ts` files, and `test_script` at `.lua` files |
 | `cross_resource_include` | A path such as `@other/file.lua` | Share code through `dependencies` and exports |
 | `unknown_capability` | A capability name is not one of the ten | Fix the spelling, or use an `x-` extension name |
 | `invalid_lua_dialect` | An unknown entry in `lua` | Use the dialects listed in [Manifest](/docs/manifest) |
 | `invalid_dependency` | A dependency is not `"name"` or `"name >=1.2.0"` | Fix the format or the range |
 | `empty_resource` | No scripts and no files | Declare at least one script or file |
 | `manifest_too_large` | The manifest exceeds 256 KiB | Move data into files |
+| `invalid_json` | `scriptgo.json` is not valid JSON, or does not hold one object | Fix the syntax; the top level is one object whose keys are directives |
+| `invalid_value` | A directive has the wrong type, e.g. `null`, a nested array, or an object anywhere but `environment_scripts` | Use a string, number, boolean or a list of them |
 | `unexpected_character`, `unterminated_string` | The manifest contains code or a broken string | Keep only directives; manifests cannot contain function calls like `os.execute(...)` |
 | `missing_file`, `pattern_empty` | A listed script is missing, or a `files` pattern matches nothing. Script entries are checked as exact paths, so a `*` in one also gives `missing_file` | Check the path against the archive; list each script explicitly |
 
@@ -98,6 +100,7 @@ The manifest is parsed, never executed. Errors stop the release; warnings are sh
 | `unknown_directive` | A directive SCRIPT//GO does not use, such as one specific to an environment. It is kept, so one manifest can serve several environments |
 | `unknown_environment` | An environment slug SCRIPT//GO does not list yet; it shows as not tested |
 | `unknown_category` | The category will be shown as `other` |
+| `manifest_shadowed` | The resource has both `scriptgo.lua` and `scriptgo.json`; `scriptgo.lua` wins and the JSON file is ignored |
 | `license_not_spdx` | The license does not look like an SPDX expression |
 | `missing_scriptgo_version` | Declare `scriptgo_version` so hosts can check compatibility |
 

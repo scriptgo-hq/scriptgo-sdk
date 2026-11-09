@@ -161,12 +161,13 @@ local function decodeString(s, i)
     end
 end
 
-function decodeValue(s, i, depth)
+-- `ordered` (decodeOrdered): objects keep their key order, arrays their length, null is M.null.
+function decodeValue(s, i, depth, ordered)
     if depth > 64 then decodeError(s, i, "nesting too deep") end
     i = skip(s, i)
     local c = s:sub(i, i)
     if c == "{" then
-        local obj = M.object({})
+        local obj = ordered and { kind = "object", keys = {}, map = {} } or M.object({})
         i = skip(s, i + 1)
         if s:sub(i, i) == "}" then return obj, i + 1 end
         while true do
@@ -177,8 +178,14 @@ function decodeValue(s, i, depth)
             i = skip(s, i)
             if s:sub(i, i) ~= ":" then decodeError(s, i, "expected ':'") end
             local val
-            val, i = decodeValue(s, i + 1, depth + 1)
-            obj[key] = val
+            val, i = decodeValue(s, i + 1, depth + 1, ordered)
+            if ordered then
+                -- A repeated key keeps its first position and its last value, like JSON.parse.
+                if obj.map[key] == nil then obj.keys[#obj.keys + 1] = key end
+                obj.map[key] = val
+            else
+                obj[key] = val
+            end
             i = skip(s, i)
             local d = s:sub(i, i)
             if d == "}" then return obj, i + 1 end
@@ -186,15 +193,15 @@ function decodeValue(s, i, depth)
             i = i + 1
         end
     elseif c == "[" then
-        local arr = {}
+        local arr = ordered and { kind = "array", items = {}, n = 0 } or {}
         i = skip(s, i + 1)
         if s:sub(i, i) == "]" then return arr, i + 1 end
         local n = 0
         while true do
             local val
-            val, i = decodeValue(s, i, depth + 1)
+            val, i = decodeValue(s, i, depth + 1, ordered)
             n = n + 1
-            arr[n] = val
+            if ordered then arr.items[n] = val; arr.n = n else arr[n] = val end
             i = skip(s, i)
             local d = s:sub(i, i)
             if d == "]" then return arr, i + 1 end
@@ -208,7 +215,7 @@ function decodeValue(s, i, depth)
     elseif s:sub(i, i + 4) == "false" then
         return false, i + 5
     elseif s:sub(i, i + 3) == "null" then
-        return nil, i + 4
+        return (ordered and M.null or nil), i + 4
     else
         local num = s:match("^-?%d+%.?%d*[eE]?[-+]?%d*", i)
         if not num or num == "" or num == "-" then decodeError(s, i, "unexpected character") end
@@ -221,6 +228,17 @@ end
 function M.decode(s)
     if type(s) ~= "string" then error("json: decode expects a string", 0) end
     local v, i = decodeValue(s, 1, 0)
+    i = skip(s, i)
+    if i <= #s then decodeError(s, i, "trailing characters") end
+    return v
+end
+
+-- Decodes without losing what plain Lua tables cannot hold (scriptgo.json manifests): objects are
+-- { kind = "object", keys = { ...in order }, map = {...} }, arrays { kind = "array", items, n },
+-- null is M.null.
+function M.decodeOrdered(s)
+    if type(s) ~= "string" then error("json: decode expects a string", 0) end
+    local v, i = decodeValue(s, 1, 0, true)
     i = skip(s, i)
     if i <= #s then decodeError(s, i, "trailing characters") end
     return v

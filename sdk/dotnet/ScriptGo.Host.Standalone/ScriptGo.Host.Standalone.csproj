@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>ScriptGo.Host.Standalone</RootNamespace>
+    <AssemblyName>scriptgo-dotnet</AssemblyName>
+    <Description>A console host for the SCRIPT//GO .NET kit: runs and verifies resources (the `dotnet` environment).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../ScriptGo.Host/ScriptGo.Host.csproj" />
+  </ItemGroup>
+</Project>
