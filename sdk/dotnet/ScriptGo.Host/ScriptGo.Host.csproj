@@ -10,6 +10,7 @@
   <ItemGroup>
     <PackageReference Include="KeraLua" />
     <PackageReference Include="Jint" />
+    <PackageReference Include="NSec.Cryptography" />
   </ItemGroup>
   <ItemGroup>
     <!-- The guest preludes, and the portable core's JSON module (one implementation for every Lua host). -->

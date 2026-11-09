@@ -7,5 +7,9 @@
     <PackageVersion Include="KeraLua" Version="1.4.9" />
     <!-- JavaScript guests (TypeScript compiles to JavaScript at pack time). -->
     <PackageVersion Include="Jint" Version="4.17.0" />
+    <!-- Escrow asymmetric crypto: ed25519 (release signatures) and X25519 (content-key unwrap),
+         through NSec, a reviewed libsodium wrapper. AES-256-GCM uses System.Security.Cryptography.
+         Pinned; never hand-rolled (CREATOR-PROTECTION.md §2 "vetted primitives only"). -->
+    <PackageVersion Include="NSec.Cryptography" Version="24.4.0" />
   </ItemGroup>
 </Project>
