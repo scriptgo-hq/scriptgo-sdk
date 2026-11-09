@@ -204,6 +204,32 @@ function closure(root: LoadedResource, search: string[]): { order: LoadedResourc
 }
 
 /**
+ * Resources a package's tests load next to it (`load({ with = { "sg_permissions" } })`), found in
+ * the search paths, with their own dependencies. Hosts that read the search paths at test time
+ * find them by themselves; a host with its own sandboxed disk (a CC: Tweaked computer) needs them
+ * copied in. Any quoted name in a test script that is also a resource folder counts.
+ */
+function testCompanions(res: LoadedResource, search: string[], have: Set<string>): LoadedResource[] {
+  if (!res.result.ok) return [];
+  const out: LoadedResource[] = [];
+  for (const rel of res.result.manifest.testScripts) {
+    const file = join(res.root, rel);
+    if (!existsSync(file)) continue;
+    for (const [, name] of readFileSync(file, "utf8").matchAll(/["']([A-Za-z0-9_-]{2,64})["']/g)) {
+      if (!name || have.has(name)) continue;
+      const dir = findResource(name, search);
+      if (!dir) continue;
+      for (const r of closure(readResource(dir), search).order) {
+        if (!r.result.ok || have.has(r.result.manifest.name)) continue;
+        have.add(r.result.manifest.name);
+        out.push(r);
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * spawnSync without blocking the event loop: the stub API lives in this process and must keep
  * answering while the Lua host runs.
  */
@@ -670,6 +696,9 @@ export async function run(args: string[]): Promise<number> {
         console.log(`Minecraft EULA accepted by the operator (--accept-minecraft-eula): ${acceptMinecraftEula()}`);
       }
       const resources = order.filter((r) => r.result.ok).map((r) => ({ name: (r.result as { manifest: ParsedManifest }).manifest.name, dir: r.root }));
+      for (const r of testCompanions(res, search, new Set(resources.map((x) => x.name)))) {
+        resources.push({ name: (r.result as { manifest: ParsedManifest }).manifest.name, dir: r.root });
+      }
       if (example) resources.push({ name: example.name, dir: example.dir });
       const timeout = Number(a.flags["cctweaked-timeout"] ?? 600) * 1000;
       const report = await verifyCcTweaked({
