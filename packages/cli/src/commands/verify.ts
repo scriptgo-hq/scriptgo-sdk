@@ -775,7 +775,7 @@ export async function run(args: string[]): Promise<number> {
   if (example) console.log(`README example: ${example.name} (runnable Lua block of README.md) runs next to ${m.name}`);
 
   // Every environment but dotnet runs Lua only: another language is reported as skipped there.
-  const luaOnly = ["standalone", "open77", "luanti", "love2d", "godot", "neovim"];
+  const luaOnly = ["standalone", "open77", "luanti", "love2d", "godot", "neovim", "cctweaked"];
   if (lang !== "lua") {
     for (const e of luaOnly.filter((x) => env === x || env === "all")) {
       reports.push({
@@ -813,7 +813,7 @@ export async function run(args: string[]): Promise<number> {
   if (lang === "lua" && (env === "neovim" || env === "all")) {
     reports.push(await verifyEngine("neovim", findNeovim(a.flags.nvim), res, m, search, example, stub));
   }
-  if (env === "cctweaked" || env === "all") {
+  if (lang === "lua" && (env === "cctweaked" || env === "all")) {
     const { order, missing } = closure(res, search);
     if (missing.length > 0) {
       reports.push({
