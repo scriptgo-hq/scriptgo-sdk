@@ -64,7 +64,8 @@ local function run()
     end)
     check("capabilities.refusal", function()
         if ScriptGo.capabilities.has("http") then return true, "http available here" end
-        local ok, err = pcall(ScriptGo.http.request, { url = "http://127.0.0.1/" })
+        -- A host may refuse when the member is read or when it is called: both are inside the pcall.
+        local ok, err = pcall(function() return ScriptGo.http.request({ url = "http://127.0.0.1/" }) end)
         return not ok and tostring(err):find("capability_unavailable:http@", 1, true) ~= nil, err
     end)
 

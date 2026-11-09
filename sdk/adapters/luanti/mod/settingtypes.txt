@@ -1,0 +1,9 @@
+# Resource to verify. When set, only this resource (and its dependencies) starts, a report is
+# written to the world folder after scriptgo_verify_seconds, and the server shuts down.
+scriptgo_verify (Resource to verify) string
+
+# Seconds a verify run lets the resource run before writing the report.
+scriptgo_verify_seconds (Verify duration) int 3 1 120
+
+# Report file name, written in the world folder.
+scriptgo_verify_report (Verify report file) string
