@@ -18,6 +18,8 @@
 // config `api` and `license_key` of the resource, global `scriptgo_api`. On OPEN//77 the server's
 // outbound HTTP is switched on with the stub's host as the only allowed host. The report then
 // carries api:* checks: every request matched the schema, named the right environment and adapter.
+// --api <url> --license-key <key> does the same against a real SCRIPT//GO API (no api:* checks:
+// only the stub sees the requests).
 import { spawn, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 // @ts-expect-error plain ESM build script without type declarations
@@ -28,7 +30,7 @@ import type { ParsedManifest } from "@scriptgo/manifest";
 import { CompatibilityRunSchema, type CompatibilityRun } from "@scriptgo/shared";
 import { parseArgs } from "../lib/args.ts";
 import { defaultSearchPaths, pickInterpreters, readResource, repoRoot, standaloneMain, type LoadedResource } from "../lib/sdk.ts";
-import { startStubApi, type StubApi } from "../lib/stub-api.ts";
+import { startStubApi, type StubRequest } from "../lib/stub-api.ts";
 import { packForOpen77 } from "./pack.ts";
 
 export const summary = "Run a resource on its environments and write compatibility reports";
@@ -55,6 +57,15 @@ interface Report {
 
 const SDK_VERSION = "0.1.0";
 
+/** The licensing API a run talks to: the loopback stub, or a real API given with --api. */
+interface ApiTarget {
+  url: string;
+  licenseKey: string;
+  /** Requests the stub saw; always empty for a real API. */
+  requests: StubRequest[];
+  label: string;
+}
+
 /** The adapter version the OPEN//77 shim reports at runtime (and sends to the licensing API). */
 export function open77ShimVersion(): string {
   const text = readFileSync(join(repoRoot, "sdk", "adapters", "open77", "shim.lua"), "utf8");
@@ -73,7 +84,7 @@ function stubPackages(m: ParsedManifest): string[] {
  * API schema, and named this run's environment and adapter. Nothing is checked when the resource
  * made no request (most packages never call the API).
  */
-export function apiChecks(requests: StubApi["requests"], from: number, environment: string, adapterVersion: string): Check[] {
+export function apiChecks(requests: StubRequest[], from: number, environment: string, adapterVersion: string): Check[] {
   const mine = requests.slice(from).filter((r) => r.path.startsWith("/v1/licenses/"));
   if (mine.length === 0) return [];
   const bad = mine.find((r) => r.bodyError !== null);
@@ -186,7 +197,7 @@ function spawnAsync(cmd: string, argv: string[]): Promise<{ status: number | nul
   });
 }
 
-async function verifyStandalone(dir: string, m: ParsedManifest, lua: { name: string; path: string }, search: string[], stub?: StubApi): Promise<Report> {
+async function verifyStandalone(dir: string, m: ParsedManifest, lua: { name: string; path: string }, search: string[], stub?: ApiTarget): Promise<Report> {
   const started = Date.now();
   const tmp = mkdtempSync(join(tmpdir(), "scriptgo-verify-"));
   const reportFile = join(tmp, "report.json");
@@ -226,7 +237,7 @@ async function verifyStandalone(dir: string, m: ParsedManifest, lua: { name: str
   }
   rmSync(tmp, { recursive: true, force: true });
   report.environment = "standalone";
-  report.evidence = { ...report.evidence, interpreter: lua.name, ...(stub ? { api: "stub-api (loopback, schema-checked)" } : {}) };
+  report.evidence = { ...report.evidence, interpreter: lua.name, ...(stub ? { api: stub.label } : {}) };
   report.status = statusOf(report.checks);
   report.durationMs = Date.now() - started;
   return report;
@@ -258,7 +269,7 @@ async function verifyOpen77(
   res: LoadedResource,
   m: ParsedManifest,
   search: string[],
-  opts: { server?: string; port: number; settleMs: number; timeoutMs: number; stub?: StubApi },
+  opts: { server?: string; port: number; settleMs: number; timeoutMs: number; stub?: ApiTarget },
 ): Promise<Report> {
   const started = Date.now();
   const checks: Check[] = [];
@@ -360,7 +371,7 @@ async function verifyOpen77(
   runtimeVersion = open77ServerVersion(server);
   // The license key and the stub's port are throwaway, but keep them out of the stored log anyway.
   const scrubbed = stub ? log.split(stub.licenseKey).join("<license_key>").split(stub.url).join("<stub-api>") : log;
-  return report(scrubbed, { serverBinary: server.split(/[\\/]/).slice(-1)[0], resources: names, ...(stub ? { api: "stub-api (loopback, schema-checked)" } : {}) });
+  return report(scrubbed, { serverBinary: server.split(/[\\/]/).slice(-1)[0], resources: names, ...(stub ? { api: stub.label } : {}) });
 }
 
 export const LUANTI_IMAGE = "ghcr.io/luanti-org/luanti:latest";
@@ -439,7 +450,8 @@ export async function run(args: string[]): Promise<number> {
   if (a.bools.has("help") || a.positional.length === 0) {
     console.log(`scriptgo verify <resourceDir> [--env standalone|open77|luanti|all] [--lua all|lua54|lua51|luajit]
     [--luanti-image ${LUANTI_IMAGE}] [--luanti-seconds 3]
-    [--search dir]... [--out verification/reports] [--json] [--stub-api]
+    [--search dir]... [--out verification/reports] [--json]
+    [--stub-api | --api <url> --license-key <sg_live_...>]
     [--open77-server path\\to\\Open77.Server.exe] [--port 11861] [--settle 1500] [--timeout 30000]`);
     return a.bools.has("help") ? 0 : 2;
   }
@@ -453,7 +465,14 @@ export async function run(args: string[]): Promise<number> {
   const env = a.flags.env ?? "standalone";
   const out = resolve(a.flags.out ?? join(repoRoot, "verification", "reports"));
   const reports: Report[] = [];
-  const stub = a.bools.has("stub-api") ? await startStubApi({ packages: stubPackages(m) }) : undefined;
+  const stubServer = a.bools.has("stub-api") ? await startStubApi({ packages: stubPackages(m) }) : undefined;
+  let stub: ApiTarget | undefined;
+  if (stubServer) {
+    stub = { url: stubServer.url, licenseKey: stubServer.licenseKey, requests: stubServer.requests, label: "stub-api (loopback, schema-checked)" };
+  } else if (a.flags.api) {
+    const key = a.flags["license-key"] ?? process.env.SCRIPTGO_LICENSE_KEY ?? "";
+    stub = { url: a.flags.api.replace(/\/+$/, ""), licenseKey: key, requests: [], label: `api ${new URL(a.flags.api).host}` };
+  }
 
   if (env === "standalone" || env === "all") {
     for (const lua of pickInterpreters(a.flags.lua ?? "all")) reports.push(await verifyStandalone(res.root, m, lua, search, stub));
@@ -473,7 +492,7 @@ export async function run(args: string[]): Promise<number> {
       seconds: Number(a.flags["luanti-seconds"] ?? 3),
     }));
   }
-  await stub?.close();
+  await stubServer?.close();
   if (reports.length === 0) {
     console.error(`unknown environment '${env}' (standalone, open77, luanti, all)`);
     return 2;

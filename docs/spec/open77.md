@@ -112,7 +112,9 @@ With `--stub-api`, verify also starts a loopback stand-in for the licensing API 
 request with the API's own schemas (`VerifyBody`, `ActivateBody`) and answers in its shapes. The
 resource gets the stub's URL and a valid key as config (`api`, `license_key`) and `scriptgo_api`;
 on OPEN//77 the server's outbound HTTP is switched on with `127.0.0.1` as the only allowed host. The
-report gains `api:bodies_valid`, `api:environment` and `api:adapter_version`.
+report gains `api:bodies_valid`, `api:environment` and `api:adapter_version`. `--api <url>
+--license-key <key>` does the same against a real SCRIPT//GO API (no `api:*` checks there: only the
+stub sees the requests); `tools/acceptance.mjs` uses it.
 
 On both, a resource can report its own checks by printing `SGCHECK PASS <name>`,
 `SGCHECK FAIL <name> <detail>` and finally `SGCHECK DONE ...`; each line becomes a check of the
