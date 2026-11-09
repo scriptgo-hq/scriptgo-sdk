@@ -422,26 +422,51 @@ describe("sandbox", function()
         })
     end)
 
-    test("require is confined to the resource and cached", function()
+    test("require is confined to the resource and cached, and answers nil, reason", function()
         local h = harness({
-            ["m/scriptgo.lua"] = manifestFor("m", 'server_script "s.lua"\nfiles { "lib/*.lua" }\n'),
+            ["m/scriptgo.lua"] = manifestFor("m", 'client_script "c.lua"\nfiles { "lib/*.lua" }\n'),
             ["m/lib/util.lua"] = 'loads = (loads or 0) + 1\nreturn { twice = function(x) return x * 2 end }',
-            ["m/s.lua"] = [[
+            ["m/c.lua"] = [[
                 local u = require("lib.util")
                 local again = require("lib.util")
                 exports("run", function()
-                    local ok, err = pcall(require, "../other/x")
-                    return u.twice(21), u == again, loads, ok, err
+                    local bad, why = require("../other/x")
+                    local missing, why2 = require("lib.nope")
+                    local undeclared, why3 = require("@other")
+                    return u.twice(21), u == again, loads, bad, why, missing, why2, undeclared, why3
                 end)
             ]],
         })
         h:add("m"); h:start("m")
-        local v, same, loads, ok, err = h:call("m", "run")
+        local v, same, loads, bad, why, missing, why2, undeclared, why3 = h:callClient("m", "run")
         expect(v).toBe(42)
         expect(same).toBe(true)
         expect(loads).toBe(1)
-        expect(ok).toBe(false)
-        expect(err).toContain("invalid module name")
+        expect(bad).toBeNil()
+        expect(why).toBe("invalid_module_name")
+        expect(missing).toBeNil()
+        expect(why2).toBe("module_not_found:lib.nope")
+        expect(undeclared).toBeNil()
+        expect(why3).toBe("dependency_not_declared:other")
+    end)
+
+    test("require('@lib') loads a declared dependency's init.lua", function()
+        local h = harness({
+            ["lib/scriptgo.lua"] = manifestFor("lib", 'files { "init.lua", "helpers/*.lua" }\n'),
+            ["lib/init.lua"] = 'return { name = "lib" }',
+            ["lib/helpers/math.lua"] = 'return { add = function(a, b) return a + b end }',
+            ["app/scriptgo.lua"] = manifestFor("app", 'client_script "c.lua"\ndependency "lib"\n'),
+            ["app/c.lua"] = [[
+                local lib = require("@lib")
+                local m = require("@lib/helpers.math")
+                exports("run", function() return lib.name, m.add(2, 3) end)
+            ]],
+        })
+        h:add("lib"); h:add("app")
+        expect(h:start("app")).toBe(true)
+        local name, sum = h:callClient("app", "run")
+        expect(name).toBe("lib")
+        expect(sum).toBe(5)
     end)
 
     test("server and client sides do not share globals", function()

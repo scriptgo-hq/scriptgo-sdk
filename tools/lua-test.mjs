@@ -34,15 +34,17 @@ const specs = readdirSync(specDir)
   .filter((f) => f.endsWith("_spec.lua"))
   .sort()
   .map((f) => join(specDir, f));
-// Package specs live next to each official package.
-const pkgRoot = join(root, "sdk", "packages");
-if (existsSync(pkgRoot)) {
-  for (const pkg of readdirSync(pkgRoot).sort()) {
-    const dir = join(pkgRoot, pkg, "spec");
-    if (!existsSync(dir)) continue;
-    for (const f of readdirSync(dir).filter((f) => f.endsWith("_spec.lua")).sort()) specs.push(join(dir, f));
+// Resources with test_script files: official packages and examples.
+const packageDirs = [join(root, "sdk", "packages"), join(root, "examples", "packages")];
+const packages = [];
+for (const dir of packageDirs) {
+  if (!existsSync(dir)) continue;
+  for (const name of readdirSync(dir).sort()) {
+    if (existsSync(join(dir, name, "scriptgo.lua"))) packages.push(join(dir, name));
   }
 }
+const searchArgs = packageDirs.filter((d) => existsSync(d)).flatMap((d) => ["--search", d]);
+
 const fixtures = readdirSync(join(specDir, "fixtures", "manifests"))
   .filter((f) => f.endsWith(".lua"))
   .map((f) => f.slice(0, -4))
@@ -70,8 +72,30 @@ for (const lua of interpreters) {
     exitCode: r.status,
     durationMs: Date.now() - started,
   };
-  summary.push(entry);
   if (r.status !== 0) failed = true;
+
+  // Resource test_script files of every official package and example, through the standalone host.
+  for (const pkg of packages) {
+    const t = spawnSync(lua.path, [join(root, "sdk", "adapters", "standalone", "main.lua"), "test", pkg, ...searchArgs], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const text = (t.stdout || "") + (t.stderr || "");
+    const line = text.trim().split(/\r?\n/).pop() || "";
+    const pm = line.match(/^(\S+): (\d+) passed, (\d+) failed/);
+    console.log(`  ${line}`);
+    if (t.status !== 0) {
+      failed = true;
+      process.stdout.write(text.split(/\r?\n/).filter((l) => /FAIL|error|^\s{7}/.test(l)).join("\n") + "\n");
+    }
+    if (pm) {
+      entry.tests += Number(pm[2]) + Number(pm[3]);
+      entry.failed += Number(pm[3]);
+    } else {
+      entry.failed += 1;
+    }
+  }
+  summary.push(entry);
 }
 
 console.log("\nSummary:");

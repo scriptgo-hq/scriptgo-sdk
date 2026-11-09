@@ -169,7 +169,13 @@ function Side:spawn(fn, ctx, onDone, ...)
     local thread = { id = self:_id(), wake = 0, ctx = ctx or {}, onDone = onDone }
     thread.co = coroutine.create(fn)
     self.threads[thread] = true
-    self:_resume(thread, pack(...))
+    if thread.ctx.deferred then
+        -- Starts on the next scheduler tick instead of inline (commands, as in Open77).
+        thread.wake = self.host.now
+        thread.resumeArgs = pack(...)
+    else
+        self:_resume(thread, pack(...))
+    end
     return thread
 end
 
@@ -606,6 +612,14 @@ function Host:playerList()
     return ids
 end
 
+-- A stable identifier for a player (for storage keys). Adapters map it to the engine's account id.
+function Host:playerIdentifier(id)
+    if self.adapter.players and self.adapter.players.identifier then return self.adapter.players.identifier(id) end
+    local p = self.players[id]
+    if not p then return nil end
+    return "local:" .. tostring(p.name):lower():gsub("[^%w_%-]", "_")
+end
+
 function Host:playerName(id)
     if self.adapter.players and self.adapter.players.name then return self.adapter.players.name(id) end
     local p = self.players[id]
@@ -630,9 +644,13 @@ function Host:commandList()
 end
 
 -- Executes a command line as `source` (0 = console). Returns true or false, reason.
+-- Same contract as Open77: names are case-insensitive, the handler gets (source, args, raw) with
+-- string args and args.n, raw has no leading "/", and it runs on the next scheduler tick.
+-- A player's line reaches a client command of that name first (local chat), then the server's.
 function Host:executeCommand(source, line)
     local name, rest = line:match("^%s*/?(%S+)%s*(.-)%s*$")
     if not name then return false, "empty_command" end
+    name = name:lower()
     local list = self.commands[name]
     if not list or #list == 0 then return false, "unknown_command:" .. name end
     local entry
@@ -642,15 +660,20 @@ function Host:executeCommand(source, line)
     if not entry then
         for _, e in ipairs(list) do if e.side.name == "server" then entry = e end end
     end
-    entry = entry or list[1]
+    if not entry then return false, "unknown_command:" .. name end
     if entry.restricted and source ~= 0 then
         local allowed = self.adapter.permissions and self.adapter.permissions.has
             and self.adapter.permissions.has(source, "command." .. name)
         if not allowed then return false, "not_allowed" end
     end
-    local args = {}
-    for word in rest:gmatch("%S+") do args[#args + 1] = word end
-    entry.side:spawn(entry.fn, { source = source }, nil, source, args, line)
+    local args = { n = 0 }
+    for word in rest:gmatch("%S+") do
+        args.n = args.n + 1
+        args[args.n] = word
+    end
+    local raw = name
+    if args.n > 0 then raw = name .. " " .. table.concat(args, " ", 1, args.n) end
+    entry.side:spawn(entry.fn, { source = source, deferred = true }, nil, source, args, raw)
     return true
 end
 
@@ -800,11 +823,44 @@ function Host:_buildEnv(side)
 
     -- Exports
     local exportsFn = function(name, fn)
-        if type(name) ~= "string" or type(fn) ~= "function" then error("exports(name, fn)", 2) end
+        if type(name) ~= "string" or name == "" or #name > 64 then return nil, "invalid_export_name" end
+        if type(fn) ~= "function" then return nil, "export_function_required" end
         side.exports[name] = fn
+        return true
+    end
+    -- exports(name, fn) registers; exports.other:name(...) is Open77's synchronous proxy: the export
+    -- runs inline and errors are raised as "export other:name <reason>" (FiveM behaviour).
+    local function syncProxy(target)
+        return setmetatable({}, {
+            __index = function(_, exportName)
+                return function(_, ...)
+                    local tr = host.resources[target]
+                    local tside = tr and tr.state == "started" and tr.sides[side.name]
+                    if not tside then error("export " .. target .. ":" .. exportName .. " export_resource_unavailable", 2) end
+                    local fn = tside.exports[exportName]
+                    if not fn then error("export " .. target .. ":" .. exportName .. " export_not_found", 2) end
+                    local args = codec.copyArgs(...)
+                    if not args then error("export " .. target .. ":" .. exportName .. " export_arguments_not_serializable", 2) end
+                    local prevInvoking = tside.invoking
+                    tside.invoking = res.name
+                    local out = pack(pcall(fn, unpack(args, 1, args.n)))
+                    tside.invoking = prevInvoking
+                    if not out[1] then error("export " .. target .. ":" .. exportName .. " " .. tostring(out[2]), 2) end
+                    local copied = { n = out.n - 1 }
+                    for i = 2, out.n do
+                        local ok, v = codec.copy(out[i])
+                        if not ok then error("export " .. target .. ":" .. exportName .. " export_result_not_serializable", 2) end
+                        copied[i - 1] = v
+                    end
+                    return unpack(copied, 1, copied.n)
+                end
+            end,
+        })
     end
     env.exports = setmetatable({}, {
         __call = function(_, name, fn) return exportsFn(name, fn) end,
+        __index = function(_, target) return syncProxy(target) end,
+        __newindex = function() error("exports is not assignable", 2) end,
     })
     env.GetInvokingResource = function() return side.invoking end
 
@@ -821,9 +877,14 @@ function Host:_buildEnv(side)
             error("RegisterCommand(name, fn, restricted?): invalid arguments", 2)
         end
         host:_requireCap("commands")
-        local list = host.commands[name] or {}
-        host.commands[name] = list
+        local key = name:lower()
+        local list = host.commands[key] or {}
+        for _, e in ipairs(list) do
+            if e.side.name == side.name then error("duplicate command '" .. key .. "'", 2) end
+        end
+        host.commands[key] = list
         list[#list + 1] = { side = side, fn = fn, restricted = restricted and true or false }
+        return true
     end
 
     env.GetCurrentResourceName = function() return res.name end
@@ -835,23 +896,42 @@ function Host:_buildEnv(side)
         return v
     end
 
-    -- Modules confined to the resource
-    env.require = function(modname)
-        if type(modname) ~= "string" or modname:find("%.%.") or modname:find("[/\\]") then
-            error("require: invalid module name '" .. tostring(modname) .. "'", 2)
+    -- Modules, as Open77's client `require`: `a.b` → a/b.lua then a/b/init.lua in this resource;
+    -- `@lib` / `@lib/a.b` → a declared dependency's init.lua / a/b.lua. Answers module or nil, reason.
+    -- (Open77 has no server-side require: portable server code shares code through shared_script.)
+    local function validModule(name)
+        if name == "" then return true end
+        for seg in (name .. "."):gmatch("([^%.]*)%.") do
+            if seg == "" or not seg:match("^[%w_%-]+$") then return false end
         end
+        return true
+    end
+    env.require = function(modname)
+        if type(modname) ~= "string" then return nil, "invalid_module_name" end
         local cached = side.modules[modname]
         if cached ~= nil then return cached end
-        local base = modname:gsub("%.", "/")
-        local text = host:_read(res.root .. "/" .. base .. ".lua")
-        local path = base .. ".lua"
-        if not text then
-            text = host:_read(res.root .. "/" .. base .. "/init.lua")
-            path = base .. "/init.lua"
+        local ownerRoot, owner, inner = res.root, res.name, modname
+        if modname:sub(1, 1) == "@" then
+            local lib, rest = modname:match("^@([%w_%-]+)/?(.*)$")
+            if not lib or not validModule(rest) then return nil, "invalid_module_name" end
+            local declared = false
+            for _, dep in ipairs(res.manifest.dependencies) do if dep.name == lib then declared = true end end
+            local dr = host.resources[lib]
+            if not declared or not dr then return nil, "dependency_not_declared:" .. lib end
+            ownerRoot, owner, inner = dr.root, lib, (rest ~= "" and rest or "init")
+        elseif modname == "" or not validModule(modname) then
+            return nil, "invalid_module_name"
         end
-        if not text then error("module '" .. modname .. "' not found in resource " .. res.name, 2) end
-        local fn, err = compat.loadWithEnv(text, "@" .. res.name .. "/" .. path, env)
-        if not fn then error(err, 2) end
+        local base = inner:gsub("%.", "/")
+        local path = base .. ".lua"
+        local text = host:_read(ownerRoot .. "/" .. path)
+        if not text then
+            path = base .. "/init.lua"
+            text = host:_read(ownerRoot .. "/" .. path)
+        end
+        if not text then return nil, "module_not_found:" .. modname end
+        local fn, err = compat.loadWithEnv(text, "@" .. owner .. "/" .. path, env)
+        if not fn then return nil, "module_load_failed: " .. tostring(err) end
         local value = fn(modname)
         if value == nil then value = true end
         side.modules[modname] = value
@@ -963,6 +1043,7 @@ function Host:_buildEnv(side)
         list = function() return host:playerList() end,
         name = function(id) return host:playerName(id) end,
         exists = function(id) return host:playerName(id) ~= nil end,
+        identifier = function(id) return host:playerIdentifier(id) end,
     })
     SG.permissions = capTable("permissions", {
         has = function(playerId, privilege)
@@ -973,8 +1054,10 @@ function Host:_buildEnv(side)
     })
     SG.ui = capTable("ui", {
         notify = function(target, payload)
-            if side.name == "client" and type(target) == "table" and payload == nil then
-                payload, target = target, (host.localPlayer and host.localPlayer.id or 1)
+            -- A client notifies its own player: notify(payload) or notify(nil, payload).
+            if side.name == "client" then
+                if payload == nil then payload = target end
+                target = host.localPlayer and host.localPlayer.id or 1
             end
             local ok, copy = codec.copy(payload)
             if not ok or type(copy) ~= "table" then return false, "invalid_payload" end

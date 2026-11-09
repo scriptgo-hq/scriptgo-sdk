@@ -1,0 +1,110 @@
+-- Run with: scriptgo test sdk/packages/sg_permissions
+local function setup(opts)
+    opts = opts or {}
+    local h = load(opts)
+    h:join(1, "Ada")
+    h:join(2, "Bo")
+    return h
+end
+
+describe("SgPerms (pure)", function()
+    test("wildcards, exact matches and denials", function()
+        local h = setup()
+        -- The shared module is a global of the resource's sandbox; reach it through an export-free path:
+        local env = h.host:getResource("sg_permissions").sides.server.env
+        local decide = env.SgPerms.decide
+        expect(decide({ "inventory.*" }, "inventory.give")).toBe(true)
+        expect(decide({ "inventory.*" }, "inventory")).toBe(false)
+        expect(decide({ "inventory.*", "-inventory.admin.*" }, "inventory.admin.reset")).toBe(false)
+        expect(decide({ "*", "-chat.mute" }, "chat.mute")).toBe(false)
+        expect(decide({ "-chat.*", "chat.mute" }, "chat.mute")).toBe(true)
+        expect(decide({}, "x")).toBe(false)
+    end)
+
+    test("inheritance cycles are detected", function()
+        local h = setup()
+        local env = h.host:getResource("sg_permissions").sides.server.env
+        local roles, err = env.SgPerms.expand({ "a" }, { a = { inherits = { "b" } }, b = { inherits = { "a" } } })
+        expect(roles).toBeNil()
+        expect(err).toContain("role_cycle")
+    end)
+end)
+
+describe("sg_permissions", function()
+    test("roles inherit privileges; admin holds everything", function()
+        local h = setup()
+        expect(h:call("sg_permissions", "has", 1, "chat.mute")).toBe(false)
+        expect(h:call("sg_permissions", "grant", 1, "moderator")).toBe(true)
+        expect(h:call("sg_permissions", "has", 1, "chat.mute")).toBe(true)
+        expect(h:call("sg_permissions", "has", 1, "server.stop")).toBe(false)
+        expect(h:call("sg_permissions", "roles", 1)).toEqual({ "user", "moderator" })
+        h:call("sg_permissions", "grant", 2, "admin")
+        expect(h:call("sg_permissions", "has", 2, "server.stop")).toBe(true)
+    end)
+
+    test("grants persist across a restart of the resource", function()
+        local h = setup()
+        h:call("sg_permissions", "grant", 1, "moderator")
+        h:stop("sg_permissions")
+        h.host.storageCache = {}
+        expect(h:start("sg_permissions")).toBe(true)
+        expect(h:call("sg_permissions", "has", 1, "players.kick")).toBe(true)
+        expect(h:storage("sg_permissions")["grants:local:ada"]).toEqual({ roles = { "moderator" }, direct = {} })
+    end)
+
+    test("revoking removes the privilege and notifies the client mirror", function()
+        local h = setup()
+        h:call("sg_permissions", "grant", 1, "moderator")
+        h:tick(10)
+        expect(h:callClient("sg_permissions", "can", "chat.mute")).toBe(true)
+        expect(h:call("sg_permissions", "revoke", 1, "moderator")).toBe(true)
+        h:tick(10)
+        expect(h:call("sg_permissions", "has", 1, "chat.mute")).toBe(false)
+        expect(h:callClient("sg_permissions", "can", "chat.mute")).toBe(false)
+        local ok, why = h:call("sg_permissions", "revoke", 1, "moderator")
+        expect(ok).toBe(false)
+        expect(why).toBe("not_granted")
+    end)
+
+    test("roles come from the resource config", function()
+        local h = setup({ config = { sg_permissions = { roles = {
+            user = { privileges = { "shop.buy" } },
+            mechanic = { inherits = { "user" }, privileges = { "garage.*", "-garage.delete" } },
+        } } } })
+        expect(h:call("sg_permissions", "has", 1, "shop.buy")).toBe(true)
+        h:call("sg_permissions", "grant", 1, "mechanic")
+        expect(h:call("sg_permissions", "has", 1, "garage.repair")).toBe(true)
+        expect(h:call("sg_permissions", "has", 1, "garage.delete")).toBe(false)
+        local ok, why = h:call("sg_permissions", "grant", 1, "moderator")
+        expect(ok).toBe(false)
+        expect(why).toBe("unknown_role")
+    end)
+
+    test("host operators hold every privilege through scriptgo.admin", function()
+        local h = setup({ permissions = { [2] = { ["scriptgo.admin"] = true } } })
+        expect(h:call("sg_permissions", "has", 2, "anything.at.all")).toBe(true)
+        expect(h:call("sg_permissions", "has", 1, "anything.at.all")).toBe(false)
+    end)
+
+    test("the perm command needs permissions.manage; the console always may", function()
+        local h = setup()
+        h:command(1, "perm grant 2 admin")
+        expect(h:call("sg_permissions", "has", 2, "x")).toBe(false)
+        expect(h:lastNotification().payload.message).toBe("You may not manage permissions.")
+        h:command(0, "perm grant 1 admin")
+        expect(h:call("sg_permissions", "has", 1, "permissions.manage")).toBe(true)
+        h:command(1, "perm grant 2 moderator")
+        expect(h:call("sg_permissions", "has", 2, "chat.mute")).toBe(true)
+    end)
+
+    test("defineRole refuses invalid privileges and cycles", function()
+        local h = setup()
+        local ok, why = h:call("sg_permissions", "defineRole", "x", { privileges = { "Bad Priv" } })
+        expect(ok).toBe(false)
+        expect(why).toContain("invalid_privilege")
+        expect(h:call("sg_permissions", "defineRole", "loop", { inherits = { "loop" } })).toBe(false)
+        expect(h:call("sg_permissions", "defineRole", "vip", { inherits = { "user" }, privileges = { "lounge.enter" } })).toBe(true)
+        h:call("sg_permissions", "grant", 1, "vip")
+        expect(h:call("sg_permissions", "has", 1, "lounge.enter")).toBe(true)
+    end)
+end)
