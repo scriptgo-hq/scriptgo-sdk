@@ -17,6 +17,8 @@
 //   neovim      runs `nvim --headless --clean -l sdk/adapters/neovim/verify.lua`: the plugin's libuv
 //               timer ticks the host on Neovim's main loop. Needs --nvim, SCRIPTGO_NVIM or
 //               tools/runtimes/neovim. HTTP and licensing through curl, so --stub-api applies.
+//   hytale      runs the owner's Hytale dedicated server on loopback with the plugin in verify
+//               mode (commands/verify-hytale.ts). Skipped without the server files and a Java 25.
 //
 // Everywhere, lines a resource prints as `SGCHECK PASS|FAIL <name>` become checks of the report.
 //
@@ -46,6 +48,7 @@ import { defaultSearchPaths, pickInterpreters, readResource, repoRoot, standalon
 import { writeReadmeExample, type ReadmeExample } from "../lib/readme-example.ts";
 import { startStubApi, type StubRequest } from "../lib/stub-api.ts";
 import { packForOpen77 } from "./pack.ts";
+import { HYTALE_HELP, verifyHytale } from "./verify-hytale.ts";
 
 export const summary = "Run a resource on its environments and write compatibility reports";
 
@@ -591,9 +594,10 @@ async function verifyEngine(
 export async function run(args: string[]): Promise<number> {
   const a = parseArgs(args, { booleans: ["help", "json", "stub-api", "no-readme-example"], repeatable: ["search"] });
   if (a.bools.has("help") || a.positional.length === 0) {
-    console.log(`scriptgo verify <resourceDir> [--env standalone|open77|luanti|love2d|godot|neovim|all] [--lua all|lua54|lua51|luajit]
+    console.log(`scriptgo verify <resourceDir> [--env standalone|open77|luanti|love2d|godot|neovim|hytale|all] [--lua all|lua54|lua51|luajit]
     [--luanti-image ${LUANTI_IMAGE}] [--luanti-seconds 3] [--love path\\to\\lovec.exe] [--godot path\\to\\Godot_console.exe]
     [--nvim path\\to\\nvim.exe] [--no-readme-example]
+    ${HYTALE_HELP}
     [--search dir]... [--out verification/reports] [--json]
     [--stub-api | --api <url> --license-key <sg_live_...>]
     [--open77-server path\\to\\Open77.Server.exe] [--port 11861] [--settle 1500] [--timeout 30000]`);
@@ -650,6 +654,7 @@ export async function run(args: string[]): Promise<number> {
   if (env === "neovim" || env === "all") {
     reports.push(await verifyEngine("neovim", findNeovim(a.flags.nvim), res, m, search, example, stub));
   }
+  if (env === "hytale" || env === "all") reports.push(await verifyHytale(res, m, search, a.flags, example, stub));
   await stubServer?.close();
   example?.cleanup();
   // Stored logs never carry local paths (they hold the user name): temporary folders and home.
@@ -664,7 +669,7 @@ export async function run(args: string[]): Promise<number> {
     for (const c of r.checks) c.message = scrub(c.message);
   }
   if (reports.length === 0) {
-    console.error(`unknown environment '${env}' (standalone, open77, luanti, love2d, godot, neovim, all)`);
+    console.error(`unknown environment '${env}' (standalone, open77, luanti, love2d, godot, neovim, hytale, all)`);
     return 2;
   }
 

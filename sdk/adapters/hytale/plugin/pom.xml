@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The Hytale server plugin: scriptgo-jvm (with Cobalt relocated under scriptgo.shaded) plus the
+  glue to the Hytale API. Which Hytale API it compiles against depends on the profile:
+
+    hytale-stubs  (default)               api-stubs, a compile check; the jar must not be installed
+    hytale-local  -Dhytale.server.jar=…   the owner's HytaleServer.jar (needs a JDK 25: Java 25 class files)
+    hytale-maven  -Dhytale.version=…      com.hypixel.hytale:Server from maven.hytale.com (JDK 25)
+
+  The Hytale API is never bundled: the server provides it.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>scriptgo</groupId>
+    <artifactId>scriptgo-hytale-parent</artifactId>
+    <version>0.1.0</version>
+  </parent>
+  <artifactId>scriptgo-hytale</artifactId>
+  <name>SCRIPT//GO Hytale plugin</name>
+
+  <properties>
+    <plugin.jarName>scriptgo-hytale-${project.version}</plugin.jarName>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>scriptgo</groupId>
+      <artifactId>scriptgo-jvm</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>${plugin.jarName}</finalName>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>true</filtering>
+        <includes><include>manifest.json</include></includes>
+      </resource>
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>false</filtering>
+        <excludes><exclude>manifest.json</exclude></excludes>
+      </resource>
+    </resources>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals><goal>shade</goal></goals>
+            <configuration>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <artifactSet>
+                <includes>
+                  <include>scriptgo:scriptgo-jvm</include>
+                  <include>cc.tweaked:cobalt</include>
+                </includes>
+              </artifactSet>
+              <relocations>
+                <relocation><pattern>org.squiddev.cobalt</pattern><shadedPattern>scriptgo.shaded.cobalt</shadedPattern></relocation>
+                <relocation><pattern>cc.tweaked.cobalt</pattern><shadedPattern>scriptgo.shaded.cctweaked.cobalt</shadedPattern></relocation>
+              </relocations>
+              <filters>
+                <filter>
+                  <artifact>cc.tweaked:cobalt</artifact>
+                  <excludes><exclude>module-info.class</exclude><exclude>META-INF/**</exclude></excludes>
+                </filter>
+                <filter>
+                  <artifact>scriptgo:scriptgo-jvm</artifact>
+                  <excludes><exclude>META-INF/**</exclude></excludes>
+                </filter>
+              </filters>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <profile>
+      <id>hytale-stubs</id>
+      <activation><activeByDefault>true</activeByDefault></activation>
+      <properties>
+        <plugin.jarName>scriptgo-hytale-${project.version}-STUBS-DO-NOT-INSTALL</plugin.jarName>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>scriptgo</groupId>
+          <artifactId>hytale-api-stubs</artifactId>
+          <version>${project.version}</version>
+          <scope>provided</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>hytale-local</id>
+      <activation><property><name>hytale.server.jar</name></property></activation>
+      <dependencies>
+        <dependency>
+          <groupId>com.hypixel.hytale</groupId>
+          <artifactId>Server</artifactId>
+          <version>local</version>
+          <scope>system</scope>
+          <systemPath>${hytale.server.jar}</systemPath>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>hytale-maven</id>
+      <activation><property><name>hytale.version</name></property></activation>
+      <repositories>
+        <repository>
+          <id>hytale</id>
+          <url>https://maven.hytale.com/release</url>
+          <releases><enabled>true</enabled><checksumPolicy>fail</checksumPolicy></releases>
+          <snapshots><enabled>false</enabled></snapshots>
+        </repository>
+      </repositories>
+      <dependencies>
+        <dependency>
+          <groupId>com.hypixel.hytale</groupId>
+          <artifactId>Server</artifactId>
+          <version>${hytale.version}</version>
+          <scope>provided</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
+</project>

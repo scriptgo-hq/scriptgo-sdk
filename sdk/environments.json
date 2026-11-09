@@ -365,14 +365,44 @@
       "status": "planned",
       "sales": "allowed",
       "salesNote": "The game's terms allow paid mods and plugins.",
-      "luaDialects": [],
+      "luaDialects": [
+        "5.2"
+      ],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "A server plugin that runs SCRIPT//GO packages on Hytale servers; players install nothing.",
-      "capabilities": {},
-      "capabilityNotes": {},
+      "capabilities": {
+        "commands": "partial",
+        "config": "supported",
+        "events": "partial",
+        "http": "partial",
+        "licensing": "partial",
+        "logging": "supported",
+        "permissions": "supported",
+        "players": "supported",
+        "storage": "supported",
+        "ui": "fallback"
+      },
+      "capabilityNotes": {
+        "commands": "Commands known when the server starts become /commands; any command also runs as /sg <command>.",
+        "config": "Per-resource values and convars from scriptgo.json in the plugin's data folder.",
+        "events": "Server side only: Hytale plugins run on the server and players install nothing.",
+        "http": "java.net.http, off until the operator lists hosts in scriptgo.json http.allowedHosts; redirects are never followed.",
+        "licensing": "Available exactly when http is.",
+        "logging": "The server log, through the plugin's logger.",
+        "permissions": "Hytale permission nodes scriptgo.admin or scriptgo.<privilege>, then the grants in scriptgo.json.",
+        "players": "Connect and disconnect events; session ids, names, identifier hytale:<uuid>.",
+        "storage": "JSON files in the plugin's data folder (mods/ScriptGo_ScriptGo/storage/<key>.json).",
+        "ui": "Notifications are sent as chat messages."
+      },
       "setupMarkdown": "",
-      "limitations": [],
+      "limitations": [
+        "Not run on a real Hytale server yet: the bridge passes the conformance probe on a plain JVM only (Cobalt, Lua 5.2).",
+        "No client side.",
+        "Lua 5.2 in the JVM (Cobalt): no io library and no C modules; os has time, clock, date and difftime.",
+        "Commands a resource registers after the server has started are reached through /sg <command>.",
+        "HTTP, and so online license checks, only to hosts the operator allows."
+      ],
       "listed": true,
       "sortOrder": 90,
       "adapters": []
