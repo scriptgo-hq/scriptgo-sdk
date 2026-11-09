@@ -90,7 +90,7 @@ scriptgo verify inventory_pro --env all
 
 Runs the resource and writes one `CompatibilityRun` JSON report per run into the repository's
 `verification/reports/` (`--out` to change it). `--env` is `standalone` (the default, one run
-per Lua interpreter), `open77`, `luanti`, `love2d`, `godot` or `all`:
+per Lua interpreter), `open77`, `luanti`, `love2d`, `godot`, `neovim` or `all`:
 
 - `open77` packs the resource and starts a real OPEN//77 dedicated server given with
   `--open77-server` (or `OP77_SERVER_EXE`). Only the server half runs.
@@ -100,10 +100,13 @@ per Lua interpreter), `open77`, `luanti`, `love2d`, `godot` or `all`:
 - `godot` runs Godot headless on `examples/godot/demo` with lua-gdextension, ticked by real
   frames. The binary comes from `--godot`, `SCRIPTGO_GODOT` or `tools/runtimes/godot`; run
   `examples/godot/demo/setup.ps1` once first.
+- `neovim` runs `nvim --headless --clean -l` on the plugin's verify mode, ticked by the plugin's
+  own timer on Neovim's event loop. The binary comes from `--nvim`, `SCRIPTGO_NVIM` or
+  `tools/runtimes/neovim`.
 
 Without the server binary, Docker or the engine, that run is reported as skipped and writes no
 report. `--stub-api` starts a local stand-in for the licensing API and gives the resource its URL
-and a valid key (standalone, LÖVE and OPEN//77 runs); `--api <url> --license-key <key>` uses a
+and a valid key (standalone, LÖVE, Neovim and OPEN//77 runs); `--api <url> --license-key <key>` uses a
 real API instead.
 
 #### The README example runs too

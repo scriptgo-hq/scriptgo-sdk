@@ -34,7 +34,7 @@
         "players": "Simulated local players (one by default).",
         "ui": "Notifications are printed to the console."
       },
-      "setupMarkdown": "",
+      "setupMarkdown": "The standalone host is the `scriptgo` CLI on plain Lua 5.4, 5.1 or LuaJIT. It needs Node.js 22 or\nlater and a Lua interpreter (`lua`/`luajit` on the `PATH`).\n\n1. Install the package into `./resources`:\n\n   ```bash\n   scriptgo add scriptgo//inventory-kit\n   ```\n\n2. Run it. Without `--for` or `--script`, the host reads steps from the terminal\n   (`cmd 1 /help`, `console <cmd>`, `wait <ms>`, `quit`):\n\n   ```bash\n   scriptgo run resources/sg_inventory --search resources --realtime\n   ```\n\n3. Privileges, per-resource values and convars come from a JSON file:\n\n   ```json\n   {\n     \"permissions\": { \"1\": [\"inventory.give\"] },\n     \"resources\": { \"sg_inventory\": { \"slots\": 12 } },\n     \"convars\": { \"scriptgo_api\": \"https://api.example\" }\n   }\n   ```\n\n   ```bash\n   scriptgo run resources/sg_inventory --search resources --config config.json\n   ```\n\nStorage goes to `.scriptgo-data/storage/` (`--data` to change it). HTTP and licensing use the\nsystem `curl`.\n",
       "limitations": [
         "No rendering: `ui` falls back to console output.",
         "HTTP needs curl on the PATH."
@@ -82,7 +82,7 @@
         "storage": "JSON files in the game's save directory (scriptgo/storage/<key>.json).",
         "ui": "On-screen toasts drawn by sg:draw(); also logged. Without love.graphics (headless) they are only logged."
       },
-      "setupMarkdown": "",
+      "setupMarkdown": "1. Copy `scriptgo_love.lua`, `adapter.lua` and `verify.lua` from `sdk/adapters/love2d/` into the\n   game (for example `lib/`), and the core `sdk/lua/scriptgo/` next to them as `lib/scriptgo/`.\n2. Put resources in a folder of the game, for example `resources/sg_inventory/`.\n3. Create the host in `love.load` and drive it from the game's callbacks:\n\n   ```lua\n   local scriptgoLove = require(\"lib.scriptgo_love\")\n   local sg\n   function love.load()\n       sg = scriptgoLove.new({\n           resources = { \"sg_inventory\" },          -- dependencies are added too\n           search = { \"resources\" },\n           player = { id = 1, name = \"Ada\" },\n           config = { permissions = { [\"1\"] = { \"inventory.give\" } } },\n       })\n   end\n   function love.update(dt) sg:update(dt) end\n   function love.draw() --[[ the game ]] sg:draw() end\n   function love.quit() sg:shutdown() end\n   ```\n\nThe server side and the local client (player `1`) both run in the game process. Storage goes to\nthe save directory; HTTP and licensing use `curl` in a `love.thread` worker, so frames keep running.\nThe layout works from a folder and from a `.love` archive.\n",
       "limitations": [
         "Single-player only: no real network between server and client.",
         "HTTP needs io.popen and a curl executable (on the PATH, or opts.curl).",
@@ -132,7 +132,7 @@
         "storage": "JSON files at user://scriptgo/storage/<key>.json, written with FileAccess.",
         "ui": "Queued for the scene (ScriptGoHost.notified signal) and logged; the demo draws them as toasts."
       },
-      "setupMarkdown": "",
+      "setupMarkdown": "Measured with Godot 4.5.2 and lua-gdextension 0.7.0 (0.8.x needs Godot 4.6).\n\n1. Copy `addons/lua-gdextension` from the lua-gdextension release into the project.\n2. Copy `scriptgo_host.gd` and `scriptgo_watchdog.gd` from `sdk/adapters/godot/` to\n   `res://addons/scriptgo/` and register them as autoloads, watchdog first:\n\n   ```ini\n   [autoload]\n   ScriptGoWatchdog=\"*res://addons/scriptgo/scriptgo_watchdog.gd\"\n   ScriptGoHost=\"*res://addons/scriptgo/scriptgo_host.gd\"\n   ```\n\n3. Import once (`Godot --headless --import --path <project>`, or open the editor) so the\n   extension is registered.\n4. Point the host at the SDK (`sdk_root`, `--scriptgo-sdk <dir>`, or a copy under\n   `res://addons/scriptgo/sdk/`), then boot it:\n\n   ```gdscript\n   func _ready():\n       ScriptGoHost.boot({ \"config\": { \"permissions\": { \"1\": [\"inventory.*\"] } } })\n       ScriptGoHost.add_search_path(ScriptGoHost.sdk_path + \"packages\")\n       ScriptGoHost.add_resource(ScriptGoHost.sdk_path + \"packages/sg_inventory\")\n       ScriptGoHost.start_all()\n       ScriptGoHost.join(1, \"Player\")\n   ```\n\nThe host ticks from `_process`. There is no HTTP yet, so licensed packages do not run on Godot.\n",
       "limitations": [
         "Needs the lua-gdextension addon, 0.7.0 for Godot 4.5 (it declares 4.4 as its minimum; the 0.8.x binaries are built for Godot 4.6 and refuse 4.5.2).",
         "No HTTP, so no online license checks.",
@@ -182,7 +182,7 @@
         "players": "Player names get session-stable integer ids; identifier is luanti:<name>.",
         "ui": "Notifications are sent as chat messages."
       },
-      "setupMarkdown": "",
+      "setupMarkdown": "1. Build the mod, optionally with resources bundled in:\n\n   ```bash\n   node sdk/adapters/luanti/build.mjs --with sdk/packages/sg_inventory --with sdk/packages/sg_eventbus\n   ```\n\n2. Copy `dist/luanti/scriptgo/` into the server's `mods/` folder and enable it for the world\n   (`load_mod_scriptgo = true` in `world.mt`). It is a regular mod: it needs no entry in\n   `secure.trusted_mods`.\n3. Put further resources in `<world>/scriptgo/resources/<name>/`. Every resource with\n   `auto_start true` starts with the server, dependencies first.\n4. Optional `<world>/scriptgo.json`:\n\n   ```json\n   {\n     \"resources\": { \"sg_inventory\": { \"slots\": 30 } },\n     \"convars\": { \"scriptgo_api\": \"https://api.example.com\" },\n     \"permissions\": { \"alice\": [\"command.giveitem\"] }\n   }\n   ```\n\nOnly the server side runs. HTTP, and so online license checks, needs the mod listed in\n`secure.http_mods` by the server owner.\n",
       "limitations": [
         "No client side.",
         "HTTP, and so online license checks, only when the server owner allows it.",
@@ -231,7 +231,7 @@
         "storage": "Open77.kvp on both sides, values stored as JSON text.",
         "ui": "Server: Open77.notifications; client: the open77_notifications package."
       },
-      "setupMarkdown": "",
+      "setupMarkdown": "OPEN//77 runs the resource format natively. The CLI packs a resource with a small shim that maps\n`ScriptGo.*` onto `Open77.*`:\n\n```bash\nscriptgo pack my_resource --target open77 --out dist\n# dist/open77/my_resource/ is a resource folder OPEN//77 loads as is\n```\n\nThe packed manifest asks for exactly the OPEN//77 permissions the resource's capabilities need.\nA resource that uses `http` or `licensing` also needs the operator to allow the API host in\n`server.jsonc`:\n\n```jsonc\n\"http\": { \"enabled\": true, \"allowedHosts\": [\"api.scriptgo.example\"] },\n\"convars\": { \"scriptgo_api\": \"https://api.scriptgo.example\" }\n```\n\nThe license key goes in the `<resource>:license_key` convar, never in the resource folder.\n",
       "limitations": [
         "Experimental: pending technical and legal review.",
         "Outbound HTTP, and so licensing, needs the operator's allow-list; no HTTP from the client.",
@@ -287,20 +287,52 @@
     {
       "slug": "neovim",
       "name": "Neovim",
-      "status": "planned",
+      "status": "beta",
       "luaDialects": [
         "LuaJIT"
       ],
-      "runtimeVersions": [],
-      "adapterVersion": "",
-      "summary": "Editor plugins on Neovim's Lua runtime.",
-      "capabilities": {},
-      "capabilityNotes": {},
-      "setupMarkdown": "",
-      "limitations": [],
+      "runtimeVersions": [
+        "Neovim 0.12"
+      ],
+      "adapterVersion": "neovim-0.1.0",
+      "summary": "Neovim plugins. Server and local client run inside the editor, ticked by a libuv timer on the main loop.",
+      "capabilities": {
+        "commands": "supported",
+        "config": "supported",
+        "events": "supported",
+        "http": "partial",
+        "licensing": "partial",
+        "logging": "supported",
+        "permissions": "supported",
+        "players": "partial",
+        "storage": "supported",
+        "ui": "supported"
+      },
+      "capabilityNotes": {
+        "commands": "Resource commands are typed as :ScriptGo <command> and run as the local player.",
+        "config": "Per-resource values and convars from the config passed to setup().",
+        "http": "curl through vim.system (Neovim 0.10 or later), asynchronous so the editor never waits; unavailable without curl. Status and body only, no response headers.",
+        "licensing": "Available exactly when http is.",
+        "permissions": "Privileges per player id from the config passed to setup().",
+        "players": "Single local player (id 1), the person at the keyboard.",
+        "storage": "JSON files under stdpath(\"data\")/scriptgo/storage/<key>.json.",
+        "ui": "Notifications go to vim.notify; a headless run only logs them."
+      },
+      "setupMarkdown": "Needs Neovim 0.10 or later (measured on 0.12.6) and `curl` for licensed packages.\n\n1. Add `sdk/adapters/neovim/` to Neovim as a plugin. Inside the SDK checkout it finds the core by\n   itself; elsewhere copy `sdk/lua/scriptgo/` to `lua/scriptgo_nvim/core/` in the plugin, or set\n   `vim.g.scriptgo_core`. With lazy.nvim:\n\n   ```lua\n   {\n     dir = \"~/scriptgo/sdk/adapters/neovim\",\n     config = function()\n       require(\"scriptgo_nvim\").setup({\n         search = { vim.fn.expand(\"~/scriptgo/resources\") },\n         resources = { \"sg_inventory\" },\n         config = { permissions = { [\"1\"] = { \"*\" } } },\n       })\n     end,\n   }\n   ```\n\n2. Use it from the editor:\n\n   ```vim\n   :ScriptGo status\n   :ScriptGo giveitem 1 water 2\n   :ScriptGo log\n   ```\n\nThe server side and the local client (you, player `1`) run inside the editor, ticked by a timer on\nthe main loop. Notifications go to `vim.notify`; storage to `stdpath(\"data\")/scriptgo/storage`.\n",
+      "limitations": [
+        "Single user: no real network between server and client.",
+        "HTTP, and so online license checks, needs curl and Neovim 0.10 or later.",
+        "Measured with Neovim 0.12.6 (LuaJIT 2.1) on Windows, headless (nvim --headless --clean -l); macOS, Linux and older Neovim releases are not measured yet."
+      ],
       "listed": true,
       "sortOrder": 80,
-      "adapters": []
+      "adapters": [
+        {
+          "version": "neovim-0.1.0",
+          "status": "beta",
+          "notes": "measured by verification reports"
+        }
+      ]
     }
   ]
 }

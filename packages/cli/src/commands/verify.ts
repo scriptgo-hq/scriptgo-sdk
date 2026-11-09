@@ -14,6 +14,9 @@
 //               real love.update frames. Needs --love, SCRIPTGO_LOVE or tools/runtimes/love.
 //   godot       runs Godot headless on examples/godot/demo (lua-gdextension) in its verify mode,
 //               ticked by real frames. Needs --godot, SCRIPTGO_GODOT or tools/runtimes/godot.
+//   neovim      runs `nvim --headless --clean -l sdk/adapters/neovim/verify.lua`: the plugin's libuv
+//               timer ticks the host on Neovim's main loop. Needs --nvim, SCRIPTGO_NVIM or
+//               tools/runtimes/neovim. HTTP and licensing through curl, so --stub-api applies.
 //
 // Everywhere, lines a resource prints as `SGCHECK PASS|FAIL <name>` become checks of the report.
 //
@@ -492,6 +495,11 @@ export function findLove(flag?: string): string | null {
   return p && existsSync(p) ? resolve(p) : null;
 }
 
+export function findNeovim(flag?: string): string | null {
+  const p = flag ?? process.env.SCRIPTGO_NVIM ?? findFile(join(repoRoot, "tools", "runtimes", "neovim"), /^nvim(\.exe)?$/, 4);
+  return p && existsSync(p) ? resolve(p) : null;
+}
+
 export function findGodot(flag?: string): string | null {
   const p = flag ?? process.env.SCRIPTGO_GODOT ?? findFile(join(repoRoot, "tools", "runtimes", "godot"), /^Godot_.*_console\.exe$|^Godot_.*\.x86_64$/);
   return p && existsSync(p) ? resolve(p) : null;
@@ -502,11 +510,12 @@ function sha256File(p: string): string {
 }
 
 /**
- * LÖVE and Godot: the engine runs headless with the demo project in its verify mode and writes a
- * CompatibilityRun itself; this reads it back. Without the engine binary the run is skipped.
+ * LÖVE, Godot and Neovim: the runtime runs headless in its verify mode (the LÖVE and Godot demo
+ * projects, Neovim's `-l` script) and writes a CompatibilityRun itself; this reads it back.
+ * Without the binary the run is skipped.
  */
 async function verifyEngine(
-  environment: "love2d" | "godot", exe: string | null, res: LoadedResource, m: ParsedManifest, search: string[], example?: ReadmeExample | null,
+  environment: "love2d" | "godot" | "neovim", exe: string | null, res: LoadedResource, m: ParsedManifest, search: string[], example?: ReadmeExample | null,
   stub?: ApiTarget,
 ): Promise<Report> {
   const started = Date.now();
@@ -515,7 +524,9 @@ async function verifyEngine(
     durationMs: Date.now() - started, checks, log, evidence: {},
   });
   if (!exe) {
-    const how = environment === "love2d" ? "--love <lovec>, SCRIPTGO_LOVE or tools/runtimes/love" : "--godot <console exe>, SCRIPTGO_GODOT or tools/runtimes/godot";
+    const how = environment === "love2d" ? "--love <lovec>, SCRIPTGO_LOVE or tools/runtimes/love"
+      : environment === "neovim" ? "--nvim <nvim>, SCRIPTGO_NVIM or tools/runtimes/neovim"
+      : "--godot <console exe>, SCRIPTGO_GODOT or tools/runtimes/godot";
     return base("skipped", [{ name: "engine_run", status: "skipped", message: `no ${environment} binary: pass ${how}` }]);
   }
   if (environment === "godot") {
@@ -535,9 +546,11 @@ async function verifyEngine(
   const verifyArgs = ["--scriptgo-verify", res.root, "--report", reportFile, "--settle", "2000"];
   for (const s of search) if (existsSync(s)) verifyArgs.push("--search", s);
   if (example) verifyArgs.push("--with", example.dir);
-  // LÖVE takes the standalone config shape: the API's URL and key reach the resource as config.
+  // LÖVE and Neovim take the standalone config shape: the API's URL and key reach the resource as
+  // config. Godot has no HTTP yet.
+  const http = environment !== "godot";
   const firstRequest = stub?.requests.length ?? 0;
-  if (stub && environment === "love2d") {
+  if (stub && http) {
     const config = join(tmp, "config.json");
     writeFileSync(config, JSON.stringify({
       resources: { [m.name]: { api: stub.url, license_key: stub.licenseKey } },
@@ -547,7 +560,9 @@ async function verifyEngine(
   }
   const argv = environment === "love2d"
     ? [join(repoRoot, "examples", "love2d", "demo"), ...verifyArgs, "--evidence", `engine-sha256=${sha256File(exe)}`]
-    : ["--headless", "--path", join(repoRoot, "examples", "godot", "demo"), "--", ...verifyArgs];
+    : environment === "neovim"
+      ? ["--headless", "--clean", "-l", join(repoRoot, "sdk", "adapters", "neovim", "verify.lua"), ...verifyArgs, "--evidence", `nvim-sha256=${sha256File(exe)}`]
+      : ["--headless", "--path", join(repoRoot, "examples", "godot", "demo"), "--", ...verifyArgs];
   const r = await spawnAsync(exe, argv);
   let report: Report;
   try {
@@ -563,11 +578,11 @@ async function verifyEngine(
     report = base("failing", [{ name: "engine_run", status: "failed", message: `no valid report (exit ${r.status}): ${e instanceof Error ? e.message.split("\n")[0] : String(e)}` }], tail);
   }
   rmSync(tmp, { recursive: true, force: true });
-  if (stub && environment === "love2d") {
-    report.checks.push(...apiChecks(stub.requests, firstRequest, "love2d", report.adapterVersion));
+  if (stub && http) {
+    report.checks.push(...apiChecks(stub.requests, firstRequest, environment, report.adapterVersion));
     report.log = report.log.split(stub.licenseKey).join("<license_key>").split(stub.url).join("<stub-api>");
   }
-  report.evidence = { ...report.evidence, ...exampleEvidence(example), ...(stub && environment === "love2d" ? { api: stub.label } : {}) };
+  report.evidence = { ...report.evidence, ...exampleEvidence(example), ...(stub && http ? { api: stub.label } : {}) };
   report.status = statusOf(report.checks);
   report.durationMs = Date.now() - started;
   return report;
@@ -576,9 +591,9 @@ async function verifyEngine(
 export async function run(args: string[]): Promise<number> {
   const a = parseArgs(args, { booleans: ["help", "json", "stub-api", "no-readme-example"], repeatable: ["search"] });
   if (a.bools.has("help") || a.positional.length === 0) {
-    console.log(`scriptgo verify <resourceDir> [--env standalone|open77|luanti|love2d|godot|all] [--lua all|lua54|lua51|luajit]
+    console.log(`scriptgo verify <resourceDir> [--env standalone|open77|luanti|love2d|godot|neovim|all] [--lua all|lua54|lua51|luajit]
     [--luanti-image ${LUANTI_IMAGE}] [--luanti-seconds 3] [--love path\\to\\lovec.exe] [--godot path\\to\\Godot_console.exe]
-    [--no-readme-example]
+    [--nvim path\\to\\nvim.exe] [--no-readme-example]
     [--search dir]... [--out verification/reports] [--json]
     [--stub-api | --api <url> --license-key <sg_live_...>]
     [--open77-server path\\to\\Open77.Server.exe] [--port 11861] [--settle 1500] [--timeout 30000]`);
@@ -632,6 +647,9 @@ export async function run(args: string[]): Promise<number> {
   if (env === "godot" || env === "all") {
     reports.push(await verifyEngine("godot", findGodot(a.flags.godot), res, m, search, example));
   }
+  if (env === "neovim" || env === "all") {
+    reports.push(await verifyEngine("neovim", findNeovim(a.flags.nvim), res, m, search, example, stub));
+  }
   await stubServer?.close();
   example?.cleanup();
   // Stored logs never carry local paths (they hold the user name): temporary folders and home.
@@ -646,7 +664,7 @@ export async function run(args: string[]): Promise<number> {
     for (const c of r.checks) c.message = scrub(c.message);
   }
   if (reports.length === 0) {
-    console.error(`unknown environment '${env}' (standalone, open77, luanti, love2d, godot, all)`);
+    console.error(`unknown environment '${env}' (standalone, open77, luanti, love2d, godot, neovim, all)`);
     return 2;
   }
 

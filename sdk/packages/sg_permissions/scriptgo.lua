@@ -1,6 +1,6 @@
 -- PermissionsKit: roles with inheritance and wildcard privileges, persisted per player.
 resource "sg_permissions"
-version "1.0.1"
+version "1.0.2"
 title "PermissionsKit"
 description "Roles, inheritance, wildcard privileges and grants that survive restarts."
 author "scriptgo"
@@ -9,7 +9,7 @@ category "permissions"
 scriptgo_version ">=0.1.0"
 open77_version ">=0.0.1"
 lua { "5.1", "5.4", "luajit" }
-environments { "standalone", "love2d", "godot", "luanti", "open77" }
+environments { "standalone", "love2d", "godot", "luanti", "open77", "neovim" }
 capabilities { "events", "logging", "storage", "players", "commands" }
 optional_capabilities { "permissions", "config", "ui" }
 permissions { "local.events", "network.events", "acl.read" }

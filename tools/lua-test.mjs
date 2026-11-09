@@ -116,6 +116,34 @@ for (const lua of interpreters) {
   summary.push(entry);
 }
 
+// The Neovim plugin, in a real Neovim when one is in tools/runtimes/neovim (or SCRIPTGO_NVIM).
+const findNvim = (dir, depth = 4) => {
+  if (!existsSync(dir) || depth < 0) return null;
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name);
+    if (e.isFile() && e.name === `nvim${exe}`) return p;
+    if (e.isDirectory()) {
+      const f = findNvim(p, depth - 1);
+      if (f) return f;
+    }
+  }
+  return null;
+};
+const nvim = process.env.SCRIPTGO_NVIM ?? findNvim(join(root, "tools", "runtimes", "neovim"));
+if (nvim && !opt("--only")) {
+  const started = Date.now();
+  const r = spawnSync(nvim, ["--headless", "--clean", "-l", join(root, "sdk", "adapters", "neovim", "test", "plugin_test.lua")], { cwd: root, encoding: "utf8" });
+  const text = ((r.stdout || "") + (r.stderr || "")).trim();
+  console.log(`\n== neovim plugin (${nvim.replace(root, "<repo>")})`);
+  for (const l of text.split(/\r?\n/).filter((l) => /^FAIL/.test(l))) console.log(`  ${l}`);
+  console.log(`  ${text.split(/\r?\n/).pop() ?? ""}`);
+  const m = /(\d+)\/(\d+) checks passed/.exec(text);
+  const total = m ? Number(m[2]) : 1;
+  const bad = m ? total - Number(m[1]) : 1;
+  if (r.status !== 0) failed = true;
+  summary.push({ interpreter: "neovim", version: "plugin", tests: total, failed: r.status === 0 ? bad : Math.max(1, bad), durationMs: Date.now() - started });
+}
+
 console.log("\nSummary:");
 for (const s of summary) {
   console.log(`  ${s.interpreter.padEnd(7)} ${s.version.padEnd(14)} ${s.tests} tests, ${s.failed} failed (${s.durationMs} ms)`);

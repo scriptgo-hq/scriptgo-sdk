@@ -34,7 +34,7 @@ The core does not change. To be listed, an environment also needs an entry in th
 ## What an adapter looks like
 
 The adapter is a plain table. The reference adapters in `sdk/adapters/` (`standalone`, `love2d`,
-`godot`, `luanti`) show complete ones; the in-memory adapter in `sdk/lua/scriptgo/testing.lua` is
+`godot`, `luanti`, `neovim`) show complete ones; the in-memory adapter in `sdk/lua/scriptgo/testing.lua` is
 the smallest.
 
 ```lua
@@ -118,6 +118,12 @@ end
 ```lua env=luanti
 -- What the scriptgo mod (sdk/adapters/luanti/mod/init.lua) does:
 core.register_globalstep(function() host:tick() end)
+```
+
+```lua env=neovim
+-- What the plugin (sdk/adapters/neovim/lua/scriptgo_nvim/init.lua) does: a libuv timer whose
+-- callback runs on the main loop, so resources never run inside a fast event.
+timer:start(0, 10, vim.schedule_wrap(function() host:tick() end))
 ```
 
 ## Sides

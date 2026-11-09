@@ -150,7 +150,33 @@ M.ENVIRONMENTS = {
     },
     openresty = { name = "OpenResty", status = "planned", dialects = { "luajit" }, summary = "Lua HTTP services on Nginx.", sides = { "server" }, capabilities = {}, notes = {}, limitations = {} },
     defold = { name = "Defold", status = "planned", dialects = { "luajit" }, summary = "2D games with Defold.", sides = { "server", "client" }, capabilities = {}, notes = {}, limitations = {} },
-    neovim = { name = "Neovim", status = "planned", dialects = { "luajit" }, summary = "Editor plugins on Neovim's Lua runtime.", sides = { "client" }, capabilities = {}, notes = {}, limitations = {} },
+    neovim = {
+        name = "Neovim",
+        status = "beta",
+        dialects = { "luajit" },
+        summary = "Neovim plugins. Server and local client run inside the editor, ticked by a libuv timer on the main loop.",
+        sides = { "server", "client" },
+        capabilities = {
+            events = "supported", logging = "supported", storage = "supported", players = "partial",
+            permissions = "supported", commands = "supported", config = "supported", ui = "supported",
+            http = "partial", licensing = "partial",
+        },
+        notes = {
+            players = "Single local player (id 1), the person at the keyboard.",
+            storage = "JSON files under stdpath(\"data\")/scriptgo/storage/<key>.json.",
+            permissions = "Privileges per player id from the config passed to setup().",
+            config = "Per-resource values and convars from the config passed to setup().",
+            commands = "Resource commands are typed as :ScriptGo <command> and run as the local player.",
+            ui = "Notifications go to vim.notify; a headless run only logs them.",
+            http = "curl through vim.system (Neovim 0.10 or later), asynchronous so the editor never waits; unavailable without curl. Status and body only, no response headers.",
+            licensing = "Available exactly when http is.",
+        },
+        limitations = {
+            "Single user: no real network between server and client.",
+            "HTTP, and so online license checks, needs curl and Neovim 0.10 or later.",
+            "Measured with Neovim 0.12.6 (LuaJIT 2.1) on Windows, headless (nvim --headless --clean -l); macOS, Linux and older Neovim releases are not measured yet.",
+        },
+    },
 }
 
 M.ORDER = { "standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim" }

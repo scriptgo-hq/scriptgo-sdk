@@ -1,6 +1,6 @@
 -- InventoryKit: slot and weight inventories with stacking, persistence and a client mirror.
 resource "sg_inventory"
-version "1.0.1"
+version "1.0.2"
 title "InventoryKit"
 description "Slot and weight inventories with stacking, unique items, moves, use events and persistence."
 author "scriptgo"
@@ -9,7 +9,7 @@ category "inventory"
 scriptgo_version ">=0.1.0"
 open77_version ">=0.0.1"
 lua { "5.1", "5.4", "luajit" }
-environments { "standalone", "love2d", "godot", "luanti", "open77" }
+environments { "standalone", "love2d", "godot", "luanti", "open77", "neovim" }
 capabilities { "events", "logging", "storage", "players" }
 optional_capabilities { "commands", "config", "ui", "permissions" }
 permissions { "local.events", "network.events" }
