@@ -18,10 +18,4 @@ shared_script "shared/schema.lua"
 server_script "server/main.lua"
 client_script "client/main.lua"
 
-server_export "defineTopic"
-server_export "publish"
-server_export "last"
-server_export "topics"
-server_export "stats"
-
 test_script "tests/eventbus_test.lua"

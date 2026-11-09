@@ -485,12 +485,32 @@ function Host:start(name, visiting)
     for _, sideName in ipairs(order) do
         local side = res.sides[sideName]
         if side then
-            local scripts = shallowCopyList(m.sharedScripts)
-            for _, p in ipairs(sideName == "server" and m.serverScripts or m.clientScripts) do scripts[#scripts + 1] = p end
-            for _, p in ipairs(m.environmentScripts[self.environment] or {}) do scripts[#scripts + 1] = p end
+            local entries = shallowCopyList(m.sharedScripts)
+            for _, p in ipairs(sideName == "server" and m.serverScripts or m.clientScripts) do entries[#entries + 1] = p end
+            for _, p in ipairs(m.environmentScripts[self.environment] or {}) do entries[#entries + 1] = p end
+            -- Script globs (allowed by OPEN//77) expand against the adapter's file listing.
+            local scripts, listing = {}, nil
+            for _, p in ipairs(entries) do
+                if manifest.isGlob(p) then
+                    if not listing then
+                        if not self.adapter.listFiles then return fail("script_glob_needs_file_listing:" .. p) end
+                        listing = self.adapter.listFiles(res.root) or {}
+                    end
+                    for _, f in ipairs(manifest.expandGlob(p, listing)) do scripts[#scripts + 1] = f end
+                else
+                    scripts[#scripts + 1] = p
+                end
+            end
             for _, rel in ipairs(scripts) do
                 local ok, err = pcall(self._runScript, self, side, rel)
                 if not ok then return fail(tostring(err)) end
+            end
+            -- Declarative exports (OPEN//77): names of global functions, published after the last
+            -- script of the side ran; a missing one fails the start.
+            for _, exportName in ipairs(sideName == "server" and m.serverExports or m.exports) do
+                local fn = rawget(side.env, exportName)
+                if type(fn) ~= "function" then return fail("manifest_export_missing:" .. exportName) end
+                side.exports[exportName] = fn
             end
         end
     end

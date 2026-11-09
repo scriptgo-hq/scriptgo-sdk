@@ -52,6 +52,16 @@ function M.memoryAdapter(opts)
         if text ~= nil then return text end
         return read(path)
     end
+    -- Lists in-memory files under a root (disk listing is the real adapters' job).
+    function adapter.listFiles(root)
+        root = root:gsub("\\", "/"):gsub("/$", "") .. "/"
+        local out = {}
+        for path in pairs(files) do
+            if path:sub(1, #root) == root then out[#out + 1] = path:sub(#root + 1) end
+        end
+        table.sort(out)
+        return out
+    end
     function adapter.log(level, origin, msg)
         adapter.logs[#adapter.logs + 1] = { level = level, origin = origin, message = msg }
         if opts.echo then print(("[%s] %s: %s"):format(level, origin, msg)) end

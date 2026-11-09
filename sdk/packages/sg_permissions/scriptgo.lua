@@ -18,12 +18,4 @@ shared_script "shared/perms.lua"
 server_script "server/main.lua"
 client_script "client/main.lua"
 
-server_export "has"
-server_export "grant"
-server_export "revoke"
-server_export "roles"
-server_export "privileges"
-server_export "defineRole"
-server_export "listRoles"
-
 test_script "tests/permissions_test.lua"

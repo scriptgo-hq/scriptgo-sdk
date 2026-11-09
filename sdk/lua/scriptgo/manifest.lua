@@ -17,7 +17,13 @@ local function set(list)
 end
 local CAPS, ENVS, DIALECTS, CATS = set(M.CAPABILITIES), set(M.KNOWN_ENVIRONMENTS), set(M.LUA_DIALECTS), set(M.CATEGORIES)
 
+-- OPEN//77 rule: 3 to 64 lowercase letters, digits or underscores, starting with a letter.
 function M.isResourceName(s)
+    return type(s) == "string" and #s >= 3 and #s <= 64 and s:match("^[a-z][a-z0-9_]*$") ~= nil
+end
+
+-- Environment ids and declarative export names: ^[a-z0-9][a-z0-9_-]{0,63}$.
+function M.isSlug(s)
     return type(s) == "string" and #s <= 64 and s:match("^[a-z0-9][a-z0-9_%-]*$") ~= nil
 end
 
@@ -251,6 +257,61 @@ local function toPlain(v)
     return v
 end
 
+-- Globs with OPEN//77 semantics (same as packages/manifest globToRegExp): `*` and `?` stay in one
+-- segment; `**/` needs at least one intermediate directory; a trailing `**` matches anything.
+local function globMatch(g, gi, p, pi)
+    while gi <= #g do
+        if g:sub(gi, gi + 2) == "**/" then
+            -- One or more non-empty segments, then the rest.
+            local j = pi
+            while true do
+                local slash = p:find("/", j, true)
+                if not slash or slash == j then return false end
+                if globMatch(g, gi + 3, p, slash + 1) then return true end
+                j = slash + 1
+            end
+        elseif g:sub(gi, gi + 1) == "**" then
+            for k = pi, #p + 1 do
+                if globMatch(g, gi + 2, p, k) then return true end
+            end
+            return false
+        end
+        local c = g:sub(gi, gi)
+        if c == "*" then
+            local k = pi
+            while true do
+                if globMatch(g, gi + 1, p, k) then return true end
+                if k > #p or p:sub(k, k) == "/" then return false end
+                k = k + 1
+            end
+        elseif c == "?" then
+            if pi > #p or p:sub(pi, pi) == "/" then return false end
+        elseif c ~= p:sub(pi, pi) then
+            return false
+        end
+        gi, pi = gi + 1, pi + 1
+    end
+    return pi > #p
+end
+
+function M.isGlob(pattern) return pattern:find("[%*%?]") ~= nil end
+
+function M.globMatch(pattern, path) return globMatch(pattern, 1, path, 1) end
+
+-- Expands a pattern against a list of relative paths; sorted, like expandGlob in TypeScript.
+function M.expandGlob(pattern, paths)
+    local out = {}
+    if not M.isGlob(pattern) then
+        for _, f in ipairs(paths) do if f == pattern then out[1] = f break end end
+        return out
+    end
+    for _, f in ipairs(paths) do
+        if globMatch(pattern, 1, f, 1) then out[#out + 1] = f end
+    end
+    table.sort(out)
+    return out
+end
+
 function M.unsafePathReason(p)
     if p == "" then return "empty path" end
     if p:find("\\", 1, true) then return "use '/' as the path separator" end
@@ -341,7 +402,7 @@ function M.parse(source, fileName)
     local name = str("resource")
     if not name then err("missing_directive", "Directive 'resource' is required.")
     elseif not M.isResourceName(name) then
-        err("invalid_resource_name", "Resource name must be a lowercase slug (a-z, 0-9, '_' or '-', up to 64 characters).", lineOf("resource"))
+        err("invalid_resource_name", "Resource name must be 3 to 64 lowercase letters, digits or '_', starting with a letter (the OPEN//77 rule).", lineOf("resource"))
     end
     local version = str("version")
     if not version then err("missing_directive", "Directive 'version' is required.")
@@ -360,14 +421,13 @@ function M.parse(source, fileName)
         end
         local reason = M.unsafePathReason(p)
         if reason then err("unsafe_path", "'" .. p .. "' in " .. where .. ": " .. reason .. ".")
-        elseif p:find("[%*%?%[%]]") then err("script_glob", "'" .. p .. "' in " .. where .. ": list scripts explicitly, globs are not allowed for scripts.")
         elseif not p:match("%.lua$") then err("script_not_lua", "'" .. p .. "' in " .. where .. ": script entries must be .lua files.") end
     end
     for _, k in ipairs({ "shared_scripts", "server_scripts", "client_scripts", "test_scripts" }) do
         for _, p in ipairs(list(k)) do checkScript(p, k) end
     end
     for _, env in ipairs(envOrder) do
-        if not M.isResourceName(env) then err("invalid_environment", "Environment '" .. env .. "' in environment_script is not a valid slug.") end
+        if not M.isSlug(env) then err("invalid_environment", "Environment '" .. env .. "' in environment_script is not a valid slug.") end
         for _, p in ipairs(envScripts[env]) do checkScript(p, 'environment_script "' .. env .. '"') end
     end
     for _, k in ipairs({ "files", "web_files" }) do
@@ -380,6 +440,13 @@ function M.parse(source, fileName)
     if webUiPage then
         local reason = M.unsafePathReason(webUiPage)
         if reason then err("unsafe_path", "'" .. webUiPage .. "' in web_ui_page: " .. reason .. ".", lineOf("web_ui_page")) end
+    end
+
+    -- Declarative exports name global functions, as in OPEN//77 (manifest_export_missing at start).
+    for _, k in ipairs({ "exports", "server_exports" }) do
+        for _, e in ipairs(list(k)) do
+            if not M.isSlug(e) then err("invalid_export_name", "'" .. e .. "' in " .. k .. ": export names are ^[a-z0-9][a-z0-9_-]{0,63}$.") end
+        end
     end
 
     local dependencies = {}
@@ -397,7 +464,7 @@ function M.parse(source, fileName)
         if not DIALECTS[d] then err("invalid_lua_dialect", "Lua dialect '" .. d .. "' is unknown.") end
     end
     for _, e in ipairs(list("environments")) do
-        if not M.isResourceName(e) then err("invalid_environment", "Environment '" .. e .. "' is not a valid slug.")
+        if not M.isSlug(e) then err("invalid_environment", "Environment '" .. e .. "' is not a valid slug.")
         elseif not ENVS[e] then warn("unknown_environment", "Environment '" .. e .. "' is not a SCRIPT//GO environment yet; it will show as not tested.") end
     end
     local function capOk(c) return CAPS[c] or c:match("^x%-[a-z0-9%-]+$") ~= nil end

@@ -103,6 +103,33 @@ return function(scriptgo, opts)
 
     adapter.readFile = readFile
 
+    -- Lists files under a resource root, relative and with forward slashes (script globs).
+    function adapter.listFiles(root)
+        local out = {}
+        local cmd, prefix
+        if isWindows then
+            local win = root:gsub("/", "\\")
+            local p = io.popen('cd /d "' .. win .. '" 2>NUL && cd')
+            prefix = p and (p:read("*l") or "") or ""
+            if p then p:close() end
+            if prefix == "" then return out end
+            cmd = 'dir /s /b /a-d "' .. prefix .. '" 2>NUL'
+            prefix = prefix:gsub("\\", "/"):gsub("/$", "") .. "/"
+        else
+            cmd = "find '" .. root .. "' -type f 2>/dev/null"
+            prefix = root:gsub("/$", "") .. "/"
+        end
+        local p = io.popen(cmd)
+        if not p then return out end
+        for line in p:lines() do
+            local path = line:gsub("\\", "/"):gsub("\r$", "")
+            if path:sub(1, #prefix):lower() == prefix:lower() then out[#out + 1] = path:sub(#prefix + 1) end
+        end
+        p:close()
+        table.sort(out)
+        return out
+    end
+
     adapter.storage = {
         load = function(key)
             return readFile(dataDir .. "/storage/" .. key .. ".json")

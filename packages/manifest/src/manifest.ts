@@ -33,7 +33,11 @@ export const CATEGORIES = [
   "other",
 ] as const;
 
-export const RESOURCE_NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+/** OPEN//77 rule: a lowercase slug of letters, digits and underscores, 3 to 64 characters, starting with a letter. */
+export const RESOURCE_NAME = /^[a-z][a-z0-9_]{2,63}$/;
+/** Environment ids and declarative export names (OPEN//77: `^[a-z0-9][a-z0-9_-]{0,63}$`). */
+export const SLUG = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+export const EXPORT_NAME = SLUG;
 export const MAX_MANIFEST_BYTES = 256 * 1024;
 
 export interface Diagnostic {
@@ -248,7 +252,7 @@ export function parseManifest(source: string, opts: { fileName?: string } = {}):
   const name = str("resource");
   if (name === null) errors.push({ code: "missing_directive", message: "Directive 'resource' is required." });
   else if (!RESOURCE_NAME.test(name)) {
-    errors.push({ code: "invalid_resource_name", message: "Resource name must be a lowercase slug (a-z, 0-9, '_' or '-', up to 64 characters).", line: lineOf("resource") });
+    errors.push({ code: "invalid_resource_name", message: "Resource name must be 3 to 64 lowercase letters, digits or '_', starting with a letter (the OPEN//77 rule).", line: lineOf("resource") });
   }
 
   const version = str("version");
@@ -268,12 +272,11 @@ export function parseManifest(source: string, opts: { fileName?: string } = {}):
     }
     const reason = unsafePathReason(p);
     if (reason) errors.push({ code: "unsafe_path", message: `'${p}' in ${where}: ${reason}.` });
-    else if (/[*?[\]]/.test(p)) errors.push({ code: "script_glob", message: `'${p}' in ${where}: list scripts explicitly, globs are not allowed for scripts.` });
     else if (!p.endsWith(".lua")) errors.push({ code: "script_not_lua", message: `'${p}' in ${where}: script entries must be .lua files.` });
   };
   for (const key of scriptKeys) for (const p of list(key)) checkScript(p, key);
   for (const [env, paths] of Object.entries(envScripts)) {
-    if (!RESOURCE_NAME.test(env)) errors.push({ code: "invalid_environment", message: `Environment '${env}' in environment_script is not a valid slug.` });
+    if (!SLUG.test(env)) errors.push({ code: "invalid_environment", message: `Environment '${env}' in environment_script is not a valid slug.` });
     for (const p of paths) checkScript(p, `environment_script "${env}"`);
   }
   for (const key of ["files", "web_files"]) {
@@ -288,6 +291,13 @@ export function parseManifest(source: string, opts: { fileName?: string } = {}):
     if (reason) errors.push({ code: "unsafe_path", message: `'${webUiPage}' in web_ui_page: ${reason}.`, line: lineOf("web_ui_page") });
   }
 
+  // Declarative exports name global functions, as in OPEN//77 (manifest_export_missing at start).
+  for (const key of ["exports", "server_exports"]) {
+    for (const e of list(key)) {
+      if (!EXPORT_NAME.test(e)) errors.push({ code: "invalid_export_name", message: `'${e}' in ${key}: export names are ^[a-z0-9][a-z0-9_-]{0,63}$.` });
+    }
+  }
+
   const dependencies: Dependency[] = [];
   for (const entry of list("dependencies")) {
     const dep = parseDependency(entry);
@@ -300,7 +310,7 @@ export function parseManifest(source: string, opts: { fileName?: string } = {}):
     if (!(LUA_DIALECTS as readonly string[]).includes(d)) errors.push({ code: "invalid_lua_dialect", message: `Lua dialect '${d}' is unknown. Use ${LUA_DIALECTS.map((x) => `"${x}"`).join(", ")}.` });
   }
   for (const e of list("environments")) {
-    if (!RESOURCE_NAME.test(e)) errors.push({ code: "invalid_environment", message: `Environment '${e}' is not a valid slug.` });
+    if (!SLUG.test(e)) errors.push({ code: "invalid_environment", message: `Environment '${e}' is not a valid slug.` });
     else if (!(KNOWN_ENVIRONMENTS as readonly string[]).includes(e)) warnings.push({ code: "unknown_environment", message: `Environment '${e}' is not a SCRIPT//GO environment yet; it will show as not tested.` });
   }
   const capOk = (c: string): boolean => (CAPABILITIES as readonly string[]).includes(c) || /^x-[a-z0-9-]+$/.test(c);

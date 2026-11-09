@@ -1,6 +1,10 @@
 {
-  "ok": false,
-  "errors": [
-    "script_glob"
-  ]
+  "ok": true,
+  "warnings": [],
+  "manifest": {
+    "name": "res_x",
+    "clientScripts": [
+      "client/**/*.lua"
+    ]
+  }
 }

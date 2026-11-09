@@ -34,7 +34,7 @@ describe("manifest fixtures (shared with the Lua parser)", () => {
 });
 
 describe("validateResourceFiles", () => {
-  const src = `resource "x"\nversion "1.0.0"\nscriptgo_version ">=0.1.0"\nserver_script "server/main.lua"\nfiles { "assets/**/*.png", "data/*.json" }\n`;
+  const src = `resource "res_x"\nversion "1.0.0"\nscriptgo_version ">=0.1.0"\nserver_script "server/main.lua"\nfiles { "assets/**/*.png", "data/*.json" }\n`;
   it("accepts a complete listing", () => {
     const r = parseManifest(src);
     if (!r.ok) throw new Error("parse failed");
