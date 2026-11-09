@@ -8,6 +8,18 @@ This guide is for people who maintain an engine, a framework or a game server an
 users to run SCRIPT//GO resources. You do not port the runtime. You write an **adapter**: one
 file that connects the portable runtime to your host.
 
+There are two ways in:
+
+- **Your host runs Lua.** Write an adapter for the portable Lua core. That is this guide.
+- **Your engine or server is written in .NET.** Embed the .NET host kit (`sdk/dotnet`,
+  experimental) instead. It runs Lua 5.4 and TypeScript or JavaScript side by side, with
+  per-resource quotas, and exposes your engine's natives to every language. Its README covers
+  embedding.
+
+Either way, your creators get the rest of SCRIPT//GO on top: packages from the registry
+(`scriptgo add`), compatibility shown from real runs, license checks through the
+[licensing API](/docs/licensing-api), and paid offers sold from their own Tebex store.
+
 ## How the pieces fit
 
 The runtime in `sdk/lua/scriptgo` is pure Lua, compatible with Lua 5.1, 5.4 and LuaJIT. It
@@ -201,8 +213,8 @@ report itself, as the LÖVE and Godot verification modes do.
    that remain. It becomes **Available** when the adapter is stable and the conformance runs
    pass.
 
-Each environment page shows the adapter version, the Lua flavour, the runtime versions tested and
-the latest run (its status, date and run id). **Verified** comes from runs, never from a form.
+Each environment page shows the adapter version, the languages and Lua dialects, the runtime
+versions tested and the latest run (its status, date and run id). **Verified** comes from runs, never from a form.
 
 ## See also
 

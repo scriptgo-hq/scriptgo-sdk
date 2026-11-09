@@ -3,7 +3,9 @@
 Every SCRIPT//GO host exposes the same runtime to resources. The shape is the familiar multiplayer
 resource shape — `CreateThread`, `Wait`, events, exports, `RegisterCommand` — so a resource author moves
 between environments without relearning anything. Environment differences live in **adapters**
-and are expressed as **capabilities**.
+and are expressed as **capabilities**. Every host runs Lua, and the examples below are Lua; the
+.NET kit also runs JavaScript and TypeScript, with the same names in each language's idiom
+([multi-language.md](multi-language.md)).
 
 ## Hosts and sides
 
@@ -13,6 +15,7 @@ and are expressed as **capabilities**.
 | `love2d` | server + local client, in-process | `sdk/adapters/love2d` |
 | `godot` | server + local client, in-process | `sdk/adapters/godot` (lua-gdextension) |
 | `luanti` | server only (mods are server-side) | `sdk/adapters/luanti` (a Luanti mod) |
+| `dotnet` | server + one local client, in one process | `sdk/dotnet` (.NET kit: Lua 5.4 on KeraLua, JavaScript and TypeScript on Jint), console host `scriptgo-dotnet` |
 | `open77` | real dedicated server + real clients | `scriptgo pack --target open77` adds a three-file shim that maps `ScriptGo.*` onto `Open77.*` (see [open77.md](open77.md)) |
 
 In single-process hosts the client side is player `1` and network events are looped back through
