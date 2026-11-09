@@ -1,5 +1,4 @@
-OPEN//77 runs the resource format natively. The CLI packs a resource with a small shim that maps
-`ScriptGo.*` onto `Open77.*`:
+The CLI packs a resource with a small shim that maps `ScriptGo.*` onto `Open77.*`:
 
 ```bash
 scriptgo pack my_resource --target open77 --out dist

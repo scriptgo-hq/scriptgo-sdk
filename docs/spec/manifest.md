@@ -1,12 +1,12 @@
 # Resource manifest: `scriptgo.lua`
 
-A SCRIPT//GO package is a **resource** in the same format as an OPEN//77 resource: a folder with a
-declarative manifest, shared/client/server Lua scripts, optional files. Anyone who has written an
-OPEN//77 (or FiveM) resource already knows the format.
+A SCRIPT//GO package is a **resource**: a folder with a declarative manifest, shared/client/server
+Lua scripts, optional files. Anyone who has written a resource for a multiplayer game server already
+knows the format.
 
 ```text
 inventory_pro/
-  scriptgo.lua          manifest (an OPEN//77 resource may ship open77.lua instead)
+  scriptgo.lua          manifest
   shared/core.lua       portable business logic, no host calls
   server/main.lua       wires the core to the runtime (exports, events, storage)
   client/main.lua       optional client side (UI)
@@ -29,14 +29,13 @@ inventory_pro/
 - Comments: `-- line` and `--[[ block ]]` (any `=` level).
 - Singular and plural forms are equivalent (`server_script` / `server_scripts`). Repeated list
   directives accumulate in order.
-- **Unknown directives are kept and reported as warnings, never errors**, so OPEN//77-only
-  directives (`preload_mod`, `web_ui_auto_create`, ...) and future ones do not break parsing.
-  OPEN//77's own parser also ignores directives it does not know, so a single manifest can serve
-  both platforms.
+- **Unknown directives are kept and reported as warnings, never errors**, so directives specific
+  to one environment and future ones do not break parsing. Hosts that also ignore directives they
+  do not know can share a single manifest.
 - Limits: manifest ≤ 256 KiB; resource name is a lowercase slug `^[a-z0-9][a-z0-9_-]{0,63}$`
   and must match the folder name when loaded from a folder.
 
-## Directives shared with OPEN//77
+## Core directives
 
 | Directive | Value | Meaning |
 |---|---|---|
@@ -47,14 +46,14 @@ inventory_pro/
 | `server_script(s)` | path(s) | Run on the authoritative side only, never sent to clients |
 | `client_script(s)` | path(s) | Run on the client side |
 | `dependency/dependencies` | `"name"` or `"name >=1.2.0"` | Required resources, started first |
-| `permission/permissions` | string(s) | Capabilities the resource asks the host for (OPEN//77 permission strings are accepted verbatim) |
+| `permission/permissions` | string(s) | Capabilities the resource asks the host for (an environment's own permission strings are accepted verbatim) |
 | `file/files` | glob(s) | Extra files shipped with the resource |
-| `export(s)` / `server_export(s)` | name(s) | Declarative export names (FiveM / OPEN//77 style) |
+| `export(s)` / `server_export(s)` | name(s) | Declarative export names |
 | `web_ui_page`, `web_file(s)` | path / glob | WebUI (hosts without a WebUI ignore them) |
 | `open77_version` | range | OPEN//77 compatibility, read only by the OPEN//77 environment |
 
 Paths are relative, use `/`, may not contain `..`, a drive letter or a leading `/`.
-Script entries must be explicit `.lua` paths (no globs), as on OPEN//77. Cross-resource includes
+Script entries must be explicit `.lua` paths (no globs). Cross-resource includes
 (`@other/file.lua`) are refused: share code through `dependencies` + exports.
 
 ## SCRIPT//GO directives
@@ -78,8 +77,9 @@ Script entries must be explicit `.lua` paths (no globs), as on OPEN//77. Cross-r
 
 ## Resolution rules
 
-1. A host loads `scriptgo.lua`; if absent it loads `open77.lua` (OPEN//77 resources run unchanged
-   on SCRIPT//GO hosts as long as they use the portable API subset).
+1. A host loads `scriptgo.lua`; if absent, an environment's native manifest name (`open77.lua` for
+   the `open77` environment), so its resources run unchanged as long as they use the portable API
+   subset.
 2. If a required capability is missing in the current environment, the resource **does not
    start**, and the host reports `capability_unavailable:<cap>@<environment>`.
 3. If `environments` is declared and the current environment is not listed, the resource starts

@@ -136,8 +136,8 @@ Resources have a server side and a client side. Your adapter declares which ones
   are refused exactly as on a real network. Do not shortcut this: resources must behave the same
   everywhere.
 - **Server-only hosts** run only server scripts. Luanti is one: its mods are server-side.
-- **Networked hosts** connect real servers and real clients. OPEN//77 runs the format natively;
-  its adapter is a shim mapping `ScriptGo.*` onto `Open77.*`.
+- **Networked hosts** connect real servers and real clients. A host that already runs this
+  resource shape needs only a shim mapping `ScriptGo.*` onto its own API.
 
 ## Sandbox expectations
 
@@ -185,9 +185,6 @@ report itself, as the LÖVE and Godot verification modes do.
 
 Each environment page shows the adapter version, the Lua flavour, the runtime versions tested and
 the latest run (its status, date and run id). **Verified** comes from runs, never from a form.
-
-OPEN//77 is an environment run by the same owners as SCRIPT//GO. It is shown as **Experimental**
-until its integration tests pass and its legal review is complete. It gets no shortcut.
 
 ## See also
 

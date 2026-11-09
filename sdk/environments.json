@@ -214,7 +214,7 @@
         "OPEN//77 server 1.0.0+5282e21c"
       ],
       "adapterVersion": "open77-shim-0.3.0",
-      "summary": "OPEN//77 runs the resource format natively. `scriptgo pack --target open77` adds a shim that maps ScriptGo.* onto Open77.*.",
+      "summary": "Packages run on OPEN//77 servers and clients through a small shim that maps ScriptGo.* onto Open77.* (`scriptgo pack --target open77`).",
       "capabilities": {
         "commands": "supported",
         "config": "supported",
@@ -236,7 +236,7 @@
         "storage": "Open77.kvp on both sides, values stored as JSON text.",
         "ui": "Server: Open77.notifications; client: the open77_notifications package."
       },
-      "setupMarkdown": "OPEN//77 runs the resource format natively. The CLI packs a resource with a small shim that maps\n`ScriptGo.*` onto `Open77.*`:\n\n```bash\nscriptgo pack my_resource --target open77 --out dist\n# dist/open77/my_resource/ is a resource folder OPEN//77 loads as is\n```\n\nThe packed manifest asks for exactly the OPEN//77 permissions the resource's capabilities need.\nA resource that uses `http` or `licensing` also needs the operator to allow the API host in\n`server.jsonc`:\n\n```jsonc\n\"http\": { \"enabled\": true, \"allowedHosts\": [\"api.scriptgo.example\"] },\n\"convars\": { \"scriptgo_api\": \"https://api.scriptgo.example\" }\n```\n\nThe license key goes in the `<resource>:license_key` convar, never in the resource folder.\n",
+      "setupMarkdown": "The CLI packs a resource with a small shim that maps `ScriptGo.*` onto `Open77.*`:\n\n```bash\nscriptgo pack my_resource --target open77 --out dist\n# dist/open77/my_resource/ is a resource folder OPEN//77 loads as is\n```\n\nThe packed manifest asks for exactly the OPEN//77 permissions the resource's capabilities need.\nA resource that uses `http` or `licensing` also needs the operator to allow the API host in\n`server.jsonc`:\n\n```jsonc\n\"http\": { \"enabled\": true, \"allowedHosts\": [\"api.scriptgo.example\"] },\n\"convars\": { \"scriptgo_api\": \"https://api.scriptgo.example\" }\n```\n\nThe license key goes in the `<resource>:license_key` convar, never in the resource folder.\n",
       "limitations": [
         "Experimental: pending technical and legal review.",
         "Outbound HTTP, and so licensing, needs the operator's allow-list; no HTTP from the client.",

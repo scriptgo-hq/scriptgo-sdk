@@ -1,7 +1,7 @@
 # Runtime API (`scriptgo_version` 0.1)
 
-Every SCRIPT//GO host exposes the same runtime to resources. The shape is the OPEN//77 / FiveM
-shape — `CreateThread`, `Wait`, events, exports, `RegisterCommand` — so a resource author moves
+Every SCRIPT//GO host exposes the same runtime to resources. The shape is the familiar multiplayer
+resource shape — `CreateThread`, `Wait`, events, exports, `RegisterCommand` — so a resource author moves
 between environments without relearning anything. Environment differences live in **adapters**
 and are expressed as **capabilities**.
 
@@ -13,12 +13,12 @@ and are expressed as **capabilities**.
 | `love2d` | server + local client, in-process | `sdk/adapters/love2d` |
 | `godot` | server + local client, in-process | `sdk/adapters/godot` (lua-gdextension) |
 | `luanti` | server only (mods are server-side) | `sdk/adapters/luanti` (a Luanti mod) |
-| `open77` | real dedicated server + real clients | OPEN//77 runs the same format natively; `scriptgo pack --target open77` adds a three-file shim that maps `ScriptGo.*` onto `Open77.*` (see [open77.md](open77.md)) |
+| `open77` | real dedicated server + real clients | `scriptgo pack --target open77` adds a three-file shim that maps `ScriptGo.*` onto `Open77.*` (see [open77.md](open77.md)) |
 
 In single-process hosts the client side is player `1` and network events are looped back through
 the value codec, so isolation rules are identical to a real network.
 
-## Globals (OPEN//77-compatible)
+## Globals
 
 | Global | Notes |
 |---|---|
@@ -45,8 +45,8 @@ Lifecycle events: `onResourceStart(name)`, `onResourceStop(name)` (server side),
 
 ## `ScriptGo` namespace
 
-`Open77` is provided as an alias of the portable subset, so OPEN//77 resources that only use that
-subset run unchanged on every host.
+`Open77` is provided as an alias of the portable subset, so resources written for the `open77`
+environment that only use that subset run unchanged on every host.
 
 | Member | Capability | Notes |
 |---|---|---|

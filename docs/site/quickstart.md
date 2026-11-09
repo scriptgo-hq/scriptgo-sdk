@@ -8,7 +8,7 @@ This guide builds a small resource from an empty folder. You will write a manife
 core, a server side that wires the core to the runtime, a test, and then run the same folder in
 other environments. It takes about fifteen minutes.
 
-If you have written an OPEN//77 or FiveM resource before, you already know the format. A
+If you have written a resource for a multiplayer game server before, you already know the format. A
 SCRIPT//GO package is a folder with a declarative manifest and shared, server and client scripts.
 
 > [!WARNING]
@@ -27,8 +27,8 @@ inventory_pro/
 ```
 
 The folder name must match the `resource` name in the manifest when a host loads it from disk.
-Resource names are 3 to 64 characters of `a-z`, `0-9` and `_`, starting with a letter (the
-OPEN//77 rule). A `-` is refused.
+Resource names are 3 to 64 characters of `a-z`, `0-9` and `_`, starting with a letter. A `-`
+is refused.
 
 `scriptgo init inventory_pro` creates a similar starting folder: a manifest, `shared/config.lua`,
 `server/main.lua`, `client/main.lua` and `tests/main_test.lua`. Writing it by hand is just as
@@ -92,7 +92,7 @@ and `debug` are not available there. See [Runtime](/docs/runtime) for the full l
 
 ## 4. Wire it to the runtime
 
-The server side uses the same globals as OPEN//77: `CreateThread`, `Wait`, events and exports,
+The server side uses the familiar multiplayer globals: `CreateThread`, `Wait`, events and exports,
 plus the `ScriptGo` namespace.
 
 ```lua

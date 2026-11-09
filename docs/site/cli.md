@@ -48,7 +48,7 @@ scoped to one user. Revoke it from the same settings page if it leaks.
 | Command | What it does |
 |---|---|
 | `scriptgo init <name>` | Creates a resource folder: manifest, `shared/`, `server/`, `client/`, `tests/` |
-| `scriptgo validate <dir>` | Checks the manifest, the OPEN//77 rules and the referenced files |
+| `scriptgo validate <dir>` | Checks the manifest, the naming and sandbox rules and the referenced files |
 | `scriptgo test <dir>` | Runs the resource's `test_script` files in the standalone host |
 | `scriptgo run <dir>...` | Runs resources in the standalone host, in simulated or real time |
 | `scriptgo verify <dir>` | Runs the resource on its environments and writes compatibility reports |
@@ -128,8 +128,8 @@ registry's home page shows this block beside the output each environment recorde
 a README shows is code that ran there. `--no-readme-example` leaves it out.
 
 Call other resources' exports from a thread, a handler or `onResourceStart`, never at file scope:
-OPEN//77 refuses that with `resource_preparing`, and every SCRIPT//GO host does the same so you
-find out before OPEN//77 does.
+every SCRIPT//GO host refuses that with `resource_preparing`, so you find out on your machine rather
+than on a live server.
 
 These reports are what the registry ingests to show a compatibility status. The shape is defined
 in the [API reference](/docs/api):

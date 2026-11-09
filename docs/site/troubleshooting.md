@@ -78,7 +78,7 @@ The manifest is parsed, never executed. Errors stop the release; warnings are sh
 | Code | Cause | Fix |
 |---|---|---|
 | `missing_directive` | `resource` or `version` is absent | Add both; they are required |
-| `invalid_resource_name` | The name breaks the OPEN//77 rule | Use 3 to 64 characters of `a-z`, `0-9` and `_`, starting with a letter. No `-` |
+| `invalid_resource_name` | The name breaks the resource name rule | Use 3 to 64 characters of `a-z`, `0-9` and `_`, starting with a letter. No `-` |
 | `invalid_version` | `version` is not semver, e.g. `"1.0"` | Use three numbers: `"1.0.0"` |
 | `invalid_range` | `scriptgo_version` or `open77_version` is not a valid range | Use a range such as `">=0.1.0"` |
 | `duplicate_directive` | A single-value directive appears twice | Keep one |
@@ -95,7 +95,7 @@ The manifest is parsed, never executed. Errors stop the release; warnings are sh
 
 | Warning | Meaning |
 |---|---|
-| `unknown_directive` | A directive SCRIPT//GO does not use, such as OPEN//77's `preload_mod`. It is kept, so one manifest serves both platforms |
+| `unknown_directive` | A directive SCRIPT//GO does not use, such as one specific to an environment. It is kept, so one manifest can serve several environments |
 | `unknown_environment` | An environment slug SCRIPT//GO does not list yet; it shows as not tested |
 | `unknown_category` | The category will be shown as `other` |
 | `license_not_spdx` | The license does not look like an SPDX expression |

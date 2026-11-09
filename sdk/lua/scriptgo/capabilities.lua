@@ -128,7 +128,7 @@ M.ENVIRONMENTS = {
         kind = "mod_platform",
         status = "experimental",
         dialects = { "5.4" },
-        summary = "OPEN//77 runs the resource format natively. `scriptgo pack --target open77` adds a shim that maps ScriptGo.* onto Open77.*.",
+        summary = "Packages run on OPEN//77 servers and clients through a small shim that maps ScriptGo.* onto Open77.* (`scriptgo pack --target open77`).",
         sides = { "server", "client" },
         capabilities = {
             events = "supported", logging = "supported", storage = "supported", players = "supported",
