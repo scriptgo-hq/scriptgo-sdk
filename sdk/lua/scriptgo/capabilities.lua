@@ -334,11 +334,33 @@ M.ENVIRONMENTS = {
             "HTTP responses carry no headers.",
         },
     },
+    -- BeamMP has an adapter (sdk/adapters/beammp, ADR-0019) but no run on a real server yet:
+    -- BeamMP-Server refuses to start without the owner's Keymaster AuthKey, so it stays planned.
     beammp = {
-        name = "BeamMP", kind = "mod_platform", status = "planned", dialects = { "5.3", "luajit" }, sides = { "server", "client" },
-        summary = "BeamMP server plugins and BeamNG.drive client mods, for driving and roleplay servers.",
+        name = "BeamMP", kind = "mod_platform", status = "planned", dialects = { "5.3" }, sides = { "server" },
+        summary = "One BeamMP server plugin runs SCRIPT//GO packages on BeamMP servers (BeamNG.drive multiplayer), for driving and roleplay servers.",
         sales = "review", salesNote = "No published rule on selling mods: free packages only until the rights holder confirms in writing.",
-        capabilities = {}, notes = {}, limitations = {},
+        capabilities = {
+            events = "partial", logging = "supported", storage = "supported", players = "supported",
+            permissions = "supported", commands = "supported", config = "supported", ui = "partial",
+            http = "partial", licensing = "partial",
+        },
+        notes = {
+            events = "Server side only: the plugin runs no client scripts, and TriggerClientEvent answers network_unavailable.",
+            storage = "JSON files in the plugin's data/storage folder (scriptgo.json dataDir), replaced atomically.",
+            players = "MP.GetPlayers and the join and disconnect events. BeamMP id n is SCRIPT//GO player n + 1 (0 is the console); identifier is beammp:<account id>, beammp-guest:<name> for guests.",
+            permissions = "Grants in scriptgo.json, by beammp:<account id>, or by name for players logged in to BeamMP: BeamMP has no server-side roles.",
+            commands = "Chat commands (/name ...; the line is not broadcast) and the server console, where they run as the console.",
+            config = "scriptgo.json resources and convars.",
+            ui = "MP.SendNotification (a toast in the BeamMP client); its display is not verified, as no game client runs here.",
+            http = "curl started in the background through os.execute and polled each tick, so a request never blocks the plugin; needs curl on the server's PATH. BeamMP's own Http.CreateConnection has no POST and drops the response.",
+            licensing = "Works over the same curl path, but paid listings stay off: no published BeamNG or BeamMP rule on selling mods, so packages stay free until the rights holder confirms in writing.",
+        },
+        limitations = {
+            "Not verified on a real server yet: BeamMP-Server (3.9.3) refuses to start without an AuthKey from keymaster.beammp.com, which only the server owner can get. Until then the adapter has passed unit tests on a mock of BeamMP's Lua API only.",
+            "Server side only: BeamNG.drive client mods are out of scope, and no game client is run.",
+            "HTTP, and so online license checks, needs curl on the server's PATH.",
+        },
     },
     roblox = {
         name = "Roblox", kind = "mod_platform", status = "planned", dialects = { "luau" }, sides = { "server", "client" },

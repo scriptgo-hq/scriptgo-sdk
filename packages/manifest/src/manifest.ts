@@ -16,7 +16,7 @@ export const CAPABILITIES = [
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
-export const KNOWN_ENVIRONMENTS = ["standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim", "cctweaked", "dotnet", "garrysmod"] as const;
+export const KNOWN_ENVIRONMENTS = ["standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim", "cctweaked", "dotnet", "garrysmod", "beammp"] as const;
 export const LUA_DIALECTS = ["5.1", "5.2", "5.3", "5.4", "luajit"] as const;
 export const CATEGORIES = [
   "inventory",

@@ -6,6 +6,8 @@
 //             (sdk/adapters/open77/shim*.lua) before the resource's scripts, and the referenced files.
 //   garrysmod a server addon scriptgo_<name>/ holding the resource, plus the runtime addon scriptgo/
 //             (lib/garrysmod.ts; --no-runtime leaves the runtime out).
+//   beammp    Resources/Server/scriptgo/: the BeamMP plugin with the resource and its dependencies
+//             (lib/beammp.ts).
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { zipSync } from "fflate";
@@ -15,6 +17,7 @@ import { packForGarrysmod } from "../lib/garrysmod.ts";
 import { open77Portability } from "../lib/portability.ts";
 import { listFiles, readResource, sdkRoot, type LoadedResource } from "../lib/sdk.ts";
 import { compileTypeScript, type CompileIssue } from "../lib/typescript.ts";
+import { packBeamMPCommand } from "../lib/beammp.ts";
 
 export const summary = "Package a resource: a publishable .zip, an OPEN//77 resource folder, or a Garry's Mod addon";
 
@@ -246,7 +249,7 @@ export function packForOpen77(
 export async function run(args: string[]): Promise<number> {
   const a = parseArgs(args, { booleans: ["help", "allow-unportable", "no-runtime"] });
   if (a.bools.has("help") || a.positional.length === 0) {
-    console.log("scriptgo pack <resourceDir> [--target scriptgo|open77|garrysmod] [--out dist] [--allow-unportable] [--no-runtime]");
+    console.log("scriptgo pack <resourceDir> [--target scriptgo|open77|garrysmod|beammp] [--out dist] [--allow-unportable] [--no-runtime]");
     return a.bools.has("help") ? 0 : 2;
   }
   const res = readResource(a.positional[0]!);
@@ -293,6 +296,8 @@ export async function run(args: string[]): Promise<number> {
     return 0;
   }
 
-  console.error(`unknown target '${target}' (scriptgo, open77, garrysmod)`);
+  if (target === "beammp") return packBeamMPCommand(res, join(out, "beammp"));
+
+  console.error(`unknown target '${target}' (scriptgo, open77, garrysmod, beammp)`);
   return 2;
 }

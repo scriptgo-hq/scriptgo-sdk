@@ -10,8 +10,8 @@ license "MIT"
 category "library"
 scriptgo_version ">=0.1.0"
 open77_version ">=0.0.1"
-lua { "5.1", "5.4", "luajit" }
-environments { "standalone", "open77", "neovim", "dotnet", "garrysmod" }
+lua { "5.1", "5.3", "5.4", "luajit" }
+environments { "standalone", "open77", "neovim", "dotnet", "garrysmod", "beammp" }
 capabilities { "http", "licensing", "config" }
 
 server_script "server/probe_net.lua"
