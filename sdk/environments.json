@@ -1,0 +1,274 @@
+{
+  "generatedFrom": "sdk/lua/scriptgo/capabilities.lua + verification/reports",
+  "environments": [
+    {
+      "slug": "standalone",
+      "name": "Lua Standalone",
+      "status": "available",
+      "luaDialects": [
+        "5.1",
+        "5.4",
+        "LuaJIT"
+      ],
+      "runtimeVersions": [
+        "Lua 5.1",
+        "Lua 5.4",
+        "LuaJIT 2.1.1794164915"
+      ],
+      "adapterVersion": "0.1.0",
+      "summary": "A command-line host. Runs resources without any engine; the reference environment for tests.",
+      "capabilities": {
+        "commands": "supported",
+        "config": "supported",
+        "events": "supported",
+        "http": "partial",
+        "licensing": "supported",
+        "logging": "supported",
+        "permissions": "supported",
+        "players": "partial",
+        "storage": "supported",
+        "ui": "fallback"
+      },
+      "capabilityNotes": {
+        "http": "Uses the system curl executable when present.",
+        "players": "Simulated local players (one by default).",
+        "ui": "Notifications are printed to the console."
+      },
+      "setupMarkdown": "",
+      "limitations": [
+        "No rendering: `ui` falls back to console output.",
+        "HTTP needs curl on the PATH."
+      ],
+      "listed": true,
+      "sortOrder": 10,
+      "adapters": [
+        {
+          "version": "0.1.0",
+          "status": "available",
+          "notes": "measured by verification reports"
+        }
+      ]
+    },
+    {
+      "slug": "love2d",
+      "name": "LÖVE",
+      "status": "beta",
+      "luaDialects": [
+        "LuaJIT"
+      ],
+      "runtimeVersions": [],
+      "adapterVersion": "",
+      "summary": "2D games with LÖVE. Server and local client run in the game process.",
+      "capabilities": {
+        "commands": "supported",
+        "config": "supported",
+        "events": "supported",
+        "http": "partial",
+        "licensing": "partial",
+        "logging": "supported",
+        "permissions": "supported",
+        "players": "partial",
+        "storage": "supported",
+        "ui": "supported"
+      },
+      "capabilityNotes": {
+        "http": "Uses curl through io.popen when LÖVE is not fused; LÖVE 12 lua-https support is planned.",
+        "players": "Single local player."
+      },
+      "setupMarkdown": "",
+      "limitations": [
+        "Single-player only: no real network between server and client."
+      ],
+      "listed": true,
+      "sortOrder": 20,
+      "adapters": []
+    },
+    {
+      "slug": "godot",
+      "name": "Godot 4",
+      "status": "beta",
+      "luaDialects": [
+        "5.4",
+        "LuaJIT"
+      ],
+      "runtimeVersions": [],
+      "adapterVersion": "",
+      "summary": "Godot 4 projects through the lua-gdextension bridge.",
+      "capabilities": {
+        "commands": "supported",
+        "config": "supported",
+        "events": "supported",
+        "http": "unavailable",
+        "licensing": "unavailable",
+        "logging": "supported",
+        "permissions": "supported",
+        "players": "partial",
+        "storage": "supported",
+        "ui": "supported"
+      },
+      "capabilityNotes": {
+        "http": "Planned through HTTPRequest.",
+        "players": "Single local player."
+      },
+      "setupMarkdown": "",
+      "limitations": [
+        "Requires the lua-gdextension addon.",
+        "No HTTP yet, so no online license checks."
+      ],
+      "listed": true,
+      "sortOrder": 30,
+      "adapters": []
+    },
+    {
+      "slug": "luanti",
+      "name": "Luanti",
+      "status": "beta",
+      "luaDialects": [
+        "5.1",
+        "LuaJIT"
+      ],
+      "runtimeVersions": [
+        "Luanti 5.18.0"
+      ],
+      "adapterVersion": "luanti-0.1.0",
+      "summary": "Luanti (formerly Minetest) servers. Resources run inside one regular, non-trusted mod.",
+      "capabilities": {
+        "commands": "supported",
+        "config": "supported",
+        "events": "partial",
+        "http": "partial",
+        "licensing": "partial",
+        "logging": "supported",
+        "permissions": "supported",
+        "players": "supported",
+        "storage": "supported",
+        "ui": "fallback"
+      },
+      "capabilityNotes": {
+        "commands": "Resource commands are ordinary chat commands.",
+        "events": "Server side only; client scripts do not run (Luanti mods are server-side).",
+        "http": "Needs the mod listed in secure.http_mods by the server owner.",
+        "permissions": "server or scriptgo_admin privilege, then the grants in <world>/scriptgo.json.",
+        "players": "Player names get session-stable integer ids; identifier is luanti:<name>.",
+        "ui": "Notifications are sent as chat messages."
+      },
+      "setupMarkdown": "",
+      "limitations": [
+        "No client side.",
+        "HTTP, and so online license checks, only when the server owner allows it.",
+        "Verified headless on Luanti 5.18.0 (LuaJIT); paths that need a connected player are not yet covered by a run."
+      ],
+      "listed": true,
+      "sortOrder": 40,
+      "adapters": [
+        {
+          "version": "luanti-0.1.0",
+          "status": "beta",
+          "notes": "measured by verification reports"
+        }
+      ]
+    },
+    {
+      "slug": "open77",
+      "name": "OPEN//77",
+      "status": "experimental",
+      "luaDialects": [
+        "5.4"
+      ],
+      "runtimeVersions": [
+        "OPEN//77 server 1.0.0+5282e21c"
+      ],
+      "adapterVersion": "open77-shim-0.1.0",
+      "summary": "OPEN//77 runs the resource format natively. `scriptgo pack --target open77` adds a shim that maps ScriptGo.* onto Open77.*.",
+      "capabilities": {
+        "commands": "supported",
+        "config": "supported",
+        "events": "supported",
+        "http": "unavailable",
+        "licensing": "unavailable",
+        "logging": "supported",
+        "permissions": "supported",
+        "players": "supported",
+        "storage": "supported",
+        "ui": "supported"
+      },
+      "capabilityNotes": {
+        "config": "Server side: convar <resource>:<key>, then the resource's tunables.",
+        "permissions": "Server side: the server ACL (Open77.acl.isAllowed, permission acl.read).",
+        "players": "Server side: GetPlayers, GetPlayerName, Open77.players.identifier.",
+        "storage": "Open77.kvp on both sides, values stored as JSON text.",
+        "ui": "Server: Open77.notifications; client: the open77_notifications package."
+      },
+      "setupMarkdown": "",
+      "limitations": [
+        "Experimental: pending technical and legal review.",
+        "No outbound HTTP for SCRIPT//GO resources, so no online license checks.",
+        "No wall clock on the client: ScriptGo.time.now() is nil there.",
+        "Verified on a dedicated server (server half); the client half is not verified yet."
+      ],
+      "listed": false,
+      "sortOrder": 50,
+      "adapters": [
+        {
+          "version": "open77-shim-0.1.0",
+          "status": "experimental",
+          "notes": "measured by verification reports"
+        }
+      ]
+    },
+    {
+      "slug": "openresty",
+      "name": "OpenResty",
+      "status": "planned",
+      "luaDialects": [
+        "LuaJIT"
+      ],
+      "runtimeVersions": [],
+      "adapterVersion": "",
+      "summary": "Lua HTTP services on Nginx.",
+      "capabilities": {},
+      "capabilityNotes": {},
+      "setupMarkdown": "",
+      "limitations": [],
+      "listed": true,
+      "sortOrder": 60,
+      "adapters": []
+    },
+    {
+      "slug": "defold",
+      "name": "Defold",
+      "status": "planned",
+      "luaDialects": [
+        "LuaJIT"
+      ],
+      "runtimeVersions": [],
+      "adapterVersion": "",
+      "summary": "2D games with Defold.",
+      "capabilities": {},
+      "capabilityNotes": {},
+      "setupMarkdown": "",
+      "limitations": [],
+      "listed": true,
+      "sortOrder": 70,
+      "adapters": []
+    },
+    {
+      "slug": "neovim",
+      "name": "Neovim",
+      "status": "planned",
+      "luaDialects": [
+        "LuaJIT"
+      ],
+      "runtimeVersions": [],
+      "adapterVersion": "",
+      "summary": "Editor plugins on Neovim's Lua runtime.",
+      "capabilities": {},
+      "capabilityNotes": {},
+      "setupMarkdown": "",
+      "limitations": [],
+      "listed": true,
+      "sortOrder": 80,
+      "adapters": []
+    }
+  ]
+}
