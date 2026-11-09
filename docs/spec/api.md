@@ -174,10 +174,12 @@ POST /v1/creator/packages/:name/releases  (multipart: archive=zip)  → Release 
 GET  /v1/creator/releases/:id                    → Release with validation report
 POST /v1/creator/releases/:id/rights { ownsCode, targetsProprietaryGame, thirdPartyAssets[] }
 POST /v1/creator/releases/:id/publish            → Release (409 publish_blocked, details.blockers: string[])
+                                                 (a release that declares a free_only environment rejects every paid offer of the package)
 POST /v1/creator/releases/:id/deprecate { reason } → Release
 POST /v1/creator/releases/:id/yank { reason }    → Release   (its download then answers 410)
 POST /v1/creator/packages/:name/offers { name, interval, price, environments, deployments, providerProductId, provider? }
                                                  → 201 Offer   (provider defaults to the creator's Tebex store, else mock)
+                                                 (422 environment_free_only: a paid offer whose environments, or whose package's non-yanked releases, include a free_only environment)
 DELETE /v1/creator/offers/:id                    → 204   (offer withdrawn; licenses already sold are unaffected)
 GET  /v1/creator/stores                          → Store[]
 POST /v1/creator/stores { provider: "mock" | "tebex", credentials }  → Store
