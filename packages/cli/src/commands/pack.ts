@@ -1,19 +1,22 @@
-// scriptgo pack <dir> --target scriptgo|open77 [--out dist]
+// scriptgo pack <dir> --target scriptgo|open77|garrysmod [--out dist]
 //
 //   scriptgo  a .zip of the resource for `scriptgo publish` (manifest + every referenced file);
 //             each TypeScript entry x.ts is compiled to x.ts.js inside the archive (lib/typescript.ts)
 //   open77    a folder OPEN//77 loads as is: a generated open77.lua that loads the ScriptGo shim
 //             (sdk/adapters/open77/shim*.lua) before the resource's scripts, and the referenced files.
+//   garrysmod a server addon scriptgo_<name>/ holding the resource, plus the runtime addon scriptgo/
+//             (lib/garrysmod.ts; --no-runtime leaves the runtime out).
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { zipSync } from "fflate";
 import { expandGlob, parseManifest, scriptLanguage, validateResourceFiles, type ParsedManifest } from "@scriptgo/manifest";
 import { parseArgs } from "../lib/args.ts";
+import { packForGarrysmod } from "../lib/garrysmod.ts";
 import { open77Portability } from "../lib/portability.ts";
 import { listFiles, readResource, sdkRoot, type LoadedResource } from "../lib/sdk.ts";
 import { compileTypeScript, type CompileIssue } from "../lib/typescript.ts";
 
-export const summary = "Package a resource: a publishable .zip, or an OPEN//77 resource folder";
+export const summary = "Package a resource: a publishable .zip, an OPEN//77 resource folder, or a Garry's Mod addon";
 
 // The shim is three files so the shared part references no server-only native: OPEN//77's
 // validator flags those in a shared_script, and its client sandbox lacks `os` and `setmetatable`.
@@ -241,9 +244,9 @@ export function packForOpen77(
 }
 
 export async function run(args: string[]): Promise<number> {
-  const a = parseArgs(args, { booleans: ["help", "allow-unportable"] });
+  const a = parseArgs(args, { booleans: ["help", "allow-unportable", "no-runtime"] });
   if (a.bools.has("help") || a.positional.length === 0) {
-    console.log("scriptgo pack <resourceDir> [--target scriptgo|open77] [--out dist] [--allow-unportable]");
+    console.log("scriptgo pack <resourceDir> [--target scriptgo|open77|garrysmod] [--out dist] [--allow-unportable] [--no-runtime]");
     return a.bools.has("help") ? 0 : 2;
   }
   const res = readResource(a.positional[0]!);
@@ -281,6 +284,15 @@ export async function run(args: string[]): Promise<number> {
     return 0;
   }
 
-  console.error(`unknown target '${target}' (scriptgo, open77)`);
+  if (target === "garrysmod") {
+    const r = packForGarrysmod(res, join(out, "garrysmod"), { runtime: !a.bools.has("no-runtime") });
+    for (const w of r.warnings) console.log(`warning ${w}`);
+    for (const e of r.errors) console.error(`error ${e.code}: ${e.message}`);
+    if (r.errors.length > 0) return 1;
+    console.log(`packed for Garry's Mod -> ${r.dest}${r.runtime ? ` (runtime addon -> ${r.runtime})` : ""}; copy into garrysmod/addons/`);
+    return 0;
+  }
+
+  console.error(`unknown target '${target}' (scriptgo, open77, garrysmod)`);
   return 2;
 }

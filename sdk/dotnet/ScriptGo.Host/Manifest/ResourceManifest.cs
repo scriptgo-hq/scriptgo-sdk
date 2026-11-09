@@ -59,7 +59,7 @@ public sealed record ManifestResult(bool Ok, ResourceManifest? Manifest, IReadOn
 public static partial class ManifestParser
 {
     public static readonly string[] Capabilities = ["events", "logging", "storage", "players", "permissions", "commands", "config", "ui", "http", "licensing"];
-    public static readonly string[] KnownEnvironments = ["standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim", "cctweaked", "dotnet"];
+    public static readonly string[] KnownEnvironments = ["standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim", "cctweaked", "dotnet", "garrysmod"];
     public static readonly string[] LuaDialects = ["5.1", "5.2", "5.3", "5.4", "luajit"];
     public static readonly string[] Categories = ["inventory", "permissions", "economy", "events", "ui", "admin", "framework", "vehicles", "housing", "quests", "library", "other"];
     public const int MaxManifestBytes = 256 * 1024;

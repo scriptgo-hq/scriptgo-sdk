@@ -1,0 +1,7 @@
+{
+  "config": {
+    "resources": { "sg_gmod_paths": { "greeting": "hello from config.json" } },
+    "permissions": { "user": ["paths.granted", "shop.*"] }
+  },
+  "botChat": ["/sgadmin", "/sgping a b"]
+}
