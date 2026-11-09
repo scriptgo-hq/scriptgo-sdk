@@ -90,7 +90,7 @@ scriptgo verify inventory_pro --env all
 
 Runs the resource and writes one `CompatibilityRun` JSON report per run into the repository's
 `verification/reports/` (`--out` to change it). `--env` is `standalone` (the default, one run
-per Lua interpreter), `open77`, `luanti`, `love2d`, `godot`, `neovim` or `all`:
+per Lua interpreter), `open77`, `luanti`, `love2d`, `godot`, `neovim`, `dotnet` or `all`:
 
 - `open77` packs the resource and starts a real OPEN//77 dedicated server given with
   `--open77-server` (or `OP77_SERVER_EXE`). Only the server half runs.
@@ -103,6 +103,14 @@ per Lua interpreter), `open77`, `luanti`, `love2d`, `godot`, `neovim` or `all`:
 - `neovim` runs `nvim --headless --clean -l` on the plugin's verify mode, ticked by the plugin's
   own timer on Neovim's event loop. The binary comes from `--nvim`, `SCRIPTGO_NVIM` or
   `tools/runtimes/neovim`.
+- `dotnet` runs the console host of the .NET kit (`sdk/dotnet`): Lua on KeraLua, JavaScript on
+  Jint. The resource and its dependencies are copied to a temporary folder where every
+  TypeScript entry is compiled with esbuild, then verified there. Needs the .NET 10 SDK
+  (`--dotnet`, `SCRIPTGO_DOTNET` or the default install); the host is built on first use.
+
+`--lang lua|ts|js` says which guest language the run is evidence for; by default the resource's
+own (`ts` when it has TypeScript scripts). The `dotnet` reports are tagged per language
+(`dotnet-lua`, `dotnet-ts`); every other environment runs Lua only and skips another language.
 
 Without the server binary, Docker or the engine, that run is reported as skipped and writes no
 report. `--stub-api` starts a local stand-in for the licensing API and gives the resource its URL

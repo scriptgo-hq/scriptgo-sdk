@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "warnings": [],
+  "manifest": {
+    "format": "scriptgo",
+    "name": "ts_widget",
+    "version": "1.0.0",
+    "autoStart": false,
+    "serverScripts": ["server/main.ts"],
+    "clientScripts": ["client/ui.js"],
+    "serverExports": ["get_count"],
+    "environments": ["dotnet"]
+  }
+}

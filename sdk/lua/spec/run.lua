@@ -1,10 +1,12 @@
--- SDK spec runner: lua run.lua <repoRoot> <manifestFixturesCsv> <spec.lua>...
+-- SDK spec runner: lua run.lua <repoRoot> <manifestFixturesCsv> <jsonManifestFixturesCsv> <spec.lua>...
 -- Driven by tools/lua-test.mjs on every interpreter (lua54, lua51, luajit). Pure Lua: the file
 -- list comes from the caller because standard Lua cannot list directories.
 local args = { ... }
 local root = (args[1] or "."):gsub("\\", "/"):gsub("/$", "")
 local fixtures = {}
 for name in (args[2] or ""):gmatch("[^,]+") do fixtures[#fixtures + 1] = name end
+local jsonFixtures = {}
+for name in (args[3] or ""):gmatch("[^,]+") do jsonFixtures[#jsonFixtures + 1] = name end
 
 local scriptgo = assert(loadfile(root .. "/sdk/lua/scriptgo/init.lua"))(root .. "/sdk/lua/scriptgo/")
 local testing = scriptgo.testing
@@ -17,11 +19,11 @@ local function readFile(path)
     return text
 end
 
-local ctx = { root = root, readFile = readFile, fixtures = fixtures, scriptgo = scriptgo }
+local ctx = { root = root, readFile = readFile, fixtures = fixtures, jsonFixtures = jsonFixtures, scriptgo = scriptgo }
 
 local total, failedTotal = 0, 0
 local failures = {}
-for i = 3, #args do
+for i = 4, #args do
     local specPath = args[i]
     local chunk, err = loadfile(specPath)
     if not chunk then

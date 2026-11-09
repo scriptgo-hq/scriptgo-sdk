@@ -1,0 +1,10 @@
+{
+  "resource": "ts_widget",
+  "version": "1.0.0",
+  "scriptgo_version": ">=0.1.0",
+  "auto_start": false,
+  "server_scripts": ["server/main.ts"],
+  "client_scripts": ["client/ui.js"],
+  "server_exports": ["get_count"],
+  "environments": ["dotnet"]
+}

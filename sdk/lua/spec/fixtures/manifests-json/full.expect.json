@@ -1,0 +1,37 @@
+{
+  "ok": true,
+  "warnings": ["unknown_directive"],
+  "manifest": {
+    "format": "scriptgo",
+    "name": "inventory_pro",
+    "version": "1.4.1",
+    "title": "Inventory Pro",
+    "author": "kestrel",
+    "license": "MIT",
+    "category": "inventory",
+    "scriptgoVersion": ">=0.1.0",
+    "open77Version": ">=0.0.1",
+    "autoStart": true,
+    "licensed": false,
+    "lua": ["5.1", "5.4", "luajit"],
+    "environments": ["standalone", "love2d", "godot", "luanti", "open77"],
+    "capabilities": ["events", "storage"],
+    "optionalCapabilities": ["ui", "players"],
+    "sharedScripts": ["shared/core.lua"],
+    "serverScripts": ["server/main.lua"],
+    "clientScripts": ["client/main.lua"],
+    "environmentScripts": {
+      "love2d": ["env/love2d/hud.lua"],
+      "godot": ["env/godot/a.lua", "env/godot/b.lua"]
+    },
+    "testScripts": ["tests/core_test.lua"],
+    "permissions": ["local.events", "network.events", "filesystem.read", "filesystem.write"],
+    "dependencies": [
+      { "name": "sg_eventbus", "range": ">=1.0.0" },
+      { "name": "sg_permissions", "range": null }
+    ],
+    "unknown": [
+      { "directive": "preload_mod", "args": ["dist/x.zip"], "line": 0 }
+    ]
+  }
+}

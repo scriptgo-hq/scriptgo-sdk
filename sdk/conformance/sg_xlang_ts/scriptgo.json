@@ -1,0 +1,13 @@
+{
+  "resource": "sg_xlang_ts",
+  "version": "0.1.0",
+  "title": "Cross-language probe (TypeScript half)",
+  "description": "The TypeScript half of the cross-language pair; verified through sg_xlang_lua.",
+  "author": "scriptgo",
+  "license": "MIT",
+  "category": "library",
+  "scriptgo_version": ">=0.1.0",
+  "environments": ["dotnet"],
+  "capabilities": ["events", "logging"],
+  "server_scripts": ["server/xlang.ts"]
+}

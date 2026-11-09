@@ -1,0 +1,27 @@
+{
+  "$schema": "https://scriptgo.dev/schemas/scriptgo.json",
+  "resource": "inventory_pro",
+  "version": "1.4.1",
+  "scriptgo_version": ">=0.1.0",
+  "open77_version": ">=0.0.1",
+  "title": "Inventory Pro",
+  "description": "Stacks, weights, persistence and events.",
+  "author": "kestrel",
+  "license": "MIT",
+  "category": "inventory",
+  "lua": ["5.1", "5.4", "luajit"],
+  "environments": ["standalone", "love2d", "godot", "luanti", "open77"],
+  "capabilities": ["events", "storage"],
+  "optional_capabilities": ["ui", "players"],
+  "shared_script": "shared/core.lua",
+  "server_scripts": ["server/main.lua"],
+  "client_script": "client/main.lua",
+  "environment_scripts": {
+    "love2d": "env/love2d/hud.lua",
+    "godot": ["env/godot/a.lua", "env/godot/b.lua"]
+  },
+  "test_script": "tests/core_test.lua",
+  "permissions": ["local.events", "network.events", "filesystem.read", "filesystem.write"],
+  "dependencies": ["sg_eventbus >=1.0.0", "sg_permissions"],
+  "preload_mod": "dist/x.zip"
+}

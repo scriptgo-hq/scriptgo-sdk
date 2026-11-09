@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "warnings": [],
+  "manifest": {
+    "name": "ts_widget",
+    "sharedScripts": ["shared/types.ts"],
+    "serverScripts": ["server/main.ts"],
+    "clientScripts": ["client/ui.js"],
+    "environmentScripts": { "dotnet": ["env/dotnet/extra.lua"] },
+    "environments": ["dotnet", "standalone"]
+  }
+}

@@ -58,7 +58,9 @@ export function validateResourceFiles(manifest: ParsedManifest, filePaths: strin
   for (const pattern of manifest.webFiles) {
     if (expandGlob(pattern, files).length === 0) out.push({ code: "pattern_empty", message: `web_files pattern '${pattern}' matches no file.` });
   }
-  const manifestName = manifest.format === "open77" ? "open77.lua" : "scriptgo.lua";
-  if (!set.has(manifestName)) out.push({ code: "missing_manifest", message: `${manifestName} must be at the root of the resource.` });
+  const manifestNames = manifest.format === "open77" ? ["open77.lua"] : ["scriptgo.lua", "scriptgo.json"];
+  if (!manifestNames.some((n) => set.has(n))) {
+    out.push({ code: "missing_manifest", message: `${manifestNames.join(" or ")} must be at the root of the resource.` });
+  }
   return out;
 }

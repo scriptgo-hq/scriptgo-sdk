@@ -1,0 +1,13 @@
+{
+  "name": "@scriptgo/types",
+  "private": true,
+  "type": "module",
+  "description": "TypeScript declarations for SCRIPT//GO resources, generated from docs/spec/runtime-idl.json by tools/gen-types.mjs.",
+  "types": "index.d.ts",
+  "files": ["index.d.ts"],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p test/sample/tsconfig.json && tsc -p test/conformance/probe.tsconfig.json && tsc -p test/conformance/xlang.tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": { "typescript": "^5.8.0", "vitest": "^3.2.0", "@types/node": "^22.15.0" }
+}

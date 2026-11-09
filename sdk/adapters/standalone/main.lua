@@ -58,11 +58,20 @@ end
 
 local function normalize(p) return (p:gsub("\\", "/"):gsub("/+$", "")) end
 
+-- The manifest of a resource folder: scriptgo.lua, then scriptgo.json, then open77.lua.
+local function readManifest(root)
+    for _, name in ipairs(scriptgo.manifest.MANIFEST_FILES) do
+        local text = readFile(root .. "/" .. name)
+        if text then return text, name end
+    end
+    return nil
+end
+
 -- Finds a resource folder by name in the search paths.
 local function locate(name)
     for _, dir in ipairs(multi.search) do
         local root = normalize(dir) .. "/" .. name
-        if readFile(root .. "/scriptgo.lua") or readFile(root .. "/open77.lua") then return root end
+        if readManifest(root) then return root end
     end
     return nil
 end
@@ -214,8 +223,9 @@ end
 local function test()
     local root = positional[1] or die("test: give a resource folder")
     root = normalize(root)
-    local manifestText = readFile(root .. "/scriptgo.lua") or readFile(root .. "/open77.lua") or die("no manifest in " .. root)
-    local parsed = scriptgo.manifest.parse(manifestText, "scriptgo.lua")
+    local manifestText, manifestName = readManifest(root)
+    if not manifestText then die("no manifest in " .. root) end
+    local parsed = scriptgo.manifest.parse(manifestText, manifestName)
     if not parsed.ok then die("invalid manifest: " .. parsed.errors[1].code) end
     local m = parsed.manifest
     local testing = scriptgo.testing
@@ -273,8 +283,8 @@ local function verify()
         checks[#checks + 1] = { name = name, status = ok and "passed" or "failed", message = message or "" }
         return ok
     end
-    local text = readFile(root .. "/scriptgo.lua") or readFile(root .. "/open77.lua")
-    local parsed = text and scriptgo.manifest.parse(text, "scriptgo.lua")
+    local text, manifestName = readManifest(root)
+    local parsed = text and scriptgo.manifest.parse(text, manifestName)
     local m = parsed and parsed.ok and parsed.manifest
     check("manifest_valid", m ~= nil and m ~= false, m and (m.name .. " " .. m.version) or "manifest missing or invalid")
     local logs = {}

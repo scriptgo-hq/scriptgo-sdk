@@ -219,6 +219,33 @@ M.ENVIRONMENTS = {
             "Fast tests use the cc-core harness (CC: Tweaked's own core and Lua VM without Minecraft); those runs are an emulator and do not count as verification.",
         },
     },
+    dotnet = {
+        name = ".NET kit",
+        status = "experimental",
+        dialects = { "5.4" },
+        languages = { "lua", "ts", "js" },
+        summary = "The SCRIPT//GO sandbox as a .NET 10 library (sdk/dotnet) for engines and servers written in C#: Lua guests on KeraLua, TypeScript and JavaScript guests on Jint, one VM per resource and language. Verified through its console host.",
+        sides = { "server", "client" },
+        capabilities = {
+            events = "supported", logging = "supported", storage = "supported", players = "partial",
+            permissions = "supported", commands = "supported", config = "supported", ui = "fallback",
+            http = "supported", licensing = "supported",
+        },
+        notes = {
+            players = "The console host simulates players; an integrating engine supplies its own through IHostPlayers.",
+            storage = "The integrator's IHostStorage; the console host keeps it in memory, or in JSON files with --data.",
+            ui = "The console host writes notifications to its log; an engine implements IHostUi.",
+            http = "HttpClient off the host thread; the answer is delivered on the next tick.",
+            licensing = "Through the kit's HTTP, against the SCRIPT//GO API (checked against the API schemas by --stub-api).",
+        },
+        limitations = {
+            "TypeScript must be compiled first (scriptgo pack or scriptgo verify do it with esbuild); the kit loads x.ts.js next to x.ts.",
+            "The JavaScript memory quota bounds what one entry allocates on the host thread, not the live heap (Jint has no per-engine heap limit).",
+            "Server and client run in one process: no real network between them.",
+            "C# guests are not available yet (planned).",
+            "Measured with .NET 10 on Windows x64 only.",
+        },
+    },
     -- Planned mod platforms (docs/research/game-modding-landscape.md). No adapter yet: no
     -- capabilities, no install steps. `sales` says whether paid packages are possible there.
     hytale = {
@@ -283,7 +310,7 @@ M.ENVIRONMENTS = {
     },
 }
 
-M.ORDER = { "standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim", "cctweaked",
+M.ORDER = { "standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim", "cctweaked", "dotnet",
     "hytale", "garrysmod", "rust", "beammp", "roblox", "fivem", "redm", "kcdmp", "zomboid", "dst" }
 
 return M

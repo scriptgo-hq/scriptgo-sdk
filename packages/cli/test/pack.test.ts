@@ -108,6 +108,34 @@ describe("packForOpen77", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+  it("refuses JavaScript and TypeScript scripts: OPEN//77 runs Lua only", () => {
+    const dir = mkdtempSync(join(tmpdir(), "scriptgo-ts-"));
+    try {
+      writeFileSync(join(dir, "scriptgo.lua"), 'resource "tsres"\nversion "1.0.0"\nenvironments { "open77" }\nshared_script "shared.lua"\nserver_script "server.ts"\n');
+      writeFileSync(join(dir, "shared.lua"), "return {}\n");
+      writeFileSync(join(dir, "server.ts"), "export {};\n");
+      const out = packForOpen77(readResource(dir), tmp);
+      expect(out.errors.map((e) => e.code)).toEqual(["open77_lua_only"]);
+      expect(out.errors[0]?.message).toMatch(/server\.ts/);
+      expect(out.dest).toBe("");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  it("packs a scriptgo.json resource and names it in the generated header", () => {
+    const dir = mkdtempSync(join(tmpdir(), "scriptgo-json-"));
+    try {
+      writeFileSync(join(dir, "scriptgo.json"), JSON.stringify({ resource: "jsonres", version: "1.0.0", environments: ["open77"], server_script: "server.lua" }));
+      writeFileSync(join(dir, "server.lua"), "return {}\n");
+      const res = readResource(dir);
+      expect(res.manifestFile).toBe("scriptgo.json");
+      const out = packForOpen77(res, tmp);
+      expect(out.errors).toEqual([]);
+      expect(readFileSync(join(out.dest, "open77.lua"), "utf8")).toMatch(/from scriptgo\.json 1\.0\.0/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("OPEN//77 portability lint", () => {
@@ -168,12 +196,12 @@ describe("pack --target scriptgo", () => {
     const res = readResource(dir);
     if (!res.result.ok) throw new Error("manifest");
     const all = listFiles(res.root);
-    const packed = scriptgoArchive(res.result.manifest, all, res.root, res.manifestFile);
+    const packed = await scriptgoArchive(res.result.manifest, all, res.root, res.manifestFile);
     expect(packed.files).toContain("README.md");
     for (const t of res.result.manifest.testScripts) expect(packed.files.some((f) => f === t || f.startsWith(t.split("*")[0]!))).toBe(true);
     const names = Object.keys(unzipSync(packed.zip));
     expect(names).toContain(`${res.result.manifest.name}/README.md`);
     // The website upload and the CLI publish get byte-identical archives.
-    expect(Buffer.from(buildArchive(dir).zip).equals(Buffer.from(packed.zip))).toBe(true);
+    expect(Buffer.from((await buildArchive(dir)).zip).equals(Buffer.from(packed.zip))).toBe(true);
   });
 });

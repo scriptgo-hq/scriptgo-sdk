@@ -13,6 +13,9 @@
         "5.4",
         "LuaJIT"
       ],
+      "languages": [
+        "lua"
+      ],
       "runtimeVersions": [
         "Lua 5.1",
         "Lua 5.4",
@@ -61,6 +64,9 @@
       "salesNote": "",
       "luaDialects": [
         "LuaJIT"
+      ],
+      "languages": [
+        "lua"
       ],
       "runtimeVersions": [
         "LÖVE 11.5"
@@ -114,6 +120,9 @@
       "luaDialects": [
         "5.4",
         "LuaJIT"
+      ],
+      "languages": [
+        "lua"
       ],
       "runtimeVersions": [
         "Godot 4.5.2-stable"
@@ -169,6 +178,9 @@
         "5.1",
         "LuaJIT"
       ],
+      "languages": [
+        "lua"
+      ],
       "runtimeVersions": [
         "Luanti 5.18.0"
       ],
@@ -219,6 +231,9 @@
       "salesNote": "Paid packages are reviewed first: the game's rights holder restricts commercial use of its IP.",
       "luaDialects": [
         "5.4"
+      ],
+      "languages": [
+        "lua"
       ],
       "runtimeVersions": [
         "OPEN//77 server 1.0.0+5282e21c"
@@ -273,6 +288,9 @@
       "luaDialects": [
         "LuaJIT"
       ],
+      "languages": [
+        "lua"
+      ],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "Lua HTTP services on Nginx.",
@@ -294,6 +312,9 @@
       "luaDialects": [
         "LuaJIT"
       ],
+      "languages": [
+        "lua"
+      ],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "2D games with Defold.",
@@ -314,6 +335,9 @@
       "salesNote": "",
       "luaDialects": [
         "LuaJIT"
+      ],
+      "languages": [
+        "lua"
       ],
       "runtimeVersions": [
         "Neovim 0.12"
@@ -368,6 +392,9 @@
       "luaDialects": [
         "5.2"
       ],
+      "languages": [
+        "lua"
+      ],
       "runtimeVersions": [
         "CC: Tweaked 1.121.0, Minecraft 1.20.1"
       ],
@@ -417,6 +444,63 @@
       ]
     },
     {
+      "slug": "dotnet",
+      "name": ".NET kit",
+      "kind": "runtime",
+      "status": "experimental",
+      "sales": "allowed",
+      "salesNote": "",
+      "luaDialects": [
+        "5.4"
+      ],
+      "languages": [
+        "lua",
+        "ts",
+        "js"
+      ],
+      "runtimeVersions": [
+        ".NET 10.0.11; KeraLua 1.4.9 (Lua 5.4); Jint 4.17.0"
+      ],
+      "adapterVersion": "dotnet-0.1.0",
+      "summary": "The SCRIPT//GO sandbox as a .NET 10 library (sdk/dotnet) for engines and servers written in C#: Lua guests on KeraLua, TypeScript and JavaScript guests on Jint, one VM per resource and language. Verified through its console host.",
+      "capabilities": {
+        "commands": "supported",
+        "config": "supported",
+        "events": "supported",
+        "http": "supported",
+        "licensing": "supported",
+        "logging": "supported",
+        "permissions": "supported",
+        "players": "partial",
+        "storage": "supported",
+        "ui": "fallback"
+      },
+      "capabilityNotes": {
+        "http": "HttpClient off the host thread; the answer is delivered on the next tick.",
+        "licensing": "Through the kit's HTTP, against the SCRIPT//GO API (checked against the API schemas by --stub-api).",
+        "players": "The console host simulates players; an integrating engine supplies its own through IHostPlayers.",
+        "storage": "The integrator's IHostStorage; the console host keeps it in memory, or in JSON files with --data.",
+        "ui": "The console host writes notifications to its log; an engine implements IHostUi."
+      },
+      "setupMarkdown": "The .NET kit is a library (`ScriptGo.Host`, .NET 10) that a C# engine or server embeds, plus a\nconsole host (`scriptgo-dotnet`) that runs and verifies resources without an engine. It runs Lua\nresources (Lua 5.4 through KeraLua) and TypeScript or JavaScript resources (Jint). It is\nexperimental and has been measured on Windows x64 only.\n\n1. Install the .NET 10 SDK. The `scriptgo` CLI finds it on the `PATH`, in `DOTNET_ROOT`, in the\n   default install folder, or through `--dotnet <path>` / `SCRIPTGO_DOTNET`.\n\n2. Verify a resource on the kit. The first run builds the console host; TypeScript entries are\n   compiled with esbuild into a temporary copy (the source folder is not changed):\n\n   ```bash\n   scriptgo verify resources/sg_inventory --env dotnet\n   scriptgo verify resources/my_ts_resource --env dotnet --lang ts\n   ```\n\n3. Run resources with the console host. It loads compiled TypeScript (`x.ts.js` next to `x.ts`),\n   which a `scriptgo pack` archive contains:\n\n   ```bash\n   dotnet sdk/dotnet/ScriptGo.Host.Standalone/bin/Release/net10.0/scriptgo-dotnet.dll run resources/sg_inventory --search resources --for 2000\n   ```\n\n4. Privileges, per-resource values and convars come from a JSON file (`--config`), as in the\n   standalone host; `--data <dir>` keeps storage in JSON files instead of memory:\n\n   ```json\n   {\n     \"permissions\": { \"1\": [\"inventory.give\"] },\n     \"resources\": { \"sg_inventory\": { \"slots\": 12 } },\n     \"convars\": { \"scriptgo_api\": \"https://api.example\" }\n   }\n   ```\n\nTo embed the kit in an engine, see `sdk/dotnet/README.md`.\n",
+      "limitations": [
+        "TypeScript must be compiled first (scriptgo pack or scriptgo verify do it with esbuild); the kit loads x.ts.js next to x.ts.",
+        "The JavaScript memory quota bounds what one entry allocates on the host thread, not the live heap (Jint has no per-engine heap limit).",
+        "Server and client run in one process: no real network between them.",
+        "C# guests are not available yet (planned).",
+        "Measured with .NET 10 on Windows x64 only."
+      ],
+      "listed": true,
+      "sortOrder": 100,
+      "adapters": [
+        {
+          "version": "dotnet-0.1.0",
+          "status": "experimental",
+          "notes": "measured by verification reports"
+        }
+      ]
+    },
+    {
       "slug": "hytale",
       "name": "Hytale",
       "kind": "mod_platform",
@@ -424,6 +508,9 @@
       "sales": "allowed",
       "salesNote": "The game's terms allow paid mods and plugins.",
       "luaDialects": [],
+      "languages": [
+        "lua"
+      ],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "A server plugin that runs SCRIPT//GO packages on Hytale servers; players install nothing.",
@@ -432,7 +519,7 @@
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
-      "sortOrder": 100,
+      "sortOrder": 110,
       "adapters": []
     },
     {
@@ -445,6 +532,9 @@
       "luaDialects": [
         "LuaJIT"
       ],
+      "languages": [
+        "lua"
+      ],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "Packages on Garry's Mod servers and clients (roleplay, sandbox, game modes), through its Lua.",
@@ -453,7 +543,7 @@
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
-      "sortOrder": 110,
+      "sortOrder": 120,
       "adapters": []
     },
     {
@@ -466,6 +556,9 @@
       "luaDialects": [
         "5.4"
       ],
+      "languages": [
+        "lua"
+      ],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "An Oxide/Carbon plugin that runs SCRIPT//GO packages on Rust servers through an embedded Lua VM.",
@@ -474,7 +567,7 @@
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
-      "sortOrder": 120,
+      "sortOrder": 130,
       "adapters": []
     },
     {
@@ -488,6 +581,9 @@
         "5.3",
         "LuaJIT"
       ],
+      "languages": [
+        "lua"
+      ],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "BeamMP server plugins and BeamNG.drive client mods, for driving and roleplay servers.",
@@ -496,7 +592,7 @@
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
-      "sortOrder": 130,
+      "sortOrder": 140,
       "adapters": []
     },
     {
@@ -509,6 +605,9 @@
       "luaDialects": [
         "Luau"
       ],
+      "languages": [
+        "lua"
+      ],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "A Luau compatibility layer for Roblox experiences.",
@@ -517,7 +616,7 @@
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
-      "sortOrder": 140,
+      "sortOrder": 150,
       "adapters": []
     },
     {
@@ -530,6 +629,9 @@
       "luaDialects": [
         "5.4"
       ],
+      "languages": [
+        "lua"
+      ],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "A shim that runs SCRIPT//GO packages on FiveM servers, with the same threads, events and exports model.",
@@ -538,7 +640,7 @@
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
-      "sortOrder": 150,
+      "sortOrder": 160,
       "adapters": []
     },
     {
@@ -551,6 +653,9 @@
       "luaDialects": [
         "5.4"
       ],
+      "languages": [
+        "lua"
+      ],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "The same shim on RedM roleplay servers.",
@@ -559,7 +664,7 @@
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
-      "sortOrder": 160,
+      "sortOrder": 170,
       "adapters": []
     },
     {
@@ -572,6 +677,9 @@
       "luaDialects": [
         "5.4"
       ],
+      "languages": [
+        "lua"
+      ],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "Game modes and client scripts for KCD:MP medieval roleplay servers (Kingdom Come: Deliverance II).",
@@ -580,7 +688,7 @@
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
-      "sortOrder": 170,
+      "sortOrder": 180,
       "adapters": []
     },
     {
@@ -593,6 +701,9 @@
       "luaDialects": [
         "5.1"
       ],
+      "languages": [
+        "lua"
+      ],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "Project Zomboid server and client mods, for survival and roleplay servers.",
@@ -601,7 +712,7 @@
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
-      "sortOrder": 180,
+      "sortOrder": 190,
       "adapters": []
     },
     {
@@ -614,6 +725,9 @@
       "luaDialects": [
         "5.1"
       ],
+      "languages": [
+        "lua"
+      ],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "Don't Starve Together server and client mods.",
@@ -622,7 +736,7 @@
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
-      "sortOrder": 190,
+      "sortOrder": 200,
       "adapters": []
     }
   ]

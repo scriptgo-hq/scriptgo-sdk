@@ -1,0 +1,7 @@
+{
+  "resource": "res_null",
+  "version": "1.0.0",
+  "scriptgo_version": ">=0.1.0",
+  "title": null,
+  "server_script": "server/main.lua"
+}

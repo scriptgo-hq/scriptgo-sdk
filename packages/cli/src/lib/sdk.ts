@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseManifest, type ParseResult } from "@scriptgo/manifest";
+import { MANIFEST_FILES, parseManifest, type ParseResult } from "@scriptgo/manifest";
 
 /** Repository root (the CLI runs from the monorepo; a published CLI would bundle `sdk/`). */
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
@@ -51,16 +51,20 @@ export interface LoadedResource {
   result: ParseResult;
 }
 
+/** The manifest of a resource folder: scriptgo.lua, then scriptgo.json, then open77.lua; null when none. */
+export function findManifestFile(dir: string): string | null {
+  for (const file of MANIFEST_FILES) {
+    if (existsSync(join(dir, file))) return file;
+  }
+  return null;
+}
+
 export function readResource(dir: string): LoadedResource {
   const root = resolve(dir);
-  for (const file of ["scriptgo.lua", "open77.lua"]) {
-    const p = join(root, file);
-    if (existsSync(p)) {
-      const source = readFileSync(p, "utf8");
-      return { root, manifestFile: file, source, result: parseManifest(source, { fileName: file }) };
-    }
-  }
-  throw new Error(`no scriptgo.lua or open77.lua in ${root}`);
+  const file = findManifestFile(root);
+  if (!file) throw new Error(`no scriptgo.lua, scriptgo.json or open77.lua in ${root}`);
+  const source = readFileSync(join(root, file), "utf8");
+  return { root, manifestFile: file, source, result: parseManifest(source, { fileName: file }) };
 }
 
 /** Every file under a folder, relative with forward slashes (skips node_modules and dot folders). */

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>ScriptGo.Host</RootNamespace>
+    <Description>The SCRIPT//GO host kit for .NET: resources, events, exports across languages, quotas, and Lua (KeraLua) and JavaScript (Jint) guests.</Description>
+    <PackageId>ScriptGo.Host</PackageId>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="KeraLua" />
+    <PackageReference Include="Jint" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The guest preludes, and the portable core's JSON module (one implementation for every Lua host). -->
+    <EmbeddedResource Include="Guests/Lua/prelude.lua" LogicalName="ScriptGo.Host.prelude.lua" />
+    <EmbeddedResource Include="../../lua/scriptgo/json.lua" LogicalName="ScriptGo.Host.json.lua" />
+    <EmbeddedResource Include="../../lua/scriptgo/compat.lua" LogicalName="ScriptGo.Host.compat.lua" />
+    <EmbeddedResource Include="Guests/JavaScript/prelude.js" LogicalName="ScriptGo.Host.prelude.js" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ScriptGo.Host.Tests" />
+  </ItemGroup>
+</Project>

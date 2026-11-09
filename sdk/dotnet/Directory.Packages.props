@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The same Lua engine as the OPEN//77 server, so a Lua resource behaves the same in both. -->
+    <PackageVersion Include="KeraLua" Version="1.4.9" />
+    <!-- JavaScript guests (TypeScript compiles to JavaScript at pack time). -->
+    <PackageVersion Include="Jint" Version="4.17.0" />
+  </ItemGroup>
+</Project>

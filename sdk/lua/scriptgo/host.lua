@@ -313,6 +313,8 @@ function M.new(opts)
     end
     self.capabilities.events = true
     self.capabilities.logging = true
+    -- Guest languages this host runs: the portable host is Lua only (.js/.ts need a JS guest).
+    self.languages = { lua = true }
     self.now = self:_clock()
     return self
 end
@@ -364,11 +366,13 @@ end
 function Host:addResource(root, opts)
     opts = opts or {}
     root = root:gsub("[/\\]+$", "")
-    local source, fileName = self:_read(root .. "/scriptgo.lua"), "scriptgo.lua"
-    if not source then
-        source, fileName = self:_read(root .. "/open77.lua"), "open77.lua"
+    -- scriptgo.lua, then scriptgo.json, then open77.lua: the first one found is the manifest.
+    local source, fileName
+    for _, name in ipairs(manifest.MANIFEST_FILES) do
+        source = self:_read(root .. "/" .. name)
+        if source then fileName = name break end
     end
-    if not source then return nil, "no scriptgo.lua or open77.lua in " .. root end
+    if not source then return nil, "no scriptgo.lua, scriptgo.json or open77.lua in " .. root end
     local parsed = manifest.parse(source, fileName)
     if not parsed.ok then
         local msgs = {}
@@ -460,6 +464,20 @@ function Host:start(name, visiting)
             res.state, res.failure = "failed", caps.unavailable(c, self.environment)
             self:log("error", name .. ": " .. res.failure)
             return false, res.failure
+        end
+    end
+    -- Only the scripts this host would run count: its sides and its own environment scripts.
+    local runs = { m.sharedScripts, m.environmentScripts[self.environment] or {} }
+    if self.sides.server then runs[#runs + 1] = m.serverScripts end
+    if self.sides.client then runs[#runs + 1] = m.clientScripts end
+    for _, paths in ipairs(runs) do
+        for _, p in ipairs(paths) do
+            local lang = manifest.scriptLanguage(p)
+            if lang and not self.languages[lang] then
+                res.state, res.failure = "failed", "language_unavailable:" .. lang .. "@" .. self.environment
+                self:log("error", name .. ": " .. res.failure)
+                return false, res.failure
+            end
         end
     end
     if #m.environments > 0 then

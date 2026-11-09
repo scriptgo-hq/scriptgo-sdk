@@ -1,0 +1,9 @@
+<Project Sdk="MSTest.Sdk">
+  <PropertyGroup>
+    <Description>Tests of the SCRIPT//GO .NET host kit.</Description>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../ScriptGo.Host/ScriptGo.Host.csproj" />
+  </ItemGroup>
+</Project>
