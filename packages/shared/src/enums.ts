@@ -10,6 +10,12 @@ export type EnvironmentKind = z.infer<typeof EnvironmentKind>;
 /** Whether paid packages are possible there: allowed, free_only (the rights holder forbids selling), review. */
 export const EnvironmentSales = z.enum(["allowed", "free_only", "review"]);
 export type EnvironmentSales = z.infer<typeof EnvironmentSales>;
+/** verified: a real run passed; written: adapter code exists, no real run yet; none: no adapter code yet. */
+export const AdapterState = z.enum(["verified", "written", "none"]);
+export type AdapterState = z.infer<typeof AdapterState>;
+/** How an environment runs packages: a CLI host, a library, an addon, a mod, a plugin, a computer program, a shim, or an embedded host kit. */
+export const IntegrationType = z.enum(["cli", "library", "addon", "mod", "plugin", "program", "shim", "kit"]);
+export type IntegrationType = z.infer<typeof IntegrationType>;
 
 export const CapabilitySupport = z.enum(["supported", "partial", "fallback", "unavailable"]);
 export type CapabilitySupport = z.infer<typeof CapabilitySupport>;

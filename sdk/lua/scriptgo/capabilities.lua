@@ -24,6 +24,12 @@ function M.unavailable(cap, environment)
 end
 
 -- support: "supported" | "partial" | "fallback" | "unavailable"
+-- integration: how the environment runs packages, shown on its page (ADR-0022).
+--   type: "cli" | "library" | "addon" | "mod" | "plugin" | "program" | "shim" | "kit"
+--   runtime: the host and its Lua, as measured or as built against; summary: one or two sentences.
+-- blockedOn: for an adapter that is written but has not passed a real run, what that run waits for,
+--   said neutrally. Whether adapter code exists and whether a real run passed are not declared here:
+--   tools/gen-environments.mjs reads them from the repository and from verification/reports.
 M.ENVIRONMENTS = {
     standalone = {
         name = "Lua Standalone",
@@ -42,6 +48,11 @@ M.ENVIRONMENTS = {
             http = "Uses the system curl executable when present.",
         },
         limitations = { "No rendering: `ui` falls back to console output.", "HTTP needs curl on the PATH." },
+        integration = {
+            type = "cli",
+            runtime = "PUC Lua 5.4 and 5.1, or LuaJIT 2.1, from the PATH",
+            summary = "The `scriptgo` CLI runs resources on a plain Lua interpreter, with no engine. `scriptgo run` ticks the host in simulated or real time and `scriptgo test` runs test scripts; it is the reference host the other environments are compared with.",
+        },
     },
     love2d = {
         name = "LÖVE",
@@ -67,6 +78,11 @@ M.ENVIRONMENTS = {
             "Single-player only: no real network between server and client.",
             "HTTP needs io.popen and a curl executable (on the PATH, or opts.curl).",
             "Measured with LÖVE 11.5 (LuaJIT 2.1) on Windows, as a folder and as a .love archive, through lovec.exe; macOS, Linux, mobile and fused builds are not measured yet.",
+        },
+        integration = {
+            type = "library",
+            runtime = "LÖVE 11.5 (LuaJIT 2.1)",
+            summary = "A Lua module the game loads, `scriptgo_love.lua`. It runs the core in LÖVE's LuaJIT, ticks it from `love.update` through `sg:update(dt)` and draws notifications with `sg:draw()`. Server and local client share the game process.",
         },
     },
     godot = {
@@ -95,6 +111,11 @@ M.ENVIRONMENTS = {
             "Single-player only: no real network between server and client.",
             "Measured with Godot 4.5.2 on Windows x86_64, headless and windowed, with the Lua 5.4 and LuaJIT builds of lua-gdextension 0.7.0; exported builds, macOS, Linux, mobile and Web are not measured yet.",
         },
+        integration = {
+            type = "addon",
+            runtime = "Godot 4.5.2 with lua-gdextension 0.7.0 (Lua 5.4 or LuaJIT)",
+            summary = "An autoload node, `ScriptGoHost`, creates a Lua state through the lua-gdextension addon, runs the core in it and ticks it from `_process`. Server and local client share the game process.",
+        },
     },
     luanti = {
         name = "Luanti",
@@ -119,6 +140,11 @@ M.ENVIRONMENTS = {
             "No client side.",
             "HTTP, and so online license checks, only when the server owner allows it.",
             "Verified headless on Luanti 5.18.0 (LuaJIT); paths that need a connected player are not yet covered by a run.",
+        },
+        integration = {
+            type = "mod",
+            runtime = "Luanti 5.18.0 server (LuaJIT 2.1)",
+            summary = "One regular Luanti mod, `scriptgo`, runs the core in the server's Lua and ticks it from a globalstep. It needs no trusted-mod entry; HTTP needs the server owner to list it in `secure.http_mods`.",
         },
     },
     open77 = {
@@ -152,6 +178,11 @@ M.ENVIRONMENTS = {
             "No wall clock on the client: ScriptGo.time.now() is nil there.",
             "Verified on a dedicated server (server half); the client half is not verified yet.",
         },
+        integration = {
+            type = "shim",
+            runtime = "OPEN//77's own Lua 5.4 runtime, on its dedicated server and game client",
+            summary = "OPEN//77 runs its own Lua runtime with the same resource shape. `scriptgo pack --target open77` adapts a package to it: a generated `open77.lua` manifest, the package's files, and a three-file shim (shared, server, client), loaded first, that maps `ScriptGo.*` onto OPEN//77's `Open77.*` API. The packed manifest asks only for the permissions the package's capabilities need.",
+        },
     },
     openresty = { name = "OpenResty", status = "planned", dialects = { "luajit" }, summary = "Lua HTTP services on Nginx.", sides = { "server" }, capabilities = {}, notes = {}, limitations = {} },
     defold = { name = "Defold", status = "planned", dialects = { "luajit" }, summary = "2D games with Defold.", sides = { "server", "client" }, capabilities = {}, notes = {}, limitations = {} },
@@ -180,6 +211,11 @@ M.ENVIRONMENTS = {
             "Single user: no real network between server and client.",
             "HTTP, and so online license checks, needs curl and Neovim 0.10 or later.",
             "Measured with Neovim 0.12.6 (LuaJIT 2.1) on Windows, headless (nvim --headless --clean -l); macOS, Linux and older Neovim releases are not measured yet.",
+        },
+        integration = {
+            type = "plugin",
+            runtime = "Neovim 0.12.6 (LuaJIT 2.1)",
+            summary = "An ordinary Neovim plugin. `setup()` starts the core in Neovim's LuaJIT, a libuv timer ticks it on the main loop, and `:ScriptGo <command>` runs resource commands. Server and local client run in the editor.",
         },
     },
     cctweaked = {
@@ -210,13 +246,18 @@ M.ENVIRONMENTS = {
             licensing = "Not offered: the Minecraft Usage Guidelines allow a mod only if it \"cannot be used to directly or indirectly verify whether a player owns or has access to out-of-game content, products, or services that affect in-game features and functions\" (minecraft.net/en-us/usage-guidelines).",
         },
         limitations = {
-            "Experimental and not verified in Minecraft yet: a run needs the operator's own acceptance of the Minecraft EULA first.",
+            "Experimental: one real server run so far, the conformance probe (35 of 35 checks). The official kits fail there only because they do not declare cctweaked yet. Each run needs the operator's own acceptance of the Minecraft EULA.",
             "Free packages only, and no licence checks (see the sales rule and the licensing note).",
             "Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft. Not affiliated with the CC: Tweaked developers.",
             "Lua 5.2 (Cobalt VM): no // or bitwise operators (use bit32), no collectgarbage.",
             "Everything runs on one computer: code that runs for about 7 seconds without yielding is stopped by CC: Tweaked (\"Too long without yielding\").",
             "Pinned for runs: Minecraft 1.20.1, Fabric loader 0.20.1, CC: Tweaked 1.121.0. Other versions are not measured.",
             "Fast tests use the cc-core harness (CC: Tweaked's own core and Lua VM without Minecraft); those runs are an emulator and do not count as verification.",
+        },
+        integration = {
+            type = "program",
+            runtime = "CC: Tweaked 1.121.0 on a Minecraft 1.20.1 Fabric server (Cobalt, Lua 5.2)",
+            summary = "A program on one ComputerCraft computer, which the CC: Tweaked mod adds to a Fabric server. It runs the core in the computer's Lua 5.2 VM, ticked by a CC timer every server tick; the server and client sides both run on that computer.",
         },
     },
     dotnet = {
@@ -244,6 +285,11 @@ M.ENVIRONMENTS = {
             "Server and client run in one process: no real network between them.",
             "C# guests are not available yet (planned).",
             "Measured with .NET 10 on Windows x64 only.",
+        },
+        integration = {
+            type = "kit",
+            runtime = ".NET 10, with KeraLua 1.4.9 (Lua 5.4) and Jint 4.17.0",
+            summary = "An embedded host kit: `ScriptGo.Host`, a .NET 10 library that a C# engine or server references and ticks from its own loop. It runs Lua 5.4 (KeraLua) and JavaScript or TypeScript (Jint) side by side, one VM per resource side and language. Its console host, `scriptgo-dotnet`, runs the verification.",
         },
     },
     -- Planned mod platforms (docs/research/game-modding-landscape.md). No adapter yet: no
@@ -278,6 +324,12 @@ M.ENVIRONMENTS = {
             "Commands a resource registers after the server has started are reached through /sg <command>.",
             "HTTP, and so online license checks, only to hosts the operator allows.",
         },
+        integration = {
+            type = "plugin",
+            runtime = "Hytale server (Java, JDK 25) with Cobalt 0.9.9 (Lua 5.2)",
+            summary = "A Java server plugin that embeds Cobalt, a Lua 5.2 VM written in Java, and runs the core on its own host thread, never on a world thread. Players install nothing.",
+        },
+        blockedOn = "Waiting for the Hytale server files, which come with a Hytale account, and for a JDK 25 to build the plugin against them.",
     },
     garrysmod = {
         name = "Garry's Mod", kind = "mod_platform", status = "beta", dialects = { "luajit" }, sides = { "server" },
@@ -306,6 +358,11 @@ M.ENVIRONMENTS = {
             "An empty server hibernates and stops ticking unless sv_hibernate_think is 1.",
             "CAMI is implemented but not yet run with a real admin mod.",
         },
+        integration = {
+            type = "addon",
+            runtime = "Garry's Mod dedicated server: GLua on LuaJIT 2.0.4 (32-bit) or LuaJIT 2.1 (64-bit)",
+            summary = "One server addon, `scriptgo`, carries the core and runs it in the server's GLua, ticked on the `Think` hook. `scriptgo pack --target garrysmod` turns each package into its own addon.",
+        },
     },
     rust = {
         name = "Rust (Oxide/Carbon)", kind = "mod_platform", status = "planned", dialects = { "5.4" }, sides = { "server" },
@@ -333,6 +390,12 @@ M.ENVIRONMENTS = {
             "KeraLua's native Lua 5.4 (lua54.dll or liblua54.so) must be installed in RustDedicated_Data/Plugins/x86_64.",
             "HTTP responses carry no headers.",
         },
+        integration = {
+            type = "plugin",
+            runtime = "Rust dedicated server with Oxide or Carbon; KeraLua (Lua 5.4)",
+            summary = "One C# plugin, `ScriptGo.cs`, the same file for Oxide and Carbon. Rust's plugin frameworks no longer run Lua, so the plugin loads a small bridge that runs the core in a KeraLua (Lua 5.4) VM, ticked by a framework timer.",
+        },
+        blockedOn = "Waiting for disk space: the Rust dedicated server needs about 6 GB installed.",
     },
     -- BeamMP has an adapter (sdk/adapters/beammp, ADR-0019) but no run on a real server yet:
     -- BeamMP-Server refuses to start without the owner's Keymaster AuthKey, so it stays planned.
@@ -361,6 +424,12 @@ M.ENVIRONMENTS = {
             "Server side only: BeamNG.drive client mods are out of scope, and no game client is run.",
             "HTTP, and so online license checks, needs curl on the server's PATH.",
         },
+        integration = {
+            type = "plugin",
+            runtime = "BeamMP-Server 3.9.3 (Lua 5.3)",
+            summary = "One BeamMP server plugin, `scriptgo`, runs the core in the plugin's own Lua 5.3 state, ticked by a 25 ms event timer. `scriptgo pack --target beammp` builds it with the package and its dependencies.",
+        },
+        blockedOn = "Waiting for a server key: BeamMP-Server does not start without an AuthKey from the BeamMP Keymaster, which the server owner requests.",
     },
     roblox = {
         name = "Roblox", kind = "mod_platform", status = "planned", dialects = { "luau" }, sides = { "server", "client" },
@@ -400,6 +469,12 @@ M.ENVIRONMENTS = {
             "The client has no `os`: ScriptGo.time.now() is nil there.",
             "RedM runs the same shim (game rdr3); it is not built or verified yet.",
         },
+        integration = {
+            type = "shim",
+            runtime = "FXServer and the FiveM client (Lua 5.4)",
+            summary = "FiveM already runs this resource shape. `scriptgo pack --target fivem` emits a resource folder with a generated `fxmanifest.lua` and one shared shim file, loaded first, that maps `ScriptGo.*` onto FiveM natives. Threads, events and exports stay FiveM's own.",
+        },
+        blockedOn = "Waiting for a server key: FXServer does not start without a Cfx.re registration key (sv_licenseKey).",
     },
     redm = {
         name = "RedM", kind = "mod_platform", status = "planned", dialects = { "5.4" }, sides = { "server", "client" },

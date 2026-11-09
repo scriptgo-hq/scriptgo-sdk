@@ -21,6 +21,8 @@ file in the same change.**
 EnvironmentStatus   = "available" | "beta" | "experimental" | "planned"
 EnvironmentKind     = "runtime" | "mod_platform"   // mod_platform: a layer on top of an existing game
 EnvironmentSales    = "allowed" | "free_only" | "review"   // the underlying game's rule on selling mods
+AdapterState        = "verified" | "written" | "none"   // a real run passed | adapter code, no real run yet | no code yet
+IntegrationType     = "cli" | "library" | "addon" | "mod" | "plugin" | "program" | "shim" | "kit"
 CapabilitySupport   = "supported" | "partial" | "fallback" | "unavailable"
 CompatibilityStatus = "verified" | "failing" | "stale" | "not_tested" | "unsupported"
 ReleaseStatus       = "draft" | "validating" | "validation_failed" | "ready" | "published" | "deprecated" | "yanked"
@@ -71,6 +73,9 @@ Environment = {
   salesNote: string,                  // one line: the rule and why; "" when allowed without condition
   luaDialects: string[],              // as sdk/environments.json writes them: "5.1", "5.4", "LuaJIT"
   languages: string[],                // guest languages its host runs: ["lua"], or ["lua", "ts", "js"] on dotnet
+  sides: string[],                    // ["server"] or ["server", "client"]
+  adapterState: AdapterState,         // read from the repository and verification/reports, never declared
+  blockedOn: string,                  // adapterState "written": what the first real run waits for; "" otherwise
   runtimeVersions: string[],          // ["11.5"]
   adapterVersion: string,
   summary: string,
@@ -79,7 +84,14 @@ Environment = {
   verifiedPackages: number,
   lastRun: { status: CompatibilityStatus, ranAt: string, runId: string } | null
 }
-EnvironmentDetail = Environment & { setupMarkdown: string, limitations: string[], packages: PackageSummary[] }
+EnvironmentDetail = Environment & {
+  setupMarkdown: string, limitations: string[], packages: PackageSummary[],
+  integration: { type: IntegrationType, runtime: string, summary: string } | null,   // null: no adapter code yet
+  proof: {                            // verified runs from verification/reports: newest version of each package, per runtime
+    package: string, version: string, runtime: string, lua: string, adapterVersion: string,
+    checksPassed: number, checks: number, ranAt: string
+  }[]
+}
 
 PackageSummary = {
   id: string,
