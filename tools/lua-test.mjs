@@ -6,9 +6,11 @@
 //   node tools/lua-test.mjs --only lua51    # one interpreter
 //   node tools/lua-test.mjs --json out.json # machine-readable summary
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { bundle } from "./bundle-lua.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -50,6 +52,12 @@ const fixtures = readdirSync(join(specDir, "fixtures", "manifests"))
   .map((f) => f.slice(0, -4))
   .sort()
   .join(",");
+
+// The single-file bundle, built fresh for this run.
+const bundleDir = mkdtempSync(join(tmpdir(), "scriptgo-bundle-"));
+mkdirSync(bundleDir, { recursive: true });
+const bundleFile = join(bundleDir, "scriptgo.lua");
+writeFileSync(bundleFile, bundle());
 
 const summary = [];
 let failed = false;
@@ -94,6 +102,16 @@ for (const lua of interpreters) {
     } else {
       entry.failed += 1;
     }
+  }
+
+  // The single-file bundle must behave like the sources: the conformance probe through it.
+  const b = spawnSync(lua.path, [join(specDir, "bundle_smoke.lua"), bundleFile, root], { cwd: root, encoding: "utf8" });
+  const bline = ((b.stdout || "") + (b.stderr || "")).trim().split(/\r?\n/).pop() || "";
+  console.log(`  ${bline}`);
+  entry.tests += 1;
+  if (b.status !== 0) {
+    failed = true;
+    entry.failed += 1;
   }
   summary.push(entry);
 }
