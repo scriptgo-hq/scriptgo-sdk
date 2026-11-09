@@ -36,6 +36,9 @@
 //   beammp      starts a real BeamMP-Server on loopback with the SCRIPT//GO plugin in verify mode
 //               (lib/beammp.ts). Needs the server (--beammp-server, SCRIPTGO_BEAMMP_SERVER or
 //               tools/runtimes/beammp) and the owner's AuthKey in BEAMMP_AUTH_KEY; else skipped.
+//   fivem       starts the owner's FXServer on loopback with the packed resource and the shim
+//               (lib/fivem-verify.ts). Needs --fivem-server or SCRIPTGO_FIVEM_SERVER and the owner's
+//               key in SCRIPTGO_FIVEM_LICENSE_KEY; else skipped.
 //
 // --lang lua|ts|js names the guest language the run is evidence for (default: the resource's own,
 // ts when it has TypeScript scripts). Reports are tagged per language on the dotnet environment
@@ -76,7 +79,7 @@ import { verifyGarrysmod } from "./verify-garrysmod.ts";
 import { HYTALE_HELP, verifyHytale } from "./verify-hytale.ts";
 import { verifyRust } from "./verify-rust.ts";
 import { BEAMMP_PORT, findBeamMPServer, verifyBeamMP } from "../lib/beammp.ts";
-import { fivemOptions, verifyFivem } from "../lib/fivem-verify.ts";
+import { FIVEM_KEY_ENV, FIVEM_PORT, fivemOptions, verifyFivem } from "../lib/fivem-verify.ts";
 
 export const summary = "Run a resource on its environments and write compatibility reports";
 
@@ -749,12 +752,13 @@ function runTag(r: Report): string {
 export async function run(args: string[]): Promise<number> {
   const a = parseArgs(args, { booleans: ["help", "json", "stub-api", "no-readme-example", "accept-minecraft-eula", "rebuild-dotnet"], repeatable: ["search"] });
   if (a.bools.has("help") || a.positional.length === 0) {
-    console.log(`scriptgo verify <resourceDir> [--env standalone|open77|luanti|love2d|godot|neovim|cctweaked|dotnet|garrysmod|hytale|rust|beammp|all] [--lua all|lua54|lua51|luajit]
+    console.log(`scriptgo verify <resourceDir> [--env standalone|open77|luanti|love2d|godot|neovim|cctweaked|dotnet|garrysmod|hytale|rust|beammp|fivem|all] [--lua all|lua54|lua51|luajit]
     [--lang lua|ts|js] [--dotnet path\\to\\dotnet.exe] [--rebuild-dotnet]
     [--luanti-image ${LUANTI_IMAGE}] [--luanti-seconds 3] [--love path\\to\\lovec.exe] [--godot path\\to\\Godot_console.exe]
     [--nvim path\\to\\nvim.exe] [--cctweaked-seconds 3] [--cctweaked-timeout 600] [--accept-minecraft-eula] [--rust-server path\\to\\server] [--rust-seconds 15] [--no-readme-example]
     ${HYTALE_HELP}
     [--beammp-server path\\to\\BeamMP-Server.exe] [--beammp-port ${BEAMMP_PORT}] [--beammp-seconds 3]  (AuthKey: BEAMMP_AUTH_KEY)
+    [--fivem-server path\\to\\FXServer.exe] [--fivem-port ${FIVEM_PORT}] [--fivem-timeout 120000] [--fivem-workdir <dir>]  (key: ${FIVEM_KEY_ENV})
     [--search dir]... [--out verification/reports] [--json]
     [--stub-api | --api <url> --license-key <sg_live_...>]
     [--open77-server path\\to\\Open77.Server.exe] [--port 11861] [--settle 1500] [--timeout 30000]
@@ -887,7 +891,7 @@ export async function run(args: string[]): Promise<number> {
     for (const c of r.checks) c.message = scrub(c.message);
   }
   if (reports.length === 0) {
-    console.error(`unknown environment '${env}' (standalone, open77, luanti, love2d, godot, neovim, cctweaked, dotnet, garrysmod, hytale, rust, beammp, all)`);
+    console.error(`unknown environment '${env}' (standalone, open77, luanti, love2d, godot, neovim, cctweaked, dotnet, garrysmod, hytale, rust, beammp, fivem, all)`);
     return 2;
   }
 

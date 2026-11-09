@@ -70,6 +70,7 @@ Environment = {
   sales: EnvironmentSales,
   salesNote: string,                  // one line: the rule and why; "" when allowed without condition
   luaDialects: string[],              // as sdk/environments.json writes them: "5.1", "5.4", "LuaJIT"
+  languages: string[],                // guest languages its host runs: ["lua"], or ["lua", "ts", "js"] on dotnet
   runtimeVersions: string[],          // ["11.5"]
   adapterVersion: string,
   summary: string,

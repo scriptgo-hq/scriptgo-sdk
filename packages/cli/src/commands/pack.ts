@@ -1,4 +1,4 @@
-// scriptgo pack <dir> --target scriptgo|open77|garrysmod [--out dist]
+// scriptgo pack <dir> --target scriptgo|open77|garrysmod|beammp|fivem [--out dist]
 //
 //   scriptgo  a .zip of the resource for `scriptgo publish` (manifest + every referenced file);
 //             each TypeScript entry x.ts is compiled to x.ts.js inside the archive (lib/typescript.ts)
@@ -8,6 +8,8 @@
 //             (lib/garrysmod.ts; --no-runtime leaves the runtime out).
 //   beammp    Resources/Server/scriptgo/: the BeamMP plugin with the resource and its dependencies
 //             (lib/beammp.ts).
+//   fivem     a FiveM resource folder: a generated fxmanifest.lua, the one-file shim, the resource
+//             (lib/fivem-pack.ts). Free only: a licensed package is refused.
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { zipSync } from "fflate";
@@ -20,7 +22,7 @@ import { listFiles, readResource, sdkRoot, type LoadedResource } from "../lib/sd
 import { compileTypeScript, type CompileIssue } from "../lib/typescript.ts";
 import { packBeamMPCommand } from "../lib/beammp.ts";
 
-export const summary = "Package a resource: a publishable .zip, an OPEN//77 resource folder, or a Garry's Mod addon";
+export const summary = "Package a resource: a publishable .zip, or a folder for OPEN//77, Garry's Mod, BeamMP or FiveM";
 
 // The shim is three files so the shared part references no server-only native: OPEN//77's
 // validator flags those in a shared_script, and its client sandbox lacks `os` and `setmetatable`.
@@ -250,7 +252,7 @@ export function packForOpen77(
 export async function run(args: string[]): Promise<number> {
   const a = parseArgs(args, { booleans: ["help", "allow-unportable", "no-runtime"] });
   if (a.bools.has("help") || a.positional.length === 0) {
-    console.log("scriptgo pack <resourceDir> [--target scriptgo|open77|garrysmod|beammp] [--out dist] [--allow-unportable] [--no-runtime]");
+    console.log("scriptgo pack <resourceDir> [--target scriptgo|open77|garrysmod|beammp|fivem] [--out dist] [--allow-unportable] [--no-runtime]");
     return a.bools.has("help") ? 0 : 2;
   }
   const res = readResource(a.positional[0]!);

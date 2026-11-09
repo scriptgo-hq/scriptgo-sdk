@@ -31,6 +31,8 @@ export const Environment = z.object({
   sales: EnvironmentSales,
   salesNote: z.string(),
   luaDialects: z.array(z.string()),
+  /** Guest languages the environment's host runs ("lua", "ts", "js"). */
+  languages: z.array(z.string()).default(["lua"]),
   runtimeVersions: z.array(z.string()),
   adapterVersion: z.string(),
   summary: z.string(),
