@@ -182,6 +182,43 @@ M.ENVIRONMENTS = {
             "Measured with Neovim 0.12.6 (LuaJIT 2.1) on Windows, headless (nvim --headless --clean -l); macOS, Linux and older Neovim releases are not measured yet.",
         },
     },
+    cctweaked = {
+        -- "Minecraft" only as the secondary part of the name, as the Minecraft Usage Guidelines ask.
+        name = "CC: Tweaked (Minecraft)",
+        -- A layer on top of a game players must own (Minecraft: Java Edition), like OPEN//77.
+        kind = "mod_platform",
+        status = "experimental",
+        sales = "free_only",
+        salesNote = "Free packages only: the Minecraft EULA lets you do what you want with your mods \"as long as you don't sell them for money\" (minecraft.net/en-us/eula).",
+        dialects = { "5.2" },
+        summary = "Packages run on a ComputerCraft computer in a Minecraft: Java Edition world, through the CC: Tweaked mod. Not an official Minecraft product; not approved by or associated with Mojang or Microsoft.",
+        sides = { "server", "client" },
+        capabilities = {
+            events = "supported", logging = "supported", storage = "supported", players = "partial",
+            permissions = "supported", commands = "supported", config = "supported", ui = "fallback",
+            http = "partial", licensing = "unavailable",
+        },
+        notes = {
+            events = "Server and client run on the same computer; network events between them are looped back through the value codec.",
+            players = "One player: the person at the computer's terminal (id 1). The world's other players are not visible.",
+            storage = "JSON files on the computer's own disk (/scriptgo/data/<key>.json), within the server's computer_space_limit (1 MB by default).",
+            permissions = "Privileges per player id from /scriptgo/config.json.",
+            commands = "Typed at the computer's sg> prompt; they run as the terminal player.",
+            config = "Per-resource values from /scriptgo/config.json; convars from config.json, then the computer's settings.",
+            ui = "Notifications are lines on the computer's terminal.",
+            http = "CC: Tweaked's asynchronous http API. The server owner decides in computercraft-server.toml whether it is on and which hosts answer ([[http.rules]]; private and local addresses are denied by default). Redirects are not followed.",
+            licensing = "Not offered: the Minecraft Usage Guidelines allow a mod only if it \"cannot be used to directly or indirectly verify whether a player owns or has access to out-of-game content, products, or services that affect in-game features and functions\" (minecraft.net/en-us/usage-guidelines).",
+        },
+        limitations = {
+            "Experimental and not verified in Minecraft yet: a run needs the operator's own acceptance of the Minecraft EULA first.",
+            "Free packages only, and no licence checks (see the sales rule and the licensing note).",
+            "Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft. Not affiliated with the CC: Tweaked developers.",
+            "Lua 5.2 (Cobalt VM): no // or bitwise operators (use bit32), no collectgarbage.",
+            "Everything runs on one computer: code that runs for about 7 seconds without yielding is stopped by CC: Tweaked (\"Too long without yielding\").",
+            "Pinned for runs: Minecraft 1.20.1, Fabric loader 0.20.1, CC: Tweaked 1.121.0. Other versions are not measured.",
+            "Fast tests use the cc-core harness (CC: Tweaked's own core and Lua VM without Minecraft); those runs are an emulator and do not count as verification.",
+        },
+    },
     -- Planned mod platforms (docs/research/game-modding-landscape.md). No adapter yet: no
     -- capabilities, no install steps. `sales` says whether paid packages are possible there.
     hytale = {
@@ -246,7 +283,7 @@ M.ENVIRONMENTS = {
     },
 }
 
-M.ORDER = { "standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim",
+M.ORDER = { "standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim", "cctweaked",
     "hytale", "garrysmod", "rust", "beammp", "roblox", "fivem", "redm", "kcdmp", "zomboid", "dst" }
 
 return M

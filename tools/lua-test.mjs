@@ -144,6 +144,34 @@ if (nvim && !opt("--only")) {
   summary.push({ interpreter: "neovim", version: "plugin", tests: total, failed: r.status === 0 ? bad : Math.max(1, bad), durationMs: Date.now() - started });
 }
 
+// The CC: Tweaked adapter on the cc-core harness, when it is set up (sdk/adapters/cctweaked/runtime.mjs
+// --harness): CC: Tweaked's own core and Lua VM WITHOUT Minecraft. An emulator: it tests the adapter
+// on the real CC APIs, it never verifies the environment (no report is written).
+const { harnessClasspath } = await import("../sdk/adapters/cctweaked/runtime.mjs");
+if (harnessClasspath() && !opt("--only")) {
+  const { LABEL, runHarness } = await import("../sdk/adapters/cctweaked/harness/run.mjs");
+  const started = Date.now();
+  console.log(`\n== ${LABEL}`);
+  let tests = 1;
+  let bad = 1;
+  try {
+    const run = runHarness(join(root, "sdk", "conformance", "sg_probe"), { seconds: 3 });
+    if (run.report) {
+      tests = run.report.checks.length;
+      bad = run.report.checks.filter((c) => c.status === "failed").length;
+      for (const c of run.report.checks.filter((c) => c.status === "failed")) console.log(`  FAIL ${c.name}  ${c.message}`);
+      console.log(`  sg_probe: ${tests - bad}/${tests} checks passed (${run.report.runtimeVersion}, ${run.report.luaVersion})`);
+    } else {
+      console.log("  no report written");
+      for (const l of run.terminal) console.log(`  | ${l}`);
+    }
+  } catch (e) {
+    console.log(`  ${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (bad > 0) failed = true;
+  summary.push({ interpreter: "cc-core", version: "harness", tests, failed: bad, durationMs: Date.now() - started });
+}
+
 console.log("\nSummary:");
 for (const s of summary) {
   console.log(`  ${s.interpreter.padEnd(7)} ${s.version.padEnd(14)} ${s.tests} tests, ${s.failed} failed (${s.durationMs} ms)`);

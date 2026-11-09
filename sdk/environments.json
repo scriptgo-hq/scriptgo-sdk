@@ -359,6 +359,56 @@
       ]
     },
     {
+      "slug": "cctweaked",
+      "name": "CC: Tweaked (Minecraft)",
+      "kind": "mod_platform",
+      "status": "experimental",
+      "sales": "free_only",
+      "salesNote": "Free packages only: the Minecraft EULA lets you do what you want with your mods \"as long as you don't sell them for money\" (minecraft.net/en-us/eula).",
+      "luaDialects": [
+        "5.2"
+      ],
+      "runtimeVersions": [],
+      "adapterVersion": "",
+      "summary": "Packages run on a ComputerCraft computer in a Minecraft: Java Edition world, through the CC: Tweaked mod. Not an official Minecraft product; not approved by or associated with Mojang or Microsoft.",
+      "capabilities": {
+        "commands": "supported",
+        "config": "supported",
+        "events": "supported",
+        "http": "partial",
+        "licensing": "unavailable",
+        "logging": "supported",
+        "permissions": "supported",
+        "players": "partial",
+        "storage": "supported",
+        "ui": "fallback"
+      },
+      "capabilityNotes": {
+        "commands": "Typed at the computer's sg> prompt; they run as the terminal player.",
+        "config": "Per-resource values from /scriptgo/config.json; convars from config.json, then the computer's settings.",
+        "events": "Server and client run on the same computer; network events between them are looped back through the value codec.",
+        "http": "CC: Tweaked's asynchronous http API. The server owner decides in computercraft-server.toml whether it is on and which hosts answer ([[http.rules]]; private and local addresses are denied by default). Redirects are not followed.",
+        "licensing": "Not offered: the Minecraft Usage Guidelines allow a mod only if it \"cannot be used to directly or indirectly verify whether a player owns or has access to out-of-game content, products, or services that affect in-game features and functions\" (minecraft.net/en-us/usage-guidelines).",
+        "permissions": "Privileges per player id from /scriptgo/config.json.",
+        "players": "One player: the person at the computer's terminal (id 1). The world's other players are not visible.",
+        "storage": "JSON files on the computer's own disk (/scriptgo/data/<key>.json), within the server's computer_space_limit (1 MB by default).",
+        "ui": "Notifications are lines on the computer's terminal."
+      },
+      "setupMarkdown": "Needs a Minecraft: Java Edition server you own or run, with [Fabric](https://fabricmc.net) and the\n[CC: Tweaked](https://tweaked.cc) mod (measured with Minecraft 1.20.1, Fabric loader 0.20.1, Fabric API\n0.92.12 and CC: Tweaked 1.121.0). Not an official Minecraft product. Not approved by or associated\nwith Mojang or Microsoft. Not affiliated with the CC: Tweaked developers.\n\n**Free packages only.** The [Minecraft EULA](https://www.minecraft.net/en-us/eula) lets you do what\nyou want with mods you create \"as long as you don't sell them for money / try to make money from\nthem\", so packages for this environment cannot have paid offers. Licence checks are not offered\neither: the [Minecraft Usage Guidelines](https://www.minecraft.net/en-us/usage-guidelines) allow a mod\nonly if it \"cannot be used to directly or indirectly verify whether a player owns or has access to\nout-of-game content, products, or services that affect in-game features and functions\".\n\n1. Build the computer's files, with your resources:\n\n   ```sh\n   node sdk/adapters/cctweaked/build.mjs --with path/to/my_resource --startup\n   ```\n\n   This writes `dist/cctweaked/computer/`: the SCRIPT//GO core, the adapter, the `sg` program and\n   your resources. Optional: `scriptgo/config.json` there sets permissions, config and convars:\n\n   ```json\n   { \"permissions\": { \"1\": [\"*\"] }, \"resources\": { \"my_resource\": { \"greeting\": \"hi\" } } }\n   ```\n\n2. Place a computer in the world, note its id (`id` in its shell), stop the server and copy the\n   folder's contents into `<world>/computercraft/computer/<id>/`. The default disk of a computer is\n   1 MB (`computer_space_limit` in `<world>/serverconfig/computercraft-server.toml`).\n\n3. Start the server and use the computer: with `--startup` it runs SCRIPT//GO at boot; otherwise\n   type `scriptgo/sg`. At the `sg>` prompt, resource commands run as the person at the terminal\n   (player `1`); `status`, `log`, `restart <name>` and `exit` drive the host.\n\nRunning a Minecraft server, including the headless one `scriptgo verify --env cctweaked` starts,\nmeans accepting the [Minecraft EULA](https://www.minecraft.net/en-us/eula): the operator must accept\nit themselves (`eula=true` in the server's `eula.txt`, or `--accept-minecraft-eula` on a verify run).\nSCRIPT//GO never accepts it for anyone.\n\nHTTP, when a resource uses it, goes through CC: Tweaked's `http` API, so the server's\n`computercraft-server.toml` decides whether it is on and which hosts answer (`[[http.rules]]`; local\nand private addresses are denied by default).\n",
+      "limitations": [
+        "Experimental and not verified in Minecraft yet: a run needs the operator's own acceptance of the Minecraft EULA first.",
+        "Free packages only, and no licence checks (see the sales rule and the licensing note).",
+        "Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft. Not affiliated with the CC: Tweaked developers.",
+        "Lua 5.2 (Cobalt VM): no // or bitwise operators (use bit32), no collectgarbage.",
+        "Everything runs on one computer: code that runs for about 7 seconds without yielding is stopped by CC: Tweaked (\"Too long without yielding\").",
+        "Pinned for runs: Minecraft 1.20.1, Fabric loader 0.20.1, CC: Tweaked 1.121.0. Other versions are not measured.",
+        "Fast tests use the cc-core harness (CC: Tweaked's own core and Lua VM without Minecraft); those runs are an emulator and do not count as verification."
+      ],
+      "listed": true,
+      "sortOrder": 90,
+      "adapters": []
+    },
+    {
       "slug": "hytale",
       "name": "Hytale",
       "kind": "mod_platform",
@@ -374,7 +424,7 @@
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
-      "sortOrder": 90,
+      "sortOrder": 100,
       "adapters": []
     },
     {
@@ -395,7 +445,7 @@
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
-      "sortOrder": 100,
+      "sortOrder": 110,
       "adapters": []
     },
     {
@@ -416,7 +466,7 @@
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
-      "sortOrder": 110,
+      "sortOrder": 120,
       "adapters": []
     },
     {
@@ -438,7 +488,7 @@
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
-      "sortOrder": 120,
+      "sortOrder": 130,
       "adapters": []
     },
     {
@@ -459,7 +509,7 @@
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
-      "sortOrder": 130,
+      "sortOrder": 140,
       "adapters": []
     },
     {
@@ -480,7 +530,7 @@
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
-      "sortOrder": 140,
+      "sortOrder": 150,
       "adapters": []
     },
     {
@@ -501,7 +551,7 @@
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
-      "sortOrder": 150,
+      "sortOrder": 160,
       "adapters": []
     },
     {
@@ -522,7 +572,7 @@
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
-      "sortOrder": 160,
+      "sortOrder": 170,
       "adapters": []
     },
     {
@@ -543,7 +593,7 @@
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
-      "sortOrder": 170,
+      "sortOrder": 180,
       "adapters": []
     },
     {
@@ -564,7 +614,7 @@
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
-      "sortOrder": 180,
+      "sortOrder": 190,
       "adapters": []
     }
   ]

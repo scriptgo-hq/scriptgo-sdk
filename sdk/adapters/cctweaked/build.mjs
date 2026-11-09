@@ -54,6 +54,30 @@ export function buildComputer(outDir, { resources = [], withTests = false, start
   return { dir: dest, bytes: sizeOf(dest) };
 }
 
+/** Where sg.lua's verify mode writes its report, on the computer and so under the computer's folder. */
+export const VERIFY_REPORT = "scriptgo-report.json";
+
+/**
+ * A computer that runs `sg verify` at boot (`scriptgo verify --env cctweaked`, and the cc-core
+ * harness): the program and core, `resources` as [{ name, dir }] copied to
+ * scriptgo/resources/<name> with their tests, /scriptgo/verify.json and an optional config.json.
+ * The computer writes /scriptgo-report.json and turns itself off.
+ */
+export function buildVerifyComputer(outDir, { resources, resource, seconds = 3, withResource = null, config = null }) {
+  const built = buildComputer(outDir, { startup: 'shell.run("/scriptgo/sg.lua", "verify")\n' });
+  for (const r of resources) {
+    cpSync(resolve(r.dir), join(built.dir, "scriptgo", "resources", r.name), {
+      recursive: true,
+      filter: (src) => !/[\\/](node_modules|\.[^\\/]+)$/.test(src),
+    });
+  }
+  const verify = { resource, seconds, report: "/" + VERIFY_REPORT, shutdown: true };
+  if (withResource) verify.with = withResource;
+  writeFileSync(join(built.dir, "scriptgo", "verify.json"), JSON.stringify(verify));
+  if (config) writeFileSync(join(built.dir, "scriptgo", "config.json"), JSON.stringify(config));
+  return { dir: built.dir, bytes: sizeOf(built.dir), report: join(built.dir, VERIFY_REPORT) };
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   let out = join(repo, "dist", "cctweaked", "computer");

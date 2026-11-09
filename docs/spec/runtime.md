@@ -84,11 +84,11 @@ resources.
 ## Sandbox
 
 Each resource side gets its own environment: `string`, `table`, `math`, `utf8` (5.3+),
-`os.time/os.clock/os.date` (standalone, LÖVE, Godot and Luanti hosts only), `pcall`, `xpcall`, `error`, `assert`, `select`, `type`, `tostring`,
+`os.time/os.clock/os.date` (standalone, LÖVE, Godot, Luanti, Neovim and CC: Tweaked hosts; on CC: Tweaked `os.time()` gives Unix seconds from the adapter's `wallTime`, not the in-game hour), `pcall`, `xpcall`, `error`, `assert`, `select`, `type`, `tostring`,
 `tonumber`, `pairs`, `ipairs`, `next`, `rawget/rawset/rawequal/rawlen`, `setmetatable`,
 `getmetatable`, `unpack`/`table.unpack`. Not exposed: `io`, `os.execute` and the rest of `os`,
 `debug`, `package`, `load`, `loadstring`, `dofile`, `loadfile`, `coroutine` (the scheduler owns
-coroutines), `collectgarbage` except `"count"`.
+coroutines), `collectgarbage` except `"count"` (refused where the host has no `collectgarbage`, as on CC: Tweaked).
 
 **OPEN//77 is stricter.** Its sandbox has no `os` at all, and its client sandbox has no
 `setmetatable` or `getmetatable`. A package that lists `open77` in `environments` must use
