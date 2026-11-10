@@ -3,7 +3,7 @@
 The cross-language contract for SCRIPT//GO creator protection. The TypeScript packer
 (`packages/escrow`), the master key endpoint (`apps/api`) and the .NET loader
 (`sdk/dotnet/ScriptGo.Host/Escrow`) all implement exactly this. The plan and the honest stance are in
-`docs/plan/CREATOR-PROTECTION.md`; the decision is DECISIONS.md ADR-0022/0023.
+`docs/plan/CREATOR-PROTECTION.md`; the decision is DECISIONS.md ADR-0023/0024.
 
 ## Honest stance (normative)
 

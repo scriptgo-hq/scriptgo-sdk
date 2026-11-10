@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Money, PageQuery, Timestamp, PackageName, Username } from "./common.ts";
 import {
+  AdapterState,
   CapabilitySupport,
   Category,
   CheckStage,
@@ -10,6 +11,7 @@ import {
   EnvironmentKind,
   EnvironmentSales,
   EnvironmentStatus,
+  IntegrationType,
   ListingStatus,
   OfferInterval,
   Provider,
@@ -33,6 +35,12 @@ export const Environment = z.object({
   luaDialects: z.array(z.string()),
   /** Guest languages the environment's host runs ("lua", "ts", "js"). */
   languages: z.array(z.string()).default(["lua"]),
+  /** Resource sides the host runs: ["server"], or ["server", "client"]. */
+  sides: z.array(z.string()).default([]),
+  /** Whether adapter code exists and a real run passed (read from the repository, ADR-0022). */
+  adapterState: AdapterState.default("none"),
+  /** For a written adapter with no real run yet: what that run waits for. "" otherwise. */
+  blockedOn: z.string().default(""),
   runtimeVersions: z.array(z.string()),
   adapterVersion: z.string(),
   summary: z.string(),
@@ -165,9 +173,35 @@ export const PackageSearchQuery = PageQuery.extend({
 });
 export type PackageSearchQuery = z.infer<typeof PackageSearchQuery>;
 
+/** How an environment runs packages (ADR-0022). */
+export const EnvironmentIntegration = z.object({
+  type: IntegrationType,
+  /** The host and its Lua: "BeamMP-Server 3.9.3 (Lua 5.3)". */
+  runtime: z.string(),
+  summary: z.string(),
+});
+export type EnvironmentIntegration = z.infer<typeof EnvironmentIntegration>;
+
+/** One verified run from verification/reports: the newest version of a package, per runtime. */
+export const ProofRun = z.object({
+  package: z.string(),
+  version: z.string(),
+  runtime: z.string(),
+  lua: z.string(),
+  adapterVersion: z.string(),
+  checksPassed: z.number().int().nonnegative(),
+  checks: z.number().int().nonnegative(),
+  ranAt: Timestamp,
+});
+export type ProofRun = z.infer<typeof ProofRun>;
+
 export const EnvironmentDetail = Environment.extend({
   setupMarkdown: z.string(),
   limitations: z.array(z.string()),
+  /** null for a planned environment with no adapter code yet. */
+  integration: EnvironmentIntegration.nullable(),
+  /** What real runs proved here; empty until one passes. */
+  proof: z.array(ProofRun),
   packages: z.array(PackageSummary),
 });
 export type EnvironmentDetail = z.infer<typeof EnvironmentDetail>;

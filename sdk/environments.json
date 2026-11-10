@@ -16,6 +16,199 @@
       "languages": [
         "lua"
       ],
+      "sides": [
+        "server",
+        "client"
+      ],
+      "adapterState": "verified",
+      "blockedOn": "",
+      "integration": {
+        "runtime": "PUC Lua 5.4 and 5.1, or LuaJIT 2.1, from the PATH",
+        "summary": "The `scriptgo` CLI runs resources on a plain Lua interpreter, with no engine. `scriptgo run` ticks the host in simulated or real time and `scriptgo test` runs test scripts; it is the reference host the other environments are compared with.",
+        "type": "cli"
+      },
+      "proof": [
+        {
+          "package": "inventory_pro",
+          "version": "1.4.3",
+          "runtime": "Lua 5.1",
+          "lua": "Lua 5.1",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 10,
+          "checks": 10,
+          "ranAt": "2026-11-09T07:29:32.009Z"
+        },
+        {
+          "package": "inventory_pro",
+          "version": "1.4.3",
+          "runtime": "Lua 5.4",
+          "lua": "Lua 5.4",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 10,
+          "checks": 10,
+          "ranAt": "2026-11-09T07:29:32.009Z"
+        },
+        {
+          "package": "inventory_pro",
+          "version": "1.4.3",
+          "runtime": "LuaJIT 2.1.1794164915",
+          "lua": "LuaJIT 2.1.1794164915",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 10,
+          "checks": 10,
+          "ranAt": "2026-11-09T07:29:32.009Z"
+        },
+        {
+          "package": "sg_eventbus",
+          "version": "1.0.2",
+          "runtime": "Lua 5.1",
+          "lua": "Lua 5.1",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 7,
+          "checks": 7,
+          "ranAt": "2026-11-09T07:28:31.973Z"
+        },
+        {
+          "package": "sg_eventbus",
+          "version": "1.0.2",
+          "runtime": "Lua 5.4",
+          "lua": "Lua 5.4",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 7,
+          "checks": 7,
+          "ranAt": "2026-11-09T07:28:31.973Z"
+        },
+        {
+          "package": "sg_eventbus",
+          "version": "1.0.2",
+          "runtime": "LuaJIT 2.1.1794164915",
+          "lua": "LuaJIT 2.1.1794164915",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 7,
+          "checks": 7,
+          "ranAt": "2026-11-09T07:28:31.973Z"
+        },
+        {
+          "package": "sg_inventory",
+          "version": "1.0.2",
+          "runtime": "Lua 5.1",
+          "lua": "Lua 5.1",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 7,
+          "checks": 7,
+          "ranAt": "2026-11-09T07:28:44.469Z"
+        },
+        {
+          "package": "sg_inventory",
+          "version": "1.0.2",
+          "runtime": "Lua 5.4",
+          "lua": "Lua 5.4",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 7,
+          "checks": 7,
+          "ranAt": "2026-11-09T07:28:44.469Z"
+        },
+        {
+          "package": "sg_inventory",
+          "version": "1.0.2",
+          "runtime": "LuaJIT 2.1.1794164915",
+          "lua": "LuaJIT 2.1.1794164915",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 7,
+          "checks": 7,
+          "ranAt": "2026-11-09T07:28:44.469Z"
+        },
+        {
+          "package": "sg_permissions",
+          "version": "1.0.2",
+          "runtime": "Lua 5.1",
+          "lua": "Lua 5.1",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 7,
+          "checks": 7,
+          "ranAt": "2026-11-09T07:28:56.989Z"
+        },
+        {
+          "package": "sg_permissions",
+          "version": "1.0.2",
+          "runtime": "Lua 5.4",
+          "lua": "Lua 5.4",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 7,
+          "checks": 7,
+          "ranAt": "2026-11-09T07:28:56.989Z"
+        },
+        {
+          "package": "sg_permissions",
+          "version": "1.0.2",
+          "runtime": "LuaJIT 2.1.1794164915",
+          "lua": "LuaJIT 2.1.1794164915",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 7,
+          "checks": 7,
+          "ranAt": "2026-11-09T07:28:56.989Z"
+        },
+        {
+          "package": "sg_probe",
+          "version": "0.1.0",
+          "runtime": "Lua 5.1",
+          "lua": "Lua 5.1",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 31,
+          "checks": 31,
+          "ranAt": "2026-11-09T07:29:09.977Z"
+        },
+        {
+          "package": "sg_probe",
+          "version": "0.1.0",
+          "runtime": "Lua 5.4",
+          "lua": "Lua 5.4",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 31,
+          "checks": 31,
+          "ranAt": "2026-11-09T07:29:09.977Z"
+        },
+        {
+          "package": "sg_probe",
+          "version": "0.1.0",
+          "runtime": "LuaJIT 2.1.1794164915",
+          "lua": "LuaJIT 2.1.1794164915",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 31,
+          "checks": 31,
+          "ranAt": "2026-11-09T07:29:09.977Z"
+        },
+        {
+          "package": "sg_probe_net",
+          "version": "0.1.0",
+          "runtime": "Lua 5.1",
+          "lua": "Lua 5.1",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 18,
+          "checks": 18,
+          "ranAt": "2026-11-09T07:29:21.138Z"
+        },
+        {
+          "package": "sg_probe_net",
+          "version": "0.1.0",
+          "runtime": "Lua 5.4",
+          "lua": "Lua 5.4",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 18,
+          "checks": 18,
+          "ranAt": "2026-11-09T07:29:21.138Z"
+        },
+        {
+          "package": "sg_probe_net",
+          "version": "0.1.0",
+          "runtime": "LuaJIT 2.1.1794164915",
+          "lua": "LuaJIT 2.1.1794164915",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 18,
+          "checks": 18,
+          "ranAt": "2026-11-09T07:29:21.138Z"
+        }
+      ],
       "runtimeVersions": [
         "Lua 5.1",
         "Lua 5.4",
@@ -67,6 +260,69 @@
       ],
       "languages": [
         "lua"
+      ],
+      "sides": [
+        "server",
+        "client"
+      ],
+      "adapterState": "verified",
+      "blockedOn": "",
+      "integration": {
+        "runtime": "LÖVE 11.5 (LuaJIT 2.1)",
+        "summary": "A Lua module the game loads, `scriptgo_love.lua`. It runs the core in LÖVE's LuaJIT, ticks it from `love.update` through `sg:update(dt)` and draws notifications with `sg:draw()`. Server and local client share the game process.",
+        "type": "library"
+      },
+      "proof": [
+        {
+          "package": "inventory_pro",
+          "version": "1.4.3",
+          "runtime": "LÖVE 11.5",
+          "lua": "LuaJIT 2.1.1700008891",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 10,
+          "checks": 10,
+          "ranAt": "2026-11-09T07:29:32.009Z"
+        },
+        {
+          "package": "sg_eventbus",
+          "version": "1.0.2",
+          "runtime": "LÖVE 11.5",
+          "lua": "LuaJIT 2.1.1700008891",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 7,
+          "checks": 7,
+          "ranAt": "2026-11-09T07:28:31.973Z"
+        },
+        {
+          "package": "sg_inventory",
+          "version": "1.0.2",
+          "runtime": "LÖVE 11.5",
+          "lua": "LuaJIT 2.1.1700008891",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 7,
+          "checks": 7,
+          "ranAt": "2026-11-09T07:28:44.469Z"
+        },
+        {
+          "package": "sg_permissions",
+          "version": "1.0.2",
+          "runtime": "LÖVE 11.5",
+          "lua": "LuaJIT 2.1.1700008891",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 7,
+          "checks": 7,
+          "ranAt": "2026-11-09T07:28:56.989Z"
+        },
+        {
+          "package": "sg_probe",
+          "version": "0.1.0",
+          "runtime": "LÖVE 11.5",
+          "lua": "LuaJIT 2.1.1700008891",
+          "adapterVersion": "0.1.0",
+          "checksPassed": 31,
+          "checks": 31,
+          "ranAt": "2026-11-09T07:29:09.977Z"
+        }
       ],
       "runtimeVersions": [
         "LÖVE 11.5"
@@ -123,6 +379,59 @@
       ],
       "languages": [
         "lua"
+      ],
+      "sides": [
+        "server",
+        "client"
+      ],
+      "adapterState": "verified",
+      "blockedOn": "",
+      "integration": {
+        "runtime": "Godot 4.5.2 with lua-gdextension 0.7.0 (Lua 5.4 or LuaJIT)",
+        "summary": "An autoload node, `ScriptGoHost`, creates a Lua state through the lua-gdextension addon, runs the core in it and ticks it from `_process`. Server and local client share the game process.",
+        "type": "addon"
+      },
+      "proof": [
+        {
+          "package": "sg_eventbus",
+          "version": "1.0.2",
+          "runtime": "Godot 4.5.2-stable",
+          "lua": "Lua 5.4",
+          "adapterVersion": "godot-0.1.0",
+          "checksPassed": 8,
+          "checks": 8,
+          "ranAt": "2026-11-09T07:28:31.973Z"
+        },
+        {
+          "package": "sg_inventory",
+          "version": "1.0.2",
+          "runtime": "Godot 4.5.2-stable",
+          "lua": "Lua 5.4",
+          "adapterVersion": "godot-0.1.0",
+          "checksPassed": 8,
+          "checks": 8,
+          "ranAt": "2026-11-09T07:28:44.469Z"
+        },
+        {
+          "package": "sg_permissions",
+          "version": "1.0.2",
+          "runtime": "Godot 4.5.2-stable",
+          "lua": "Lua 5.4",
+          "adapterVersion": "godot-0.1.0",
+          "checksPassed": 8,
+          "checks": 8,
+          "ranAt": "2026-11-09T07:28:56.989Z"
+        },
+        {
+          "package": "sg_probe",
+          "version": "0.1.0",
+          "runtime": "Godot 4.5.2-stable",
+          "lua": "Lua 5.4",
+          "adapterVersion": "godot-0.1.0",
+          "checksPassed": 32,
+          "checks": 32,
+          "ranAt": "2026-11-09T07:29:09.977Z"
+        }
       ],
       "runtimeVersions": [
         "Godot 4.5.2-stable"
@@ -181,6 +490,58 @@
       "languages": [
         "lua"
       ],
+      "sides": [
+        "server"
+      ],
+      "adapterState": "verified",
+      "blockedOn": "",
+      "integration": {
+        "runtime": "Luanti 5.18.0 server (LuaJIT 2.1)",
+        "summary": "One regular Luanti mod, `scriptgo`, runs the core in the server's Lua and ticks it from a globalstep. It needs no trusted-mod entry; HTTP needs the server owner to list it in `secure.http_mods`.",
+        "type": "mod"
+      },
+      "proof": [
+        {
+          "package": "sg_eventbus",
+          "version": "1.0.2",
+          "runtime": "Luanti 5.18.0",
+          "lua": "LuaJIT 2.1.1793275035",
+          "adapterVersion": "luanti-0.1.0",
+          "checksPassed": 6,
+          "checks": 6,
+          "ranAt": "2026-11-09T07:28:31.973Z"
+        },
+        {
+          "package": "sg_inventory",
+          "version": "1.0.2",
+          "runtime": "Luanti 5.18.0",
+          "lua": "LuaJIT 2.1.1793275035",
+          "adapterVersion": "luanti-0.1.0",
+          "checksPassed": 6,
+          "checks": 6,
+          "ranAt": "2026-11-09T07:28:44.469Z"
+        },
+        {
+          "package": "sg_permissions",
+          "version": "1.0.2",
+          "runtime": "Luanti 5.18.0",
+          "lua": "LuaJIT 2.1.1793275035",
+          "adapterVersion": "luanti-0.1.0",
+          "checksPassed": 6,
+          "checks": 6,
+          "ranAt": "2026-11-09T07:28:56.989Z"
+        },
+        {
+          "package": "sg_probe",
+          "version": "0.1.0",
+          "runtime": "Luanti 5.18.0",
+          "lua": "LuaJIT 2.1.1793275035",
+          "adapterVersion": "luanti-0.1.0",
+          "checksPassed": 30,
+          "checks": 30,
+          "ranAt": "2026-11-09T07:29:09.977Z"
+        }
+      ],
       "runtimeVersions": [
         "Luanti 5.18.0"
       ],
@@ -234,6 +595,79 @@
       ],
       "languages": [
         "lua"
+      ],
+      "sides": [
+        "server",
+        "client"
+      ],
+      "adapterState": "verified",
+      "blockedOn": "",
+      "integration": {
+        "runtime": "OPEN//77's own Lua 5.4 runtime, on its dedicated server and game client",
+        "summary": "OPEN//77 runs its own Lua runtime with the same resource shape. `scriptgo pack --target open77` adapts a package to it: a generated `open77.lua` manifest, the package's files, and a three-file shim (shared, server, client), loaded first, that maps `ScriptGo.*` onto OPEN//77's `Open77.*` API. The packed manifest asks only for the permissions the package's capabilities need.",
+        "type": "shim"
+      },
+      "proof": [
+        {
+          "package": "inventory_pro",
+          "version": "1.4.3",
+          "runtime": "OPEN//77 server 1.0.0+5282e21c",
+          "lua": "Lua 5.4",
+          "adapterVersion": "open77-shim-0.3.0",
+          "checksPassed": 13,
+          "checks": 13,
+          "ranAt": "2026-11-09T07:29:32.009Z"
+        },
+        {
+          "package": "sg_eventbus",
+          "version": "1.0.2",
+          "runtime": "OPEN//77 server 1.0.0+5282e21c",
+          "lua": "Lua 5.4",
+          "adapterVersion": "open77-shim-0.3.0",
+          "checksPassed": 8,
+          "checks": 8,
+          "ranAt": "2026-11-09T07:28:31.973Z"
+        },
+        {
+          "package": "sg_inventory",
+          "version": "1.0.2",
+          "runtime": "OPEN//77 server 1.0.0+5282e21c",
+          "lua": "Lua 5.4",
+          "adapterVersion": "open77-shim-0.3.0",
+          "checksPassed": 8,
+          "checks": 8,
+          "ranAt": "2026-11-09T07:28:44.469Z"
+        },
+        {
+          "package": "sg_permissions",
+          "version": "1.0.2",
+          "runtime": "OPEN//77 server 1.0.0+5282e21c",
+          "lua": "Lua 5.4",
+          "adapterVersion": "open77-shim-0.3.0",
+          "checksPassed": 8,
+          "checks": 8,
+          "ranAt": "2026-11-09T07:28:56.989Z"
+        },
+        {
+          "package": "sg_probe",
+          "version": "0.1.0",
+          "runtime": "OPEN//77 server 1.0.0+5282e21c",
+          "lua": "Lua 5.4",
+          "adapterVersion": "open77-shim-0.3.0",
+          "checksPassed": 37,
+          "checks": 37,
+          "ranAt": "2026-11-09T07:29:09.977Z"
+        },
+        {
+          "package": "sg_probe_net",
+          "version": "0.1.0",
+          "runtime": "OPEN//77 server 1.0.0+5282e21c",
+          "lua": "Lua 5.4",
+          "adapterVersion": "open77-shim-0.3.0",
+          "checksPassed": 19,
+          "checks": 19,
+          "ranAt": "2026-11-09T07:29:21.138Z"
+        }
       ],
       "runtimeVersions": [
         "OPEN//77 server 1.0.0+5282e21c"
@@ -291,6 +725,13 @@
       "languages": [
         "lua"
       ],
+      "sides": [
+        "server"
+      ],
+      "adapterState": "none",
+      "blockedOn": "",
+      "integration": null,
+      "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "Lua HTTP services on Nginx.",
@@ -315,6 +756,14 @@
       "languages": [
         "lua"
       ],
+      "sides": [
+        "server",
+        "client"
+      ],
+      "adapterState": "none",
+      "blockedOn": "",
+      "integration": null,
+      "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "2D games with Defold.",
@@ -338,6 +787,79 @@
       ],
       "languages": [
         "lua"
+      ],
+      "sides": [
+        "server",
+        "client"
+      ],
+      "adapterState": "verified",
+      "blockedOn": "",
+      "integration": {
+        "runtime": "Neovim 0.12.6 (LuaJIT 2.1)",
+        "summary": "An ordinary Neovim plugin. `setup()` starts the core in Neovim's LuaJIT, a libuv timer ticks it on the main loop, and `:ScriptGo <command>` runs resource commands. Server and local client run in the editor.",
+        "type": "plugin"
+      },
+      "proof": [
+        {
+          "package": "inventory_pro",
+          "version": "1.4.3",
+          "runtime": "Neovim 0.12",
+          "lua": "LuaJIT 2.1.1774638290",
+          "adapterVersion": "neovim-0.1.0",
+          "checksPassed": 10,
+          "checks": 10,
+          "ranAt": "2026-11-09T07:30:10.691Z"
+        },
+        {
+          "package": "sg_eventbus",
+          "version": "1.0.2",
+          "runtime": "Neovim 0.12",
+          "lua": "LuaJIT 2.1.1774638290",
+          "adapterVersion": "neovim-0.1.0",
+          "checksPassed": 7,
+          "checks": 7,
+          "ranAt": "2026-11-09T07:29:59.208Z"
+        },
+        {
+          "package": "sg_inventory",
+          "version": "1.0.2",
+          "runtime": "Neovim 0.12",
+          "lua": "LuaJIT 2.1.1774638290",
+          "adapterVersion": "neovim-0.1.0",
+          "checksPassed": 7,
+          "checks": 7,
+          "ranAt": "2026-11-09T07:30:01.490Z"
+        },
+        {
+          "package": "sg_permissions",
+          "version": "1.0.2",
+          "runtime": "Neovim 0.12",
+          "lua": "LuaJIT 2.1.1774638290",
+          "adapterVersion": "neovim-0.1.0",
+          "checksPassed": 7,
+          "checks": 7,
+          "ranAt": "2026-11-09T07:30:03.780Z"
+        },
+        {
+          "package": "sg_probe",
+          "version": "0.1.0",
+          "runtime": "Neovim 0.12",
+          "lua": "LuaJIT 2.1.1774638290",
+          "adapterVersion": "neovim-0.1.0",
+          "checksPassed": 31,
+          "checks": 31,
+          "ranAt": "2026-11-09T07:30:06.049Z"
+        },
+        {
+          "package": "sg_probe_net",
+          "version": "0.1.0",
+          "runtime": "Neovim 0.12",
+          "lua": "LuaJIT 2.1.1774638290",
+          "adapterVersion": "neovim-0.1.0",
+          "checksPassed": 18,
+          "checks": 18,
+          "ranAt": "2026-11-09T07:30:08.368Z"
+        }
       ],
       "runtimeVersions": [
         "Neovim 0.12"
@@ -395,6 +917,29 @@
       "languages": [
         "lua"
       ],
+      "sides": [
+        "server",
+        "client"
+      ],
+      "adapterState": "verified",
+      "blockedOn": "",
+      "integration": {
+        "runtime": "CC: Tweaked 1.121.0 on a Minecraft 1.20.1 Fabric server (Cobalt, Lua 5.2)",
+        "summary": "A program on one ComputerCraft computer, which the CC: Tweaked mod adds to a Fabric server. It runs the core in the computer's Lua 5.2 VM, ticked by a CC timer every server tick; the server and client sides both run on that computer.",
+        "type": "program"
+      },
+      "proof": [
+        {
+          "package": "sg_probe",
+          "version": "0.1.0",
+          "runtime": "CC: Tweaked 1.121.0, Minecraft 1.20.1",
+          "lua": "Lua 5.2",
+          "adapterVersion": "cctweaked-0.1.0",
+          "checksPassed": 35,
+          "checks": 35,
+          "ranAt": "2026-11-09T14:16:40.054Z"
+        }
+      ],
       "runtimeVersions": [
         "CC: Tweaked 1.121.0, Minecraft 1.20.1"
       ],
@@ -425,7 +970,7 @@
       },
       "setupMarkdown": "Needs a Minecraft: Java Edition server you own or run, with [Fabric](https://fabricmc.net) and the\n[CC: Tweaked](https://tweaked.cc) mod (measured with Minecraft 1.20.1, Fabric loader 0.20.1, Fabric API\n0.92.12 and CC: Tweaked 1.121.0). Not an official Minecraft product. Not approved by or associated\nwith Mojang or Microsoft. Not affiliated with the CC: Tweaked developers.\n\n**Free packages only.** The [Minecraft EULA](https://www.minecraft.net/en-us/eula) lets you do what\nyou want with mods you create \"as long as you don't sell them for money / try to make money from\nthem\", so packages for this environment cannot have paid offers. Licence checks are not offered\neither: the [Minecraft Usage Guidelines](https://www.minecraft.net/en-us/usage-guidelines) allow a mod\nonly if it \"cannot be used to directly or indirectly verify whether a player owns or has access to\nout-of-game content, products, or services that affect in-game features and functions\".\n\n1. Build the computer's files, with your resources:\n\n   ```sh\n   node sdk/adapters/cctweaked/build.mjs --with path/to/my_resource --startup\n   ```\n\n   This writes `dist/cctweaked/computer/`: the SCRIPT//GO core, the adapter, the `sg` program and\n   your resources. Optional: `scriptgo/config.json` there sets permissions, config and convars:\n\n   ```json\n   { \"permissions\": { \"1\": [\"*\"] }, \"resources\": { \"my_resource\": { \"greeting\": \"hi\" } } }\n   ```\n\n2. Place a computer in the world, note its id (`id` in its shell), stop the server and copy the\n   folder's contents into `<world>/computercraft/computer/<id>/`. The default disk of a computer is\n   1 MB (`computer_space_limit` in `<world>/serverconfig/computercraft-server.toml`).\n\n3. Start the server and use the computer: with `--startup` it runs SCRIPT//GO at boot; otherwise\n   type `scriptgo/sg`. At the `sg>` prompt, resource commands run as the person at the terminal\n   (player `1`); `status`, `log`, `restart <name>` and `exit` drive the host.\n\nRunning a Minecraft server, including the headless one `scriptgo verify --env cctweaked` starts,\nmeans accepting the [Minecraft EULA](https://www.minecraft.net/en-us/eula): the operator must accept\nit themselves (`eula=true` in the server's `eula.txt`, or `--accept-minecraft-eula` on a verify run).\nSCRIPT//GO never accepts it for anyone.\n\nHTTP, when a resource uses it, goes through CC: Tweaked's `http` API, so the server's\n`computercraft-server.toml` decides whether it is on and which hosts answer (`[[http.rules]]`; local\nand private addresses are denied by default).\n",
       "limitations": [
-        "Experimental and not verified in Minecraft yet: a run needs the operator's own acceptance of the Minecraft EULA first.",
+        "Experimental: one real server run so far, the conformance probe (35 of 35 checks). The official kits fail there only because they do not declare cctweaked yet. Each run needs the operator's own acceptance of the Minecraft EULA.",
         "Free packages only, and no licence checks (see the sales rule and the licensing note).",
         "Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft. Not affiliated with the CC: Tweaked developers.",
         "Lua 5.2 (Cobalt VM): no // or bitwise operators (use bit32), no collectgarbage.",
@@ -457,6 +1002,59 @@
         "lua",
         "ts",
         "js"
+      ],
+      "sides": [
+        "server",
+        "client"
+      ],
+      "adapterState": "verified",
+      "blockedOn": "",
+      "integration": {
+        "runtime": ".NET 10, with KeraLua 1.4.9 (Lua 5.4) and Jint 4.17.0",
+        "summary": "An embedded host kit: `ScriptGo.Host`, a .NET 10 library that a C# engine or server references and ticks from its own loop. It runs Lua 5.4 (KeraLua) and JavaScript or TypeScript (Jint) side by side, one VM per resource side and language. Its console host, `scriptgo-dotnet`, runs the verification.",
+        "type": "kit"
+      },
+      "proof": [
+        {
+          "package": "sg_probe",
+          "version": "0.1.0",
+          "runtime": ".NET 10.0.11; KeraLua 1.4.9 (Lua 5.4); Jint 4.17.0",
+          "lua": "Lua 5.4",
+          "adapterVersion": "dotnet-0.1.0",
+          "checksPassed": 31,
+          "checks": 31,
+          "ranAt": "2026-11-09T15:00:07.909Z"
+        },
+        {
+          "package": "sg_probe_net",
+          "version": "0.1.0",
+          "runtime": ".NET 10.0.11; KeraLua 1.4.9 (Lua 5.4); Jint 4.17.0",
+          "lua": "Lua 5.4",
+          "adapterVersion": "dotnet-0.1.0",
+          "checksPassed": 18,
+          "checks": 18,
+          "ranAt": "2026-11-09T15:00:09.237Z"
+        },
+        {
+          "package": "sg_probe_ts",
+          "version": "0.1.0",
+          "runtime": ".NET 10.0.11; KeraLua 1.4.9 (Lua 5.4); Jint 4.17.0",
+          "lua": "Lua 5.4",
+          "adapterVersion": "dotnet-0.1.0",
+          "checksPassed": 32,
+          "checks": 32,
+          "ranAt": "2026-11-09T15:00:08.387Z"
+        },
+        {
+          "package": "sg_xlang_lua",
+          "version": "0.1.0",
+          "runtime": ".NET 10.0.11; KeraLua 1.4.9 (Lua 5.4); Jint 4.17.0",
+          "lua": "Lua 5.4",
+          "adapterVersion": "dotnet-0.1.0",
+          "checksPassed": 26,
+          "checks": 26,
+          "ranAt": "2026-11-09T15:00:08.851Z"
+        }
       ],
       "runtimeVersions": [
         ".NET 10.0.11; KeraLua 1.4.9 (Lua 5.4); Jint 4.17.0"
@@ -513,6 +1111,17 @@
       "languages": [
         "lua"
       ],
+      "sides": [
+        "server"
+      ],
+      "adapterState": "written",
+      "blockedOn": "Waiting for the Hytale server files, which come with a Hytale account, and for a JDK 25 to build the plugin against them.",
+      "integration": {
+        "runtime": "Hytale server (Java, JDK 25) with Cobalt 0.9.9 (Lua 5.2)",
+        "summary": "A Java server plugin that embeds Cobalt, a Lua 5.2 VM written in Java, and runs the core on its own host thread, never on a world thread. Players install nothing.",
+        "type": "plugin"
+      },
+      "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "A server plugin that runs SCRIPT//GO packages on Hytale servers; players install nothing.",
@@ -564,6 +1173,38 @@
       ],
       "languages": [
         "lua"
+      ],
+      "sides": [
+        "server"
+      ],
+      "adapterState": "verified",
+      "blockedOn": "",
+      "integration": {
+        "runtime": "Garry's Mod dedicated server: GLua on LuaJIT 2.0.4 (32-bit) or LuaJIT 2.1 (64-bit)",
+        "summary": "One server addon, `scriptgo`, carries the core and runs it in the server's GLua, ticked on the `Think` hook. `scriptgo pack --target garrysmod` turns each package into its own addon.",
+        "type": "addon"
+      },
+      "proof": [
+        {
+          "package": "sg_probe",
+          "version": "0.1.0",
+          "runtime": "Garry's Mod 2026.09.17 (x86)",
+          "lua": "LuaJIT 2.0.4",
+          "adapterVersion": "garrysmod-0.1.0",
+          "checksPassed": 39,
+          "checks": 39,
+          "ranAt": "2026-11-09T15:24:29.578Z"
+        },
+        {
+          "package": "sg_probe_net",
+          "version": "0.1.0",
+          "runtime": "Garry's Mod 2026.09.17 (x86)",
+          "lua": "LuaJIT 2.0.4",
+          "adapterVersion": "garrysmod-0.1.0",
+          "checksPassed": 23,
+          "checks": 23,
+          "ranAt": "2026-11-09T15:24:39.961Z"
+        }
       ],
       "runtimeVersions": [
         "Garry's Mod 2026.09.17 (x86)"
@@ -624,6 +1265,17 @@
       "languages": [
         "lua"
       ],
+      "sides": [
+        "server"
+      ],
+      "adapterState": "written",
+      "blockedOn": "Waiting for disk space: the Rust dedicated server needs about 6 GB installed.",
+      "integration": {
+        "runtime": "Rust dedicated server with Oxide or Carbon; KeraLua (Lua 5.4)",
+        "summary": "One C# plugin, `ScriptGo.cs`, the same file for Oxide and Carbon. Rust's plugin frameworks no longer run Lua, so the plugin loads a small bridge that runs the core in a KeraLua (Lua 5.4) VM, ticked by a framework timer.",
+        "type": "plugin"
+      },
+      "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "An Oxide/Carbon plugin that runs SCRIPT//GO packages on Rust servers through an embedded Lua VM.",
@@ -674,6 +1326,17 @@
       "languages": [
         "lua"
       ],
+      "sides": [
+        "server"
+      ],
+      "adapterState": "written",
+      "blockedOn": "Waiting for a server key: BeamMP-Server does not start without an AuthKey from the BeamMP Keymaster, which the server owner requests.",
+      "integration": {
+        "runtime": "BeamMP-Server 3.9.3 (Lua 5.3)",
+        "summary": "One BeamMP server plugin, `scriptgo`, runs the core in the plugin's own Lua 5.3 state, ticked by a 25 ms event timer. `scriptgo pack --target beammp` builds it with the package and its dependencies.",
+        "type": "plugin"
+      },
+      "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "One BeamMP server plugin runs SCRIPT//GO packages on BeamMP servers (BeamNG.drive multiplayer), for driving and roleplay servers.",
@@ -723,6 +1386,14 @@
       "languages": [
         "lua"
       ],
+      "sides": [
+        "server",
+        "client"
+      ],
+      "adapterState": "none",
+      "blockedOn": "",
+      "integration": null,
+      "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "A Luau compatibility layer for Roblox experiences.",
@@ -747,6 +1418,18 @@
       "languages": [
         "lua"
       ],
+      "sides": [
+        "server",
+        "client"
+      ],
+      "adapterState": "written",
+      "blockedOn": "Waiting for a server key: FXServer does not start without a Cfx.re registration key (sv_licenseKey).",
+      "integration": {
+        "runtime": "FXServer and the FiveM client (Lua 5.4)",
+        "summary": "FiveM already runs this resource shape. `scriptgo pack --target fivem` emits a resource folder with a generated `fxmanifest.lua` and one shared shim file, loaded first, that maps `ScriptGo.*` onto FiveM natives. Threads, events and exports stay FiveM's own.",
+        "type": "shim"
+      },
+      "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "A shim that runs SCRIPT//GO packages on FiveM servers, with the same threads, events and exports model.",
@@ -800,6 +1483,14 @@
       "languages": [
         "lua"
       ],
+      "sides": [
+        "server",
+        "client"
+      ],
+      "adapterState": "none",
+      "blockedOn": "",
+      "integration": null,
+      "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "The same shim on RedM roleplay servers.",
@@ -824,6 +1515,14 @@
       "languages": [
         "lua"
       ],
+      "sides": [
+        "server",
+        "client"
+      ],
+      "adapterState": "none",
+      "blockedOn": "",
+      "integration": null,
+      "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "Game modes and client scripts for KCD:MP medieval roleplay servers (Kingdom Come: Deliverance II).",
@@ -848,6 +1547,14 @@
       "languages": [
         "lua"
       ],
+      "sides": [
+        "server",
+        "client"
+      ],
+      "adapterState": "none",
+      "blockedOn": "",
+      "integration": null,
+      "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "Project Zomboid server and client mods, for survival and roleplay servers.",
@@ -872,6 +1579,14 @@
       "languages": [
         "lua"
       ],
+      "sides": [
+        "server",
+        "client"
+      ],
+      "adapterState": "none",
+      "blockedOn": "",
+      "integration": null,
+      "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "Don't Starve Together server and client mods.",
