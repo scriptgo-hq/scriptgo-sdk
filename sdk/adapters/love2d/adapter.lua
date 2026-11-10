@@ -57,6 +57,8 @@ return function(scriptgo, opts)
         toasts = {},
     }
     for _, c in ipairs(scriptgo.capabilities.ALL) do adapter.capabilities[c] = true end
+    -- Player perks are not switched on here (one local player, no account to tie a purchase to); the registry says the same (capabilities.lua).
+    adapter.capabilities.perks = false
 
     local logLevel = { debug = 0, info = 1, warn = 2, error = 3 }
     local minLevel = logLevel[opts.logLevel or "info"] or 1

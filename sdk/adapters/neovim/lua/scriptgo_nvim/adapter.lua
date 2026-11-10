@@ -52,6 +52,8 @@ return function(scriptgo, opts)
         storageDir = storageDir,
     }
     for _, c in ipairs(scriptgo.capabilities.ALL) do adapter.capabilities[c] = true end
+    -- Player perks are not switched on here (an editor has no players); the registry says the same (capabilities.lua).
+    adapter.capabilities.perks = false
 
     local logLevel = { debug = 0, info = 1, warn = 2, error = 3 }
     local minLevel = logLevel[opts.logLevel or "info"] or 1

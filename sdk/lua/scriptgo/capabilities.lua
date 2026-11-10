@@ -4,7 +4,7 @@
 local R = ...
 local M = {}
 
-M.ALL = { "events", "logging", "storage", "players", "permissions", "commands", "config", "ui", "http", "licensing" }
+M.ALL = { "events", "logging", "storage", "players", "permissions", "commands", "config", "ui", "http", "licensing", "perks" }
 
 M.DESCRIPTIONS = {
     events = "Local events, network events between sides, lifecycle events.",
@@ -17,6 +17,7 @@ M.DESCRIPTIONS = {
     ui = "ScriptGo.ui.notify: on-screen notifications or chat fallback.",
     http = "Outbound HTTP requests from the server side.",
     licensing = "License activation and verification against the SCRIPT//GO API.",
+    perks = "Player perks: what the operator sold to a player from their own store, asked from the SCRIPT//GO API.",
 }
 
 function M.unavailable(cap, environment)
@@ -57,9 +58,10 @@ M.ENVIRONMENTS = {
         capabilities = {
             events = "supported", logging = "supported", storage = "supported", players = "partial",
             permissions = "supported", commands = "supported", config = "supported", ui = "fallback",
-            http = "partial", licensing = "supported",
+            http = "partial", licensing = "supported", perks = "partial",
         },
         notes = {
+            perks = "Implemented in the core, over curl. The players are the simulated local ones, so the identifier is local:<name>: for tests and tooling, not for real players.",
             players = "Simulated local players (one by default).",
             ui = "Notifications are printed to the console.",
             http = "Uses the system curl executable when present.",
@@ -81,9 +83,10 @@ M.ENVIRONMENTS = {
         capabilities = {
             events = "supported", logging = "supported", storage = "supported", players = "partial",
             permissions = "supported", commands = "supported", config = "supported", ui = "supported",
-            http = "partial", licensing = "partial",
+            http = "partial", licensing = "partial", perks = "unavailable",
         },
         notes = {
+            perks = "Not switched on: a single local player, with no account to tie a purchase to.",
             players = "Single local player (id 1), the game's own client side.",
             storage = "JSON files in the game's save directory (scriptgo/storage/<key>.json).",
             permissions = "Privileges per player id from the config table the game passes.",
@@ -113,9 +116,10 @@ M.ENVIRONMENTS = {
         capabilities = {
             events = "supported", logging = "supported", storage = "supported", players = "partial",
             permissions = "supported", commands = "supported", config = "supported", ui = "supported",
-            http = "unavailable", licensing = "unavailable",
+            http = "unavailable", licensing = "unavailable", perks = "unavailable",
         },
         notes = {
+            perks = "Needs http, which this adapter does not have.",
             players = "Single local player (id 1) joined by the scene; ScriptGoHost.join adds simulated ones.",
             storage = "JSON files at user://scriptgo/storage/<key>.json, written with FileAccess.",
             permissions = "Privileges per player id from the config passed to ScriptGoHost.boot.",
@@ -146,9 +150,10 @@ M.ENVIRONMENTS = {
         capabilities = {
             events = "partial", logging = "supported", storage = "supported", players = "supported",
             permissions = "supported", commands = "supported", config = "supported", ui = "fallback",
-            http = "partial", licensing = "partial",
+            http = "partial", licensing = "partial", perks = "unavailable",
         },
         notes = {
+            perks = "Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here.",
             events = "Server side only; client scripts do not run (Luanti mods are server-side).",
             players = "Player names get session-stable integer ids; identifier is luanti:<name>.",
             permissions = "server or scriptgo_admin privilege, then the grants in <world>/scriptgo.json.",
@@ -182,9 +187,10 @@ M.ENVIRONMENTS = {
         capabilities = {
             events = "supported", logging = "supported", storage = "supported", players = "supported",
             permissions = "supported", commands = "supported", config = "supported", ui = "supported",
-            http = "partial", licensing = "partial",
+            http = "partial", licensing = "partial", perks = "partial",
         },
         notes = {
+            perks = "Server side, in the shim: the core's perks module over Open77.http.request (the operator allows the API host) and Open77.players.identifier. The shim is packed per resource, so each resource that uses perks polls on its own; the cache is kept in the resource's kvp.",
             storage = "Open77.kvp on both sides, values stored as JSON text.",
             players = "Server side: GetPlayers, GetPlayerName, Open77.players.identifier.",
             permissions = "Server side: the server ACL (Open77.acl.isAllowed, permission acl.read).",
@@ -205,8 +211,8 @@ M.ENVIRONMENTS = {
             summary = "OPEN//77 runs its own Lua runtime with the same resource shape. `scriptgo pack --target open77` adapts a package to it: a generated `open77.lua` manifest, the package's files, and a three-file shim (shared, server, client), loaded first, that maps `ScriptGo.*` onto OPEN//77's `Open77.*` API. The packed manifest asks only for the permissions the package's capabilities need.",
         },
     },
-    openresty = { name = "OpenResty", status = "planned", dialects = { "luajit" }, summary = "Lua HTTP services on Nginx.", sides = { "server" }, protection = { tier = "license", state = "planned", note = "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim." }, capabilities = {}, notes = {}, limitations = {} },
-    defold = { name = "Defold", status = "planned", dialects = { "luajit" }, summary = "2D games with Defold.", sides = { "server", "client" }, protection = { tier = "license", state = "planned", note = "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim." }, capabilities = {}, notes = {}, limitations = {} },
+    openresty = { name = "OpenResty", status = "planned", dialects = { "luajit" }, summary = "Lua HTTP services on Nginx.", sides = { "server" }, protection = { tier = "license", state = "planned", note = "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim." }, capabilities = { perks = "unavailable" }, notes = { perks = "No adapter yet." }, limitations = {} },
+    defold = { name = "Defold", status = "planned", dialects = { "luajit" }, summary = "2D games with Defold.", sides = { "server", "client" }, protection = { tier = "license", state = "planned", note = "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim." }, capabilities = { perks = "unavailable" }, notes = { perks = "No adapter yet." }, limitations = {} },
     neovim = {
         protection = { tier = "license", state = "available", note = "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim." },
         name = "Neovim",
@@ -217,9 +223,10 @@ M.ENVIRONMENTS = {
         capabilities = {
             events = "supported", logging = "supported", storage = "supported", players = "partial",
             permissions = "supported", commands = "supported", config = "supported", ui = "supported",
-            http = "partial", licensing = "partial",
+            http = "partial", licensing = "partial", perks = "unavailable",
         },
         notes = {
+            perks = "Not applicable: an editor has no players to sell a perk to.",
             players = "Single local player (id 1), the person at the keyboard.",
             storage = "JSON files under stdpath(\"data\")/scriptgo/storage/<key>.json.",
             permissions = "Privileges per player id from the config passed to setup().",
@@ -255,9 +262,10 @@ M.ENVIRONMENTS = {
         capabilities = {
             events = "supported", logging = "supported", storage = "supported", players = "partial",
             permissions = "supported", commands = "supported", config = "supported", ui = "fallback",
-            http = "partial", licensing = "unavailable",
+            http = "partial", licensing = "unavailable", perks = "unavailable",
         },
         notes = {
+            perks = "Not implemented, for the reason given for licensing.",
             events = "Server and client run on the same computer; network events between them are looped back through the value codec.",
             players = "One player: the person at the computer's terminal (id 1). The world's other players are not visible.",
             storage = "JSON files on the computer's own disk (/scriptgo/data/<key>.json), within the server's computer_space_limit (1 MB by default).",
@@ -294,9 +302,10 @@ M.ENVIRONMENTS = {
         capabilities = {
             events = "supported", logging = "supported", storage = "supported", players = "partial",
             permissions = "supported", commands = "supported", config = "supported", ui = "fallback",
-            http = "supported", licensing = "supported",
+            http = "supported", licensing = "supported", perks = "partial",
         },
         notes = {
+            perks = "Lua guests: the kit runs the core's perks module in the guest, over IHostHttp and IHostPlayers.Identifier. JavaScript and TypeScript guests do not have it yet (capability_unavailable).",
             players = "The console host simulates players; an integrating engine supplies its own through IHostPlayers.",
             storage = "The integrator's IHostStorage; the console host keeps it in memory, or in JSON files with --data.",
             ui = "The console host writes notifications to its log; an engine implements IHostUi.",
@@ -328,9 +337,10 @@ M.ENVIRONMENTS = {
         capabilities = {
             events = "partial", logging = "supported", storage = "supported", players = "supported",
             permissions = "supported", commands = "partial", config = "supported", ui = "fallback",
-            http = "partial", licensing = "partial",
+            http = "partial", licensing = "partial", perks = "unavailable",
         },
         notes = {
+            perks = "Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here.",
             events = "Server side only: Hytale plugins run on the server and players install nothing.",
             logging = "The server log, through the plugin's logger.",
             storage = "JSON files in the plugin's data folder (mods/ScriptGo_ScriptGo/storage/<key>.json).",
@@ -364,9 +374,10 @@ M.ENVIRONMENTS = {
         capabilities = {
             events = "partial", logging = "supported", storage = "supported", players = "supported",
             permissions = "supported", commands = "supported", config = "supported", ui = "fallback",
-            http = "supported", licensing = "supported",
+            http = "supported", licensing = "supported", perks = "unavailable",
         },
         notes = {
+            perks = "Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here.",
             events = "Server side only; client scripts do not run yet. The scheduler ticks on the Think hook, every server frame.",
             logging = "The server console (and garrysmod/console.log with -condebug).",
             storage = "JSON files under garrysmod/data/scriptgo/storage/.",
@@ -398,9 +409,10 @@ M.ENVIRONMENTS = {
         capabilities = {
             events = "partial", logging = "supported", storage = "supported", players = "supported",
             permissions = "supported", commands = "supported", config = "supported", ui = "fallback",
-            http = "partial", licensing = "supported",
+            http = "partial", licensing = "supported", perks = "supported",
         },
         notes = {
+            perks = "Implemented in the core, over the plugin's web requests; the player is steam:<steamid64>. The cache is kept in the plugin's data files.",
             events = "Server side only: Rust has no client-side plugins. Lua 5.4 runs in KeraLua inside the plugin.",
             storage = "Oxide/Carbon data files: <data>/ScriptGo/storage/<key>.json.",
             players = "BasePlayer. Steam ids get integer ids that stay stable while the plugin is loaded; identifier is steam:<steamid64>.",
@@ -433,9 +445,10 @@ M.ENVIRONMENTS = {
         capabilities = {
             events = "partial", logging = "supported", storage = "supported", players = "supported",
             permissions = "supported", commands = "supported", config = "supported", ui = "partial",
-            http = "partial", licensing = "partial",
+            http = "partial", licensing = "partial", perks = "unavailable",
         },
         notes = {
+            perks = "Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here.",
             events = "Server side only: the plugin runs no client scripts, and TriggerClientEvent answers network_unavailable.",
             storage = "JSON files in the plugin's data/storage folder (scriptgo.json dataDir), replaced atomically.",
             players = "MP.GetPlayers and the join and disconnect events. BeamMP id n is SCRIPT//GO player n + 1 (0 is the console); identifier is beammp:<account id>, beammp-guest:<name> for guests.",
@@ -463,7 +476,7 @@ M.ENVIRONMENTS = {
         name = "Roblox", kind = "mod_platform", status = "planned", dialects = { "luau" }, sides = { "server", "client" },
         summary = "A Luau compatibility layer for Roblox experiences.",
         platformRules = "unsettled", platformRulesNote = "Roblox sells creations through its own store.",
-        capabilities = {}, notes = {}, limitations = {},
+        capabilities = { perks = "unavailable" }, notes = { perks = "No adapter yet." }, limitations = {},
     },
     fivem = {
         protection = { tier = "none", state = "available", note = "No licence check in the shim, so a package runs there without one. Releases are still signed." },
@@ -476,9 +489,10 @@ M.ENVIRONMENTS = {
         capabilities = {
             events = "supported", logging = "supported", storage = "supported", players = "supported",
             permissions = "supported", commands = "supported", config = "supported", ui = "fallback",
-            http = "partial", licensing = "unavailable",
+            http = "partial", licensing = "unavailable", perks = "unavailable",
         },
         notes = {
+            perks = "Not switched on: the shim does not carry the core's perks module.",
             events = "FiveM's own events and exports; TriggerEvent runs its handlers at once instead of on the next tick.",
             logging = "print to the server console (channel script:<resource>) or the client console, with the level in front.",
             storage = "Resource KVP (GetResourceKvpString / SetResourceKvp) on both sides, values stored as JSON text.",
@@ -510,28 +524,28 @@ M.ENVIRONMENTS = {
         name = "RedM", kind = "mod_platform", status = "planned", dialects = { "5.4" }, sides = { "server", "client" },
         summary = "The same shim on RedM roleplay servers.",
         platformRules = "restricts_paid", platformRulesNote = "The platform's creator terms keep paid server content on its own marketplace (Rockstar Games Creator Platform License Agreement, 2026-09-10, §3.1(6)).",
-        capabilities = {}, notes = {}, limitations = {},
+        capabilities = { perks = "unavailable" }, notes = { perks = "No adapter yet." }, limitations = {},
     },
     kcdmp = {
         protection = { tier = "license", state = "planned", note = "No adapter yet. Licence check and signed releases are planned with it; the host would run plain script, so its operator could read what it loads: no code-secrecy claim." },
         name = "KCD:MP", kind = "mod_platform", status = "planned", dialects = { "5.4" }, sides = { "server", "client" },
         summary = "Game modes and client scripts for KCD:MP medieval roleplay servers (Kingdom Come: Deliverance II).",
         platformRules = "restricts_paid", platformRulesNote = "The game's developer does not allow selling mods.",
-        capabilities = {}, notes = {}, limitations = {},
+        capabilities = { perks = "unavailable" }, notes = { perks = "No adapter yet." }, limitations = {},
     },
     zomboid = {
         protection = { tier = "license", state = "planned", note = "No adapter yet. Licence check and signed releases are planned with it; the host would run plain script, so its operator could read what it loads: no code-secrecy claim." },
         name = "Project Zomboid", kind = "mod_platform", status = "planned", dialects = { "5.1" }, sides = { "server", "client" },
         summary = "Project Zomboid server and client mods, for survival and roleplay servers.",
         platformRules = "restricts_paid", platformRulesNote = "The game's terms do not allow selling mods without approval.",
-        capabilities = {}, notes = {}, limitations = {},
+        capabilities = { perks = "unavailable" }, notes = { perks = "No adapter yet." }, limitations = {},
     },
     dst = {
         protection = { tier = "license", state = "planned", note = "No adapter yet. Licence check and signed releases are planned with it; the host would run plain script, so its operator could read what it loads: no code-secrecy claim." },
         name = "Don't Starve Together", kind = "mod_platform", status = "planned", dialects = { "5.1" }, sides = { "server", "client" },
         summary = "Don't Starve Together server and client mods.",
         platformRules = "restricts_paid", platformRulesNote = "The game's developer does not allow paid or paywalled mods.",
-        capabilities = {}, notes = {}, limitations = {},
+        capabilities = { perks = "unavailable" }, notes = { perks = "No adapter yet." }, limitations = {},
     },
 }
 

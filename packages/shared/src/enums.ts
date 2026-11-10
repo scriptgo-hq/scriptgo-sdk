@@ -133,6 +133,7 @@ export const KNOWN_CAPABILITIES = [
   "ui",
   "http",
   "licensing",
+  "perks",
 ] as const;
 export const Capability = z.string().min(1).max(64);
 export type Capability = z.infer<typeof Capability>;

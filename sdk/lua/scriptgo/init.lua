@@ -69,6 +69,7 @@ local M = {
     codec = R("codec"),
     manifest = R("manifest"),
     capabilities = R("capabilities"),
+    perks = R("perks"),
     host = host,
     testing = R("testing"),
 }

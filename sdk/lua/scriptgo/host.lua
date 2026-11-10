@@ -8,6 +8,7 @@ local codec = R("codec")
 local manifest = R("manifest")
 local semver = R("semver")
 local caps = R("capabilities")
+local perksLib = R("perks")
 
 local unpack, pack = compat.unpack, compat.pack
 
@@ -293,6 +294,11 @@ end
 
 function Side:kill()
     self.alive = false
+    -- Perk handlers live in the host-wide perks client: a stopped side takes its own back.
+    if self.perkHandlers and self.host.perks then
+        for _, id in ipairs(self.perkHandlers) do self.host.perks.off(id) end
+    end
+    self.perkHandlers = nil
     self.threads = {}
     self.handlers = {}
     self.handlerById = {}
@@ -323,6 +329,8 @@ function M.new(opts)
     end
     self.capabilities.events = true
     self.capabilities.logging = true
+    -- Perks are implemented once, in the core, over the adapter's HTTP: no HTTP, no perks.
+    if not self.capabilities.http then self.capabilities.perks = false end
     -- Guest languages this host runs: the portable host is Lua only (.js/.ts need a JS guest).
     self.languages = { lua = true }
     self.now = self:_clock()
@@ -905,11 +913,61 @@ function Host:_tickLicenses()
     end
 end
 
+-- Player perks ------------------------------------------------------------------------------------------
+-- One perks client for the whole host (scriptgo/perks.lua): one server link, one event queue, one
+-- cache, whatever the number of resources that ask. It is created on first use, so a server whose
+-- scripts never touch ScriptGo.perks never polls. The adapter supplies what it already supplies to
+-- every resource: HTTP, the player identifier, the wall clock, config and storage.
+function Host:_perks()
+    if self.perks then return self.perks end
+    local host, adapter = self, self.adapter
+    local storage
+    if adapter.storage and adapter.storage.load and adapter.storage.save then
+        storage = {
+            load = function()
+                local text = adapter.storage.load("scriptgo.perks")
+                if type(text) ~= "string" or text == "" then return nil end
+                local ok, data = pcall(json.decode, text)
+                return ok and data or nil
+            end,
+            save = function(data) adapter.storage.save("scriptgo.perks", json.encode(json.object(data))) end,
+        }
+    end
+    self.perks = perksLib.new({
+        request = function(req, done) return adapter.http.request(req, done) end,
+        await = function(register)
+            local promise = newPromise(host)
+            register(function(...) promise:resolve(...) end)
+            return promise:await()
+        end,
+        identifier = function(player) return host:playerIdentifier(player) end,
+        findPlayer = function(identifier)
+            for _, id in ipairs(host:playerList()) do
+                if host:playerIdentifier(id) == identifier then return id end
+            end
+            return nil
+        end,
+        now = function() return host:_wall() end,
+        json = json,
+        config = function(key)
+            local cfg = adapter.config
+            return cfg and cfg.get and cfg.get(nil, key) or nil
+        end,
+        log = function(level, message) host:_log(level, "perks", message) end,
+        storage = storage,
+        environment = self.environment,
+        adapterVersion = adapter.adapterVersion,
+        pollSeconds = adapter.perksPollSeconds,
+    })
+    return self.perks
+end
+
 -- Tick -------------------------------------------------------------------------------------------------
 function Host:tick(now)
     self.now = now or self:_clock()
     self.tickCount = self.tickCount + 1
     if self.licenseGuards then self:_tickLicenses() end
+    if self.perks then self.perks.tick() end
     self:_drain()
     for _, rname in ipairs(self.order) do
         local r = self.resources[rname]
@@ -1320,6 +1378,63 @@ function Host:_buildEnv(side)
                 licenseKey = opts.licenseKey, deploymentToken = opts.deploymentToken,
                 package = opts.package, environment = environment, adapterVersion = SG.runtime.adapterVersion(),
             })
+        end,
+    })
+    -- Player perks (ADR-0038): what the operator sold to a player, asked from SCRIPT//GO. Server side.
+    local function perksCall(fnName, threaded)
+        if threaded then inThread("ScriptGo.perks." .. fnName) end
+        if side.name ~= "server" then return nil end
+        return host:_perks()
+    end
+    SG.perks = capTable("perks", {
+        has = function(player, key)
+            local client = perksCall("has", true)
+            if not client then return false, "perks is server-side only" end
+            return client.has(player, key)
+        end,
+        list = function(player)
+            local client = perksCall("list", true)
+            if not client then return nil, "perks is server-side only" end
+            return client.list(player)
+        end,
+        refresh = function(player)
+            local client = perksCall("refresh", true)
+            if not client then return false, "perks is server-side only" end
+            return client.refresh(player)
+        end,
+        purchaseLink = function(player, key)
+            local client = perksCall("purchaseLink", true)
+            if not client then return nil, "perks is server-side only" end
+            return client.purchaseLink(player, key)
+        end,
+        catalog = function()
+            local client = perksCall("catalog", true)
+            if not client then return nil, "perks is server-side only" end
+            return client.catalog()
+        end,
+        -- on("granted" | "removed", fn): fn(player, key, info) runs in a thread of this resource.
+        on = function(kind, fn)
+            local client = perksCall("on", false)
+            if not client then return nil, "perks is server-side only" end
+            if (kind ~= "granted" and kind ~= "removed") or type(fn) ~= "function" then
+                error('ScriptGo.perks.on(kind, fn): kind is "granted" or "removed", fn a function', 2)
+            end
+            local id = client.on(kind, function(...)
+                if side.alive then side:spawn(fn, {}, nil, ...) end
+            end)
+            side.perkHandlers = side.perkHandlers or {}
+            side.perkHandlers[#side.perkHandlers + 1] = id
+            return id
+        end,
+        off = function(id)
+            local client = perksCall("off", false)
+            if not client then return false end
+            return client.off(id)
+        end,
+        status = function()
+            local client = perksCall("status", false)
+            if not client then return nil, "perks is server-side only" end
+            return client.status()
         end,
     })
     -- OPEN//77-compatible names for the portable subset.

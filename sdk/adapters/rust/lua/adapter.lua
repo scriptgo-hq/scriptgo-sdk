@@ -25,6 +25,8 @@ return function(scriptgo, H, opts)
             storage = caps.storage == true, players = caps.players == true,
             permissions = caps.permissions == true, config = caps.config == true,
             ui = caps.ui == true, http = caps.http == true, licensing = caps.http == true,
+            -- Player perks: the core's module, over the plugin's web requests and the Steam identifier.
+            perks = caps.http == true and caps.players == true,
         },
         budgetMs = opts.budgetMs,
     }

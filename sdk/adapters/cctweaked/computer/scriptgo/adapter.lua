@@ -60,6 +60,8 @@ return function(scriptgo, opts)
         writeFile = writeFile,
     }
     for _, c in ipairs(scriptgo.capabilities.ALL) do adapter.capabilities[c] = true end
+    -- Player perks are not switched on here (for the reason licensing is off); the registry says the same (capabilities.lua).
+    adapter.capabilities.perks = false
 
     -- Logging --------------------------------------------------------------------------------------
     local logLevel = { debug = 0, info = 1, warn = 2, error = 3 }

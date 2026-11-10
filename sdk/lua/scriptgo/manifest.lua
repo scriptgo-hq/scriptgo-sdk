@@ -5,7 +5,7 @@ local semver = R("semver")
 local json = R("json")
 local M = {}
 
-M.CAPABILITIES = { "events", "logging", "storage", "players", "permissions", "commands", "config", "ui", "http", "licensing" }
+M.CAPABILITIES = { "events", "logging", "storage", "players", "permissions", "commands", "config", "ui", "http", "licensing", "perks" }
 M.KNOWN_ENVIRONMENTS = { "standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim", "cctweaked", "dotnet", "garrysmod", "hytale", "rust", "beammp", "fivem" }
 M.LUA_DIALECTS = { "5.1", "5.2", "5.3", "5.4", "luajit" }
 M.CATEGORIES = { "inventory", "permissions", "economy", "events", "ui", "admin", "framework", "vehicles", "housing", "quests", "library", "other" }

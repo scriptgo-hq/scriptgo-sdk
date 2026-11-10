@@ -36,7 +36,7 @@ local resourceName = GetCurrentResourceName()
 local J = rawget(_G, "json")
 local unpackArgs = rawget(table, "unpack") or rawget(_G, "unpack")
 
-local ALL = { "events", "logging", "storage", "players", "permissions", "commands", "config", "ui", "http", "licensing" }
+local ALL = { "events", "logging", "storage", "players", "permissions", "commands", "config", "ui", "http", "licensing", "perks" }
 
 -- What this side of a FiveM resource can call. players, permissions, config and http are server
 -- side, as on every SCRIPT//GO host; ui is a chat message on both sides; licensing is never on.
@@ -44,6 +44,8 @@ local CAPS = {
     events = true, logging = true, storage = true, commands = true, ui = true,
     players = isServer, permissions = isServer, config = isServer, http = isServer,
     licensing = false,
+    -- Player perks: the shim does not carry the core's perks module.
+    perks = false,
 }
 
 local function unavailable(cap)
@@ -359,6 +361,10 @@ end
 
 -- No licence check in this shim (see the header).
 SG.licensing = { activate = refuse("licensing"), verify = refuse("licensing") }
+SG.perks = {
+    has = refuse("perks"), list = refuse("perks"), refresh = refuse("perks"), purchaseLink = refuse("perks"),
+    catalog = refuse("perks"), on = refuse("perks"), off = refuse("perks"), status = refuse("perks"),
+}
 
 -- OPEN//77-compatible names for the portable subset, as on every SCRIPT//GO host.
 SG.notifications = {

@@ -229,6 +229,7 @@
         "http": "partial",
         "licensing": "supported",
         "logging": "supported",
+        "perks": "partial",
         "permissions": "supported",
         "players": "partial",
         "storage": "supported",
@@ -236,6 +237,7 @@
       },
       "capabilityNotes": {
         "http": "Uses the system curl executable when present.",
+        "perks": "Implemented in the core, over curl. The players are the simulated local ones, so the identifier is local:<name>: for tests and tooling, not for real players.",
         "players": "Simulated local players (one by default).",
         "ui": "Notifications are printed to the console."
       },
@@ -348,6 +350,7 @@
         "http": "partial",
         "licensing": "partial",
         "logging": "supported",
+        "perks": "unavailable",
         "permissions": "supported",
         "players": "partial",
         "storage": "supported",
@@ -357,6 +360,7 @@
         "config": "Per-resource values and convars from the config table the game passes.",
         "http": "curl through io.popen, run in a love.thread worker so frames keep running; unavailable when io.popen or curl is missing. Status and body only, no response headers.",
         "licensing": "Available exactly when http is.",
+        "perks": "Not switched on: a single local player, with no account to tie a purchase to.",
         "permissions": "Privileges per player id from the config table the game passes.",
         "players": "Single local player (id 1), the game's own client side.",
         "storage": "JSON files in the game's save directory (scriptgo/storage/<key>.json).",
@@ -463,6 +467,7 @@
         "http": "unavailable",
         "licensing": "unavailable",
         "logging": "supported",
+        "perks": "unavailable",
         "permissions": "supported",
         "players": "partial",
         "storage": "supported",
@@ -472,6 +477,7 @@
         "config": "Per-resource values and convars from the config passed to ScriptGoHost.boot.",
         "http": "Not implemented: no outbound HTTP from resources yet.",
         "licensing": "Needs http.",
+        "perks": "Needs http, which this adapter does not have.",
         "permissions": "Privileges per player id from the config passed to ScriptGoHost.boot.",
         "players": "Single local player (id 1) joined by the scene; ScriptGoHost.join adds simulated ones.",
         "storage": "JSON files at user://scriptgo/storage/<key>.json, written with FileAccess.",
@@ -578,6 +584,7 @@
         "http": "partial",
         "licensing": "partial",
         "logging": "supported",
+        "perks": "unavailable",
         "permissions": "supported",
         "players": "supported",
         "storage": "supported",
@@ -587,6 +594,7 @@
         "commands": "Resource commands are ordinary chat commands.",
         "events": "Server side only; client scripts do not run (Luanti mods are server-side).",
         "http": "Needs the mod listed in secure.http_mods by the server owner.",
+        "perks": "Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here.",
         "permissions": "server or scriptgo_admin privilege, then the grants in <world>/scriptgo.json.",
         "players": "Player names get session-stable integer ids; identifier is luanti:<name>.",
         "ui": "Notifications are sent as chat messages."
@@ -711,6 +719,7 @@
         "http": "partial",
         "licensing": "partial",
         "logging": "supported",
+        "perks": "partial",
         "permissions": "supported",
         "players": "supported",
         "storage": "supported",
@@ -720,6 +729,7 @@
         "config": "Server side: convar <resource>:<key>, then the resource's tunables.",
         "http": "Server side, through Open77.http.request (permission http.request). Off until the operator sets server.jsonc http.enabled and lists each host in http.allowedHosts; redirects are never followed.",
         "licensing": "Server side, over Open77.http.request to the scriptgo_api convar; the operator allows the API host.",
+        "perks": "Server side, in the shim: the core's perks module over Open77.http.request (the operator allows the API host) and Open77.players.identifier. The shim is packed per resource, so each resource that uses perks polls on its own; the cache is kept in the resource's kvp.",
         "permissions": "Server side: the server ACL (Open77.acl.isAllowed, permission acl.read).",
         "players": "Server side: GetPlayers, GetPlayerName, Open77.players.identifier.",
         "storage": "Open77.kvp on both sides, values stored as JSON text.",
@@ -771,8 +781,12 @@
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "Lua HTTP services on Nginx.",
-      "capabilities": {},
-      "capabilityNotes": {},
+      "capabilities": {
+        "perks": "unavailable"
+      },
+      "capabilityNotes": {
+        "perks": "No adapter yet."
+      },
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
@@ -809,8 +823,12 @@
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "2D games with Defold.",
-      "capabilities": {},
-      "capabilityNotes": {},
+      "capabilities": {
+        "perks": "unavailable"
+      },
+      "capabilityNotes": {
+        "perks": "No adapter yet."
+      },
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
@@ -921,6 +939,7 @@
         "http": "partial",
         "licensing": "partial",
         "logging": "supported",
+        "perks": "unavailable",
         "permissions": "supported",
         "players": "partial",
         "storage": "supported",
@@ -931,6 +950,7 @@
         "config": "Per-resource values and convars from the config passed to setup().",
         "http": "curl through vim.system (Neovim 0.10 or later), asynchronous so the editor never waits; unavailable without curl. Status and body only, no response headers.",
         "licensing": "Available exactly when http is.",
+        "perks": "Not applicable: an editor has no players to sell a perk to.",
         "permissions": "Privileges per player id from the config passed to setup().",
         "players": "Single local player (id 1), the person at the keyboard.",
         "storage": "JSON files under stdpath(\"data\")/scriptgo/storage/<key>.json.",
@@ -1006,6 +1026,7 @@
         "http": "partial",
         "licensing": "unavailable",
         "logging": "supported",
+        "perks": "unavailable",
         "permissions": "supported",
         "players": "partial",
         "storage": "supported",
@@ -1017,6 +1038,7 @@
         "events": "Server and client run on the same computer; network events between them are looped back through the value codec.",
         "http": "CC: Tweaked's asynchronous http API. The server owner decides in computercraft-server.toml whether it is on and which hosts answer ([[http.rules]]; private and local addresses are denied by default). Redirects are not followed.",
         "licensing": "Not implemented: this adapter was built without a licence check, after the Minecraft Usage Guidelines, which allow a mod only if it \"cannot be used to directly or indirectly verify whether a player owns or has access to out-of-game content, products, or services that affect in-game features and functions\" (minecraft.net/en-us/usage-guidelines).",
+        "perks": "Not implemented, for the reason given for licensing.",
         "permissions": "Privileges per player id from /scriptgo/config.json.",
         "players": "One player: the person at the computer's terminal (id 1). The world's other players are not visible.",
         "storage": "JSON files on the computer's own disk (/scriptgo/data/<key>.json), within the server's computer_space_limit (1 MB by default).",
@@ -1128,6 +1150,7 @@
         "http": "supported",
         "licensing": "supported",
         "logging": "supported",
+        "perks": "partial",
         "permissions": "supported",
         "players": "partial",
         "storage": "supported",
@@ -1136,6 +1159,7 @@
       "capabilityNotes": {
         "http": "HttpClient off the host thread; the answer is delivered on the next tick.",
         "licensing": "Through the kit's HTTP, against the SCRIPT//GO API (checked against the API schemas by --stub-api).",
+        "perks": "Lua guests: the kit runs the core's perks module in the guest, over IHostHttp and IHostPlayers.Identifier. JavaScript and TypeScript guests do not have it yet (capability_unavailable).",
         "players": "The console host simulates players; an integrating engine supplies its own through IHostPlayers.",
         "storage": "The integrator's IHostStorage; the console host keeps it in memory, or in JSON files with --data.",
         "ui": "The console host writes notifications to its log; an engine implements IHostUi."
@@ -1198,6 +1222,7 @@
         "http": "partial",
         "licensing": "partial",
         "logging": "supported",
+        "perks": "unavailable",
         "permissions": "supported",
         "players": "supported",
         "storage": "supported",
@@ -1210,6 +1235,7 @@
         "http": "java.net.http, off until the operator lists hosts in scriptgo.json http.allowedHosts; redirects are never followed.",
         "licensing": "Available exactly when http is.",
         "logging": "The server log, through the plugin's logger.",
+        "perks": "Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here.",
         "permissions": "Hytale permission nodes scriptgo.admin or scriptgo.<privilege>, then the grants in scriptgo.json.",
         "players": "Connect and disconnect events; session ids, names, identifier hytale:<uuid>.",
         "storage": "JSON files in the plugin's data folder (mods/ScriptGo_ScriptGo/storage/<key>.json).",
@@ -1290,6 +1316,7 @@
         "http": "supported",
         "licensing": "supported",
         "logging": "supported",
+        "perks": "unavailable",
         "permissions": "supported",
         "players": "supported",
         "storage": "supported",
@@ -1302,6 +1329,7 @@
         "http": "The engine's asynchronous HTTP(): any method, status, body and headers. Loopback and private addresses need srcds -allowlocalhttp.",
         "licensing": "Over HTTP() to the scriptgo_api convar (default http://localhost:4100).",
         "logging": "The server console (and garrysmod/console.log with -condebug).",
+        "perks": "Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here.",
         "permissions": "superadmin, then CAMI (privilege scriptgo.<name>, for ULX, SAM and other admin mods), then grants by usergroup, SteamID64 or SteamID in data/scriptgo/config.json.",
         "players": "The player's UserID() is its id; identifier steam:<SteamID64>, bot:<id> for bots. Join and drop come from PlayerInitialSpawn and player_disconnect.",
         "storage": "JSON files under garrysmod/data/scriptgo/storage/.",
@@ -1377,6 +1405,7 @@
         "http": "partial",
         "licensing": "supported",
         "logging": "supported",
+        "perks": "supported",
         "permissions": "supported",
         "players": "supported",
         "storage": "supported",
@@ -1388,6 +1417,7 @@
         "events": "Server side only: Rust has no client-side plugins. Lua 5.4 runs in KeraLua inside the plugin.",
         "http": "Oxide/Carbon web requests. Response headers are not available; httpAllowedHosts can limit the hosts.",
         "licensing": "Over the plugin's web requests, to the scriptgo_api convar.",
+        "perks": "Implemented in the core, over the plugin's web requests; the player is steam:<steamid64>. The cache is kept in the plugin's data files.",
         "permissions": "Oxide permissions: privilege p is scriptgo.p; scriptgo.admin holds every privilege.",
         "players": "BasePlayer. Steam ids get integer ids that stay stable while the plugin is loaded; identifier is steam:<steamid64>.",
         "storage": "Oxide/Carbon data files: <data>/ScriptGo/storage/<key>.json.",
@@ -1450,6 +1480,7 @@
         "http": "partial",
         "licensing": "partial",
         "logging": "supported",
+        "perks": "unavailable",
         "permissions": "supported",
         "players": "supported",
         "storage": "supported",
@@ -1461,6 +1492,7 @@
         "events": "Server side only: the plugin runs no client scripts, and TriggerClientEvent answers network_unavailable.",
         "http": "curl started in the background through os.execute and polled each tick, so a request never blocks the plugin; needs curl on the server's PATH. BeamMP's own Http.CreateConnection has no POST and drops the response.",
         "licensing": "Over the same curl path, to the scriptgo_api convar.",
+        "perks": "Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here.",
         "permissions": "Grants in scriptgo.json, by beammp:<account id>, or by name for players logged in to BeamMP: BeamMP has no server-side roles.",
         "players": "MP.GetPlayers and the join and disconnect events. BeamMP id n is SCRIPT//GO player n + 1 (0 is the console); identifier is beammp:<account id>, beammp-guest:<name> for guests.",
         "storage": "JSON files in the plugin's data/storage folder (scriptgo.json dataDir), replaced atomically.",
@@ -1506,8 +1538,12 @@
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "A Luau compatibility layer for Roblox experiences.",
-      "capabilities": {},
-      "capabilityNotes": {},
+      "capabilities": {
+        "perks": "unavailable"
+      },
+      "capabilityNotes": {
+        "perks": "No adapter yet."
+      },
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
@@ -1555,6 +1591,7 @@
         "http": "partial",
         "licensing": "unavailable",
         "logging": "supported",
+        "perks": "unavailable",
         "permissions": "supported",
         "players": "supported",
         "storage": "supported",
@@ -1567,6 +1604,7 @@
         "http": "Server side, through PerformHttpRequest; redirects are not followed. No host allow-list: the server owner decides what a resource may call.",
         "licensing": "Not implemented: the shim has no licence check. It was written without one after Rockstar's Creator Platform License Agreement (2026-09-10, §3.1(6)), which forbids a third-party marketplace that sells or licenses server content.",
         "logging": "print to the server console (channel script:<resource>) or the client console, with the level in front.",
+        "perks": "Not switched on: the shim does not carry the core's perks module.",
         "permissions": "Server side: ACE (IsPlayerAceAllowed), granted with add_ace in server.cfg.",
         "players": "Server side: GetPlayers, GetPlayerName, and the license: identifier.",
         "storage": "Resource KVP (GetResourceKvpString / SetResourceKvp) on both sides, values stored as JSON text.",
@@ -1615,8 +1653,12 @@
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "The same shim on RedM roleplay servers.",
-      "capabilities": {},
-      "capabilityNotes": {},
+      "capabilities": {
+        "perks": "unavailable"
+      },
+      "capabilityNotes": {
+        "perks": "No adapter yet."
+      },
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
@@ -1653,8 +1695,12 @@
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "Game modes and client scripts for KCD:MP medieval roleplay servers (Kingdom Come: Deliverance II).",
-      "capabilities": {},
-      "capabilityNotes": {},
+      "capabilities": {
+        "perks": "unavailable"
+      },
+      "capabilityNotes": {
+        "perks": "No adapter yet."
+      },
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
@@ -1691,8 +1737,12 @@
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "Project Zomboid server and client mods, for survival and roleplay servers.",
-      "capabilities": {},
-      "capabilityNotes": {},
+      "capabilities": {
+        "perks": "unavailable"
+      },
+      "capabilityNotes": {
+        "perks": "No adapter yet."
+      },
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
@@ -1729,8 +1779,12 @@
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "Don't Starve Together server and client mods.",
-      "capabilities": {},
-      "capabilityNotes": {},
+      "capabilities": {
+        "perks": "unavailable"
+      },
+      "capabilityNotes": {
+        "perks": "No adapter yet."
+      },
       "setupMarkdown": "",
       "limitations": [],
       "listed": true,
