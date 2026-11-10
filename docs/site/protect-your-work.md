@@ -17,7 +17,7 @@ page is for creators who publish a protected release and for operators who run o
 | Layer | Applies to | What it gives you |
 |---|---|---|
 | Release signing | Every published release | Anyone can check that a release is the one the registry published, unaltered |
-| Per-server licence | Paid packages | Only a licensed server runs the package, and a refund or a revocation ends that |
+| Per-server licence | Paid packages, and packages you grant a free licence for | Only a licensed server runs the package, and a refund or a revocation ends that |
 | Encrypted release (escrow) | Releases you choose to protect | The files are delivered encrypted; the key goes to a licensed, bound server only |
 
 The first two work in every environment that allows paid packages. The third needs a loader on the
@@ -140,6 +140,82 @@ A refund, a lost payment dispute, an ended subscription or a revocation closes t
   default), then stops. The grace exists so that a short outage of the API never stops a paying
   server.
 
+## Protect without selling
+
+You do not have to sell a package to protect it. You can grant a **free licence** for one of your
+own packages, so that an encrypted release runs on the servers you chose: your own, a partner's, a
+tester's. Nothing is sold and no payment provider is involved. There is no offer, no checkout and no
+store behind a granted licence.
+
+A granted licence is an ordinary licence in every other way. It is bound to one server per
+deployment, every key delivery is logged, the copy carries a delivery marker, and you can revoke it.
+
+### Grant to an account
+
+The recipient has a SCRIPT//GO account. Ask them for their **account id**: it is on their
+**Dashboard → Settings** page, and `scriptgo login` prints it. It is not a secret. A creator username
+works too. An e-mail address is not accepted, because the answer would tell you whether that address
+has an account.
+
+Open **Dashboard → Packages**, pick the package, and use **Grant a free license** under
+*Free licenses*. Or from the CLI:
+
+```bash
+scriptgo grant create inventory-pro --to <account id> --note "Night City RP"
+```
+
+The recipient gets an e-mail and finds the licence under **Dashboard → Licenses**, marked as granted
+by you. From there the chain is the one above: reveal the key once, add a deployment, let the server
+bind itself.
+
+### Grant to a server key
+
+The operator has no account, or does not want one. They create the server's identity and send you
+the public key it prints:
+
+```bash
+scriptgo escrow identity --identity ./server-identity.json
+# public key   <43 characters>      ← this is what they send you. The file stays on their server.
+```
+
+A compiled host prints the same key when it starts. You grant to that key:
+
+```bash
+scriptgo grant create inventory-pro --server-key <public key> --environment standalone --name their-server
+```
+
+You hold this licence. Its one deployment is bound to that server key from the start, and its
+**deployment token is shown once**: hand it to the operator over a private channel. With the token
+they download the bundle and start their loader:
+
+```bash
+scriptgo add kestrel//inventory-pro --deployment-token <the token>
+```
+
+The token only works with the key you granted to. On any other server the key endpoint answers
+`server_key_mismatch`, exactly as it does for a bought licence that was copied. If the operator
+moves the server, use **Reset server key** on that licence in **Dashboard → Licenses**.
+
+### Revoke
+
+Use **Revoke** next to the grant, or `scriptgo grant revoke <licence id> --reason "<why>"`. The
+reason is recorded and shown to the holder. Revocation behaves as described under
+[When a licence ends](#when-a-licence-ends): the next key release fails at once, and a server that is
+already running stops when its offline grace ends. A revocation cannot be undone; grant again.
+
+You can revoke the licences you granted. You cannot revoke a licence someone paid for: that is for
+the payment provider (a refund) or for SCRIPT//GO staff.
+
+### Limits
+
+- Only for your own packages, and only while the package can be delivered: a listing that
+  SCRIPT//GO restricted or suspended after a report, or a package whose only release was yanked or
+  restricted, cannot be granted. A private package cannot be granted either, because nobody but
+  you could download it: make it unlisted.
+- One live grant per account and per server key for a package. To change its terms, revoke it and
+  grant again.
+- 25 grants per package per day. Every grant and every revocation is in the audit log.
+
 ## Refusal reasons
 
 `POST /v1/licenses/key` answers `200` with `valid: false` and one of these reasons. They are stable.
@@ -187,7 +263,8 @@ What a buyer's server gets depends on the host. Each environment has a tier, sho
 - Encrypted at rest and in transit.
 - The key is never shipped with the file.
 - Per-server binding: a copied bundle does not open on an unbound server.
-- Revocation on refund, lost dispute, ended subscription or admin decision, at the next key release.
+- Revocation on refund, lost dispute, ended subscription, admin decision or, for a licence you
+  granted, your own decision, at the next key release.
 - Tamper-evident signing.
 - Traceable leaks.
 - Defeating it takes real effort and leaves traces.

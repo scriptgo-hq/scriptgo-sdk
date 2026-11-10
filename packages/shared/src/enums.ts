@@ -136,7 +136,8 @@ export type ModerationActionKind = z.infer<typeof ModerationActionKind>;
 export const AppealStatus = z.enum(["open", "upheld", "reversed"]);
 export type AppealStatus = z.infer<typeof AppealStatus>;
 
-export const HistorySource = z.enum(["provider", "user", "admin", "system"]);
+/** `creator`: the creator who granted the license (a grant, or its revocation). */
+export const HistorySource = z.enum(["provider", "user", "admin", "system", "creator"]);
 export type HistorySource = z.infer<typeof HistorySource>;
 
 export const VerifyFailureReason = z.enum([

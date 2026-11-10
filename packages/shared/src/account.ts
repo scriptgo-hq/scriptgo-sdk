@@ -55,10 +55,31 @@ export type TokenSummary = z.infer<typeof TokenSummary>;
 
 // ---------------------------------------------------------------- licenses
 
+/**
+ * Where a license comes from. `provider`: a payment event of the creator's store. `admin`: a staff
+ * grant. `creator`: a free license granted by the package's creator: no offer, no checkout and no
+ * payment provider are involved (ADR-0036).
+ */
+export const LicenseSource = z.enum(["provider", "admin", "creator"]);
+export type LicenseSource = z.infer<typeof LicenseSource>;
+export const GrantRecipientKind = z.enum(["account", "server_key"]);
+export type GrantRecipientKind = z.infer<typeof GrantRecipientKind>;
+
+export const LicenseOrigin = z.object({
+  source: LicenseSource,
+  /** Creator grants: the granting creator's username. */
+  grantedBy: z.string().nullable(),
+  /** Creator grants: issued to an account, or to a server key an operator presented. */
+  recipient: GrantRecipientKind.nullable(),
+});
+export type LicenseOrigin = z.infer<typeof LicenseOrigin>;
+
 export const LicenseSummary = z.object({
   id: z.string(),
   package: PackageSummary,
-  offer: Offer,
+  /** null for a license granted by the creator: nothing was sold. */
+  offer: Offer.nullable(),
+  origin: LicenseOrigin,
   status: LicenseStatus,
   currentPeriodEnd: Timestamp.nullable(),
   deploymentsUsed: z.number().int().nonnegative(),
@@ -110,6 +131,8 @@ export const LicenseDetail = LicenseSummary.extend({
   history: z.array(LicenseHistoryEntry),
   seller: z.object({ creator: z.string(), provider: Provider.nullable() }),
   revokedReason: z.string().nullable(),
+  /** Who revoked it: the creator who granted it, staff, or a lost payment dispute. */
+  revokedBy: z.enum(["creator", "staff", "provider"]).nullable(),
   graceUntil: Timestamp.nullable(),
 });
 export type LicenseDetail = z.infer<typeof LicenseDetail>;
@@ -314,7 +337,89 @@ export const CustomerRow = z.object({
     deploymentsAllowed: z.number().int().nonnegative(),
   }),
   customer: z.object({ username: z.string() }),
-  offer: Offer,
+  /** null for a license the creator granted for free. */
+  offer: Offer.nullable(),
+  source: LicenseSource,
   package: z.object({ identifier: z.string(), title: z.string() }),
 });
 export type CustomerRow = z.infer<typeof CustomerRow>;
+
+// ---------------------------------------------------------------- creator grants ("protect without selling")
+
+/** A server's X25519 public key as a loader prints it: 32 bytes, base64url without padding. */
+export const ServerPublicKey = z.string().regex(/^[A-Za-z0-9_-]{43}$/, "a server public key is 32 bytes in base64url (43 characters), as `scriptgo escrow identity` prints it");
+
+/**
+ * A free license issued by the package's creator. Exactly one of `to` and `serverKey`:
+ *  - `to`: the recipient's account id (Dashboard → Settings, or `scriptgo login`), or a creator
+ *    username. E-mail addresses are not accepted: an answer would reveal whether an address has an
+ *    account.
+ *  - `serverKey`: the public key of the operator's server. The license is held by the creator and
+ *    its single deployment is bound to that key at once; the deployment token comes back once.
+ */
+export const CreateGrantBody = z
+  .object({
+    to: z.string().trim().min(2).max(64).optional(),
+    serverKey: ServerPublicKey.optional(),
+    /** Account grants: environments covered; empty = every environment the latest release declares. */
+    environments: z.array(z.string().min(1).max(64)).max(32).default([]),
+    /** Server-key grants: the environment of that server (required), and a name for its deployment. */
+    environment: z.string().min(1).max(64).optional(),
+    deploymentName: z.string().trim().min(1).max(64).default("server"),
+    /** Account grants: how many servers may run it at once. A server-key grant is always one. */
+    deployments: z.number().int().min(1).max(100).default(1),
+    /** null = until revoked. */
+    expiresInDays: z.number().int().min(1).max(3650).nullable().default(null),
+    note: z.string().trim().max(200).default(""),
+  })
+  .refine((b) => Boolean(b.to) !== Boolean(b.serverKey), { message: "Give either 'to' (an account) or 'serverKey' (a server public key), not both.", path: ["to"] })
+  .refine((b) => !b.serverKey || Boolean(b.environment), { message: "A server-key grant needs the environment of that server.", path: ["environment"] });
+export type CreateGrantBody = z.infer<typeof CreateGrantBody>;
+
+export const GrantRow = z.object({
+  /** The license id. */
+  id: z.string(),
+  package: z.string(),
+  status: LicenseStatus,
+  createdAt: Timestamp,
+  expiresAt: Timestamp.nullable(),
+  revokedAt: Timestamp.nullable(),
+  revokedReason: z.string().nullable(),
+  recipient: z.object({
+    kind: GrantRecipientKind,
+    /** account: the holder's display name. server_key: the deployment's name. */
+    name: z.string(),
+    /** server_key: fingerprint of the bound server key (null after the holder reset it). */
+    serverKeyFingerprint: z.string().nullable(),
+  }),
+  environments: z.array(z.string()),
+  deploymentsUsed: z.number().int().nonnegative(),
+  deploymentsAllowed: z.number().int().nonnegative(),
+  /** When a content key was last released to one of its deployments. */
+  lastKeyReleaseAt: Timestamp.nullable(),
+  note: z.string(),
+});
+export type GrantRow = z.infer<typeof GrantRow>;
+
+/** `deploymentToken` is set for a server-key grant only, and only in this answer: it is stored hashed. */
+export const GrantCreated = z.object({ grant: GrantRow, deploymentToken: z.string().nullable() });
+export type GrantCreated = z.infer<typeof GrantCreated>;
+
+/**
+ * The grants of one package, and whether a new one can be issued now. `blockedReason` is what the
+ * dashboard shows next to the disabled form: a moderation hold, no deliverable release, a private
+ * package, or the daily allowance used up.
+ */
+export const GrantList = z.object({
+  grants: z.array(GrantRow),
+  canGrant: z.boolean(),
+  blockedCode: z.string().nullable(),
+  blockedReason: z.string().nullable(),
+  /** Grants allowed for this package per rolling 24 hours (0 = no cap), and how many were issued. */
+  perDay: z.number().int().nonnegative(),
+  grantedToday: z.number().int().nonnegative(),
+});
+export type GrantList = z.infer<typeof GrantList>;
+
+export const RevokeGrantBody = z.object({ reason: z.string().trim().min(3).max(2000) });
+export type RevokeGrantBody = z.infer<typeof RevokeGrantBody>;

@@ -31,6 +31,8 @@ ListingStatus       = "active" | "restricted" | "suspended"
 OfferInterval       = "free" | "month" | "year" | "perpetual"
 Classification      = "free" | "software_license" | "authorized_app_feature" | "pending_review" | "rejected"
 LicenseStatus       = "active" | "grace" | "cancelled_active" | "expired" | "revoked" | "refunded"
+LicenseSource       = "provider" | "admin" | "creator"   // a payment event | a staff grant | a free grant by the package's creator
+GrantRecipientKind  = "account" | "server_key"
 ActivationStatus    = "pending" | "active" | "offline_grace" | "deactivated" | "blocked"
 StoreStatus         = "not_connected" | "sandbox" | "checkout_off" | "live" | "needs_attention"
 CaseStatus          = "received" | "under_review" | "action_taken" | "no_action" | "escalated" | "appeal_open" | "closed"
@@ -171,28 +173,43 @@ GET  /v1/checkout/:checkoutId                    → { checkoutId, status: "pend
 ```
 
 ```ts
-LicenseSummary = { id, package: PackageSummary, offer: Offer, status: LicenseStatus,
+LicenseSummary = { id, package: PackageSummary,
+                   offer: Offer | null,           // null for a license granted by the creator: nothing was sold
+                   origin: { source: LicenseSource,
+                             grantedBy: string | null,              // creator grants: the creator's username
+                             recipient: GrantRecipientKind | null },// creator grants: an account, or a server key
+                   status: LicenseStatus,
                    currentPeriodEnd: string | null, deploymentsUsed: number, deploymentsAllowed: number }
 LicenseDetail = LicenseSummary & {
   keyPreview: string,                 // "sg_live_…a91c"
   environments: string[],
   activations: { id, name, environment, adapterVersion, lastVerifiedAt, status: ActivationStatus, offlineGraceUntil }[],
-  history: { at, event, source: "provider" | "user" | "admin" | "system", reference }[],
+  history: { at, event, source: "provider" | "user" | "admin" | "system" | "creator", reference }[],
+                                      // "creator": the creator who granted the license (the grant, its revocation)
   keyRevealAvailable: boolean,        // POST .../reveal can still show the issued key
   seller: { creator: string, provider: "tebex" | "mock" | null },
   revokedReason: string | null,
+  revokedBy: "creator" | "staff" | "provider" | null,   // the granting creator, staff, or a lost payment dispute
   graceUntil: string | null
 }
 ```
+
+A license granted by a creator (`origin.source = "creator"`, see *Creator grants* below) is an
+ordinary license on every route of this section and of *Licensing*: the same key, reveal, rotation,
+deployments, binding, key endpoint and offline grace. It has no offer and no payment provider
+(`offer: null`, `seller.provider: null`). A grant to a server key is held by the creator who granted
+it (`origin.recipient = "server_key"`).
 
 The mock provider's checkout page is served by the API at `/v1/mock-provider/checkout/:checkoutId`
 (only when COMMERCE_MOCK_PROVIDER_ENABLED, which the API refuses in production). Its buttons POST to
 `/v1/mock-provider/checkout/:checkoutId/:action`, `action` one of `pay`, `pay_then_cancel`,
 `cancel`, `refund`, `cancel_subscription`, `renew`; each builds the provider events, signs them
 (`X-SG-Signature`) and delivers them to `/v1/webhooks/mock`, then answers 303 to
-`${PUBLIC_WEB_URL}/checkout/:checkoutId` (`?cancelled=1` after *Cancel*). Licenses are only ever
-granted by a verified webhook or an audited admin grant, never by the redirect: the web page polls
-`GET /v1/checkout/:checkoutId`.
+`${PUBLIC_WEB_URL}/checkout/:checkoutId` (`?cancelled=1` after *Cancel*). A paid license is only ever
+issued by a verified webhook, never by the redirect: the web page polls
+`GET /v1/checkout/:checkoutId`. The two other ways a license exists involve no payment and are both
+audited: a staff grant (`POST /v1/admin/licenses/grant`) and a creator grant
+(`POST /v1/creator/packages/:name/grants`).
 
 ## Creator (session or PAT; requires a creator profile)
 
@@ -226,7 +243,17 @@ DELETE /v1/creator/offers/:id                    → 204   (offer withdrawn; lic
 GET  /v1/creator/stores                          → Store[]
 POST /v1/creator/stores { provider: "mock" | "tebex", credentials }  → Store
 POST /v1/creator/stores/:id/test-event           → { delivered: boolean, status: number }  (mock store only)
-GET  /v1/creator/customers                       → { license, customer: { username }, offer }[]
+GET  /v1/creator/packages/:name/grants           → GrantList
+POST /v1/creator/packages/:name/grants { to | serverKey, environments?, environment?, deploymentName?,
+                                         deployments?, expiresInDays?, note? }
+                                                 → 201 { grant: GrantRow, deploymentToken: string | null }
+       400 (neither or both of to/serverKey; serverKey without environment; a malformed key)
+       404 recipient_not_found   409 grant_blocked (details.reason) | package_private | already_granted
+       422 grant_to_self | unknown_environment | environment_not_declared | environment_unprotected
+       429 grant_limit
+POST /v1/creator/grants/:id/revoke { reason }    → GrantRow   (404 for a license that was not granted by you)
+GET  /v1/creator/customers                       → { license, customer: { username }, offer: Offer | null, source: LicenseSource }[]
+                                                 (a grant to a server key is held by the creator: it is in GrantList, not here)
 GET  /v1/creator/analytics?days=30&package=      → { downloads: Series, activations: Series, verifications: Series }
 ```
 
@@ -235,6 +262,76 @@ KeyActivity = { days, released, refused, refusalsByReason: Record<KeyReleaseFail
                 deployments,            // distinct deployments that received a key in the window
                 lastReleasedAt, lastRefusedAt }
 ```
+
+### Creator grants: protect without selling (ADR-0036)
+
+A creator can issue a **free license** for one of their own packages. Nothing is sold: no offer, no
+checkout, no store and no payment event exist behind it, and no payment provider is involved. It is
+for a creator who wants a protected release to run on servers they chose (their own, a partner's, a
+tester's) with the same binding, logging and revocation a sold license has.
+
+```ts
+// POST body. Exactly one of `to` and `serverKey`.
+{ to?: string,             // the recipient's account id (GET /v1/me → user.id; shown in Dashboard → Settings and by
+                           // `scriptgo login`), or a creator username. Never an e-mail address.
+  serverKey?: string,      // the server's X25519 public key, base64url, 43 characters (`scriptgo escrow identity`)
+  environments?: string[], // account grants: environments covered; default: what the latest release declares
+  environment?: string,    // server-key grants: the environment of that server (required)
+  deploymentName?: string, // server-key grants: default "server"
+  deployments?: number,    // account grants: 1..100, default 1. A server-key grant is always 1
+  expiresInDays?: number | null,   // 1..3650; null (default) = until revoked
+  note?: string }          // the creator's own note, up to 200 characters; not shown to the holder
+
+GrantRow  = { id,                      // the license id
+              package: "creator//name", status: LicenseStatus, createdAt, expiresAt, revokedAt, revokedReason,
+              recipient: { kind: GrantRecipientKind,
+                           name,                       // account: the holder's display name; server_key: the deployment's name
+                           serverKeyFingerprint },     // server_key: fingerprint of the bound key, else null
+              environments: string[], deploymentsUsed, deploymentsAllowed, lastKeyReleaseAt, note }
+GrantList = { grants: GrantRow[], canGrant: boolean, blockedCode: string | null, blockedReason: string | null,
+              perDay: number, grantedToday: number }
+```
+
+- **To an account** (`to`). The account holds the license as a buyer would: it appears in
+  `GET /v1/me/licenses`, the key is revealed once, deployments are added and bound on first use. The
+  holder is told by e-mail (the message carries no key). An e-mail address is not accepted as `to`:
+  the answer, or the list of grants, would tell the creator whether that address has an account. An
+  account id is random and a creator username is public, so `404 recipient_not_found` reveals nothing.
+- **To a server key** (`serverKey`). For an operator who has no account, or wants none. They run
+  their loader's identity command on the server and send the creator the public key it prints. The
+  license is then **held by the creator**; its single deployment is created by the grant, already
+  bound to that key, and its **deployment token is returned once** in this answer (stored hashed,
+  never listed again) for the creator to hand over. The operator downloads the bundle with
+  `X-ScriptGo-Deployment-Token` and the loader asks `POST /v1/licenses/key` with it. The key endpoint
+  is unchanged: the content key is wrapped to the bound key only, and a request that presents any
+  other key is `server_key_mismatch`, so the token is useless on another machine. Moving the server
+  takes the holder's audited reset (`POST /v1/me/licenses/:id/deployments/:activationId/reset-server-key`,
+  by the creator here) like any deployment. A lost token is renewed by re-activating the same
+  deployment name with the license key, which never swaps the bound key.
+- **Who.** The package's own creator only (`404` for anyone else's package). Staff keep their own
+  grant (`POST /v1/admin/licenses/grant`, which needs an offer) and can revoke any license.
+- **Holds.** A grant needs no offer and depends on none. It is refused with `409 grant_blocked` and
+  `details.reason` while staff action holds the package or nothing can be delivered:
+  `listing_suspended`, `listing_restricted`, `sales_restricted`, `no_release` (no published release
+  that is neither yanked nor restricted). Also `409 package_private` (nobody but the creator could
+  download it). A license granted earlier follows the same staff action afterwards: the key endpoint
+  does not release the key of a restricted or yanked release, and the download refuses a restricted
+  listing. The `free_only` rule of an environment is about selling and does not block a grant; a
+  server-key grant for an environment whose protection tier is `none` is
+  `422 environment_unprotected`.
+- **Limits.** One live grant per account and package, and per server key and package
+  (`409 already_granted`). `LICENSE_CREATOR_GRANTS_PER_PACKAGE_PER_DAY` (25) grants per package per
+  rolling 24 hours, revoked ones included (`429 grant_limit`; 0 lifts the cap). The routes are
+  rate-limited per IP like the other creator routes.
+- **Revocation.** `POST /v1/creator/grants/:id/revoke` works on licenses this creator granted, never
+  on one that was paid for. It is what a staff revoke is: `POST /v1/licenses/key` and
+  `/v1/licenses/verify` answer `revoked` from the next request, the bundle is no longer delivered,
+  and a running server stops when the offline grace of its last valid answer ends. Not reversible:
+  grant again.
+- **Audit.** `license.issued` with `source: "creator"`, the recipient kind, the holder and
+  `payment: "none"`; `license.deployment_added` and `license.deployment_server_key_bound` for a
+  server-key grant; `license.revoked` with `by: "creator"` and the reason. The deployment token and
+  the license key are in no audit record.
 
 The content key of a protected release is sealed at rest, is in no log and no audit record, and is in
 no response of this API other than `POST /v1/licenses/key`, wrapped to one bound server. Publishing
