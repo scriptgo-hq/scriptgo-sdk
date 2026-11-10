@@ -14,3 +14,6 @@ coverage/
 !packages/cli/bin/
 sdk/native/build/
 sdk/examples/tools/.demo/
+
+# Machine-specific notes for agents
+CLAUDE.local.md

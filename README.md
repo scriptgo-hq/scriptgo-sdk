@@ -6,8 +6,7 @@
 platform needs: the portable runtime, one adapter per environment, the `scriptgo` CLI, the protected
 release loader, and the guides to bring SCRIPT//GO to a platform of your own.
 
-> This repository is published from the SCRIPT//GO monorepo (`scriptgo-hq/scriptgo`) by
-> `tools/split/publish-sdk.sh`, with its history. Changes are made there, not here.
+MIT-licensed: use it, change it, and sell what you build with it.
 
 ## What is inside
 
@@ -20,9 +19,10 @@ release loader, and the guides to bring SCRIPT//GO to a platform of your own.
 | [`sdk/conformance`](sdk/conformance) | Probe packages every adapter must pass (`sg_probe`, `sg_probe_net`, …) |
 | [`sdk/packages`](sdk/packages) | Official kits: `sg_eventbus`, `sg_inventory`, `sg_permissions` |
 | [`sdk/examples`](sdk/examples), [`examples`](examples) | Example hosts (a fictional third-party engine included) and demo projects |
-| [`packages/cli`](packages/cli) | The `scriptgo` CLI, with the manifest parser, the protected-release format, the API contract and the TypeScript types it uses |
+| [`packages/cli`](packages/cli) | The `scriptgo` CLI |
+| [`packages/shared`](packages/shared), [`manifest`](packages/manifest), [`escrow`](packages/escrow), [`types`](packages/types) | The npm packages: the API contract, the manifest parser, the protected-release format, the TypeScript declarations of the runtime |
 | [`docs/spec`](docs/spec) | The contracts: runtime, manifest, multi-language IDL, escrow, perks, the API |
-| [`docs/guides`](docs/guides), [`docs/site`](docs/site) | The guides, and the documentation pages of the website (their links point to the website) |
+| [`docs/site`](docs/site), [`docs/guides`](docs/guides) | The documentation of [scriptgo.dev/docs](https://scriptgo.dev/docs): the website is built from these files (their links point to the website) |
 
 ## Environments
 
@@ -59,6 +59,20 @@ pwsh -File sdk/native/build.ps1    # once: libscriptgo (sdk/native/build-linux.s
 dotnet test --project sdk/dotnet/ScriptGo.Host.Tests
 ```
 
+## npm packages
+
+| Package | What it is |
+|---|---|
+| `@scriptgo/shared` | The API contract: zod schemas and TypeScript types |
+| `@scriptgo/manifest` | The manifest parser and validator |
+| `@scriptgo/escrow` | Protected releases: format, signing, sealing, watermarking |
+| `@scriptgo/types` | TypeScript declarations of the runtime API, for scripts in TypeScript |
+
+In this repository they run from their TypeScript sources; `pnpm run build` emits `dist/`, which is
+what npm receives. A tag `v<version>` publishes them (`.github/workflows/release.yml`). The CLI
+is not on npm yet: run it from a checkout as above. `ScriptGo.Escrow` for NuGet is packed by
+[`sdk/dotnet/pack.ps1`](sdk/dotnet/pack.ps1).
+
 ## Bring SCRIPT//GO to your platform
 
 - **An adapter** gives the core a clock, persistence, players, privileges and output:
@@ -72,6 +86,15 @@ dotnet test --project sdk/dotnet/ScriptGo.Host.Tests
 Protection is deterrence, traceability and revocation: server code encrypted at rest, keys never
 shipped, a key released per server, revoked on a refund. The operator of a machine can ultimately
 recover what their own process runs; SCRIPT//GO never claims otherwise.
+
+## Contributing
+
+Issues and pull requests are welcome. A change is done when it is proven where it runs: the tests
+above, and for an adapter a run in the real runtime, written down in its README.
+[`AGENTS.md`](AGENTS.md) holds the rules of this repository, for people and coding agents alike.
+
+The SCRIPT//GO platform (the API and the website) is a separate, proprietary project. It consumes
+this SDK by tag: a change here reaches it when it moves to a new tag.
 
 ## Licence
 
