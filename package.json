@@ -1,0 +1,11 @@
+{
+  "name": "scriptgo-sdk",
+  "private": true,
+  "description": "SCRIPT//GO SDK: the portable runtime, the adapters, the CLI and the protected-release loader.",
+  "packageManager": "pnpm@12.18.0",
+  "scripts": {
+    "test": "pnpm -r run test",
+    "typecheck": "pnpm -r run typecheck",
+    "lua:test": "node tools/lua-test.mjs"
+  }
+}

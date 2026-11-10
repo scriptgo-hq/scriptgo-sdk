@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+*.log
+*.tsbuildinfo
+.env
+.env.local
+/tools/runtimes/
+/verification/
+# .NET and native build output (contains absolute local paths)
+**/bin/
+**/obj/
+**/TestResults/
+!packages/cli/bin/
+sdk/native/build/
+sdk/examples/tools/.demo/
