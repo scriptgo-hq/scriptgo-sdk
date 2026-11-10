@@ -57,6 +57,7 @@ scoped to one user. Revoke it from the same settings page if it leaks.
 | `scriptgo publish [dir]` | Uploads a release of the resource and publishes it |
 | `scriptgo add creator//package` | Installs a package into `./resources` |
 | `scriptgo license activate\|verify` | Activates a deployment or verifies a license |
+| `scriptgo escrow inspect\|install\|identity\|load` | Protected releases: read a bundle, install it encrypted for OPEN//77, or open it with the reference loader |
 
 ### scriptgo init
 
@@ -178,6 +179,33 @@ dashboard. `--dry-run` only packs. A published version is immutable: to fix `1.5
 You need `scriptgo login` and a creator profile before you can publish. Create the profile from
 the dashboard.
 
+#### Publish a protected release
+
+```bash
+scriptgo publish --escrow --escrow-ignore config.lua --owns-code
+```
+
+`--escrow` encrypts the release on your machine before it is uploaded.
+
+- **What is encrypted:** your server-side code. Files a host sends to game clients (shared and
+  client scripts, `files`, `web_files`) cannot be secret, so they stay readable. So do the manifest,
+  `README.md`, `CHANGELOG.md` and `LICENSE`, and anything you name with `--escrow-ignore <glob>`
+  (repeatable), for example a config file an operator must edit.
+- **Who signs:** the bundle's `escrow.json` is signed with your own key. The CLI creates it on first
+  use in `~/.scriptgo/release-signing.key`; `SCRIPTGO_SIGNING_KEY` (a base64 32-byte seed) overrides it.
+  Keep that file: buyers pin its public key.
+- **Where the key goes:** the content key is sent to SCRIPT//GO once, in the upload, and sealed there.
+  This command never writes it to disk and never prints it.
+- A package that can run on OPEN//77 gets its `open77.lua` and shim generated into the bundle as
+  signed readable files.
+
+`scriptgo pack --escrow` writes the bundle and a separate key file instead of uploading. Publish
+that pair later with `scriptgo publish --bundle <file.escrow.zip> --escrow-key <file.json> --package <slug> --owns-code`.
+The key file is a secret: never commit it and never ship it with the bundle.
+
+Protection is deterrence and traceability, not DRM. A licensed operator can still read what their
+own host decrypts. See [Protect your work](/docs/protect-your-work).
+
 ### scriptgo add
 
 ```bash
@@ -190,8 +218,49 @@ archive and checks its SHA-256 against the `X-Sha256` header and the registry li
 mismatch nothing is written. It then extracts the resource into `./resources/<resource>`
 (`--dir` to change it; `--force` replaces an existing folder).
 
+Every published release is signed by the registry, and `add` checks that signature before it
+writes a file. The first time it talks to a registry it pins that registry's release keys in
+`~/.scriptgo/trusted-keys.json` and says so. A release signed by a key that is not pinned is refused:
+if the registry rotated its key, compare the fingerprint and pass `--trust-new-key`. Set
+`SCRIPTGO_RELEASE_KEYS` (comma-separated public keys) to pin keys yourself, for example in CI.
+`--allow-unsigned` exists only for a registry older than release signing.
+
 Paid packages install like free ones; the license is checked at runtime by the resource itself.
 See [Licensing API](/docs/licensing-api).
+
+A **protected** release arrives as its encrypted bundle, and only for a licensed customer: log in
+as the license holder, or pass `--deployment-token`. The bundle is saved as
+`./resources/<resource>-<version>.escrow.zip` and is not extracted.
+
+### scriptgo escrow
+
+```bash
+scriptgo escrow inspect  resources/inventory_pro-1.5.0.escrow.zip
+scriptgo escrow identity --identity ./server-identity.json
+scriptgo escrow load     --bundle resources/inventory_pro-1.5.0.escrow.zip \
+    --package kestrel//inventory-pro --environment standalone \
+    --deployment-token "$SCRIPTGO_DEPLOYMENT_TOKEN" --identity ./server-identity.json \
+    --trusted-signer <the creator's key> --once --out resources/inventory_pro
+scriptgo escrow install  resources/inventory_pro-1.5.0.escrow.zip --target open77 --out <resources folder>
+```
+
+- `inspect` prints what a bundle holds, readable and encrypted, and checks its signature. It needs
+  no key.
+- `identity` creates the server's key pair. The private half stays in that file, on that server.
+  The licence page shows the fingerprint once the deployment is bound.
+- `load` is the **reference loader, not a compiled host**. It checks the bundle, asks SCRIPT//GO for
+  the key wrapped to this server, decrypts in memory and adds the delivery marker. `--out` writes
+  the decrypted copy to disk for a host that only reads files: that is licence-only protection,
+  because the operator can read the disk. `--lua lua54` runs the resource once in the standalone
+  host. Without `--once` it stays up, asks again before each answer expires, and stops when the
+  offline grace of its last valid answer ends. It exits `0` when the resource ran, `1` when it
+  was refused, `3` when it stopped at the end of grace, `4` when the API could not answer at
+  start. A key is never written to disk, so a start always needs the API.
+- `install --target open77` writes an OPEN//77 resource folder with the scripts still encrypted.
+  It decrypts nothing: a server with that feature switched on does it. It refuses a bundle that was
+  not packed for OPEN//77.
+
+For code that stays in memory, use a compiled host: the [.NET kit](/docs/dotnet-kit).
 
 ## Exit codes and errors
 

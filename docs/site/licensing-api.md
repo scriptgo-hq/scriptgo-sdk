@@ -132,6 +132,67 @@ gets a 400.
 
 Response: `{ "ok": true }`. The slot is free again.
 
+### POST /v1/licenses/key
+
+For a **protected** release. It answers the release's content key, encrypted to one server.
+
+```json
+{
+  "deploymentToken": "sg_dep_…",
+  "package": "kestrel//inventory-pro",
+  "version": "1.5.0",
+  "environment": "dotnet",
+  "serverPublicKey": "…"
+}
+```
+
+`serverPublicKey` is the server's X25519 public key, raw, in base64url. The first request binds it
+to the deployment. After that, a request with another key is refused: a copy of the files on
+another machine has no matching private key and gets nothing. `version` is optional; without it
+the newest protected release answers.
+
+```json
+{
+  "valid": true,
+  "reason": null,
+  "wrappedKey": { "epk": "…", "nonce": "…", "wrapped": "…" },
+  "aad": "kestrel//inventory-pro@1.5.0",
+  "signerPublicKey": "…",
+  "deliveryWatermark": "…",
+  "offlineGraceUntil": "2026-11-13T10:00:00.000Z",
+  "expiresAt": "2026-11-10T10:15:00.000Z"
+}
+```
+
+The loader unwraps the key with its private key, checks the bundle against `signerPublicKey`,
+decrypts, and stamps `deliveryWatermark` into the copy. It asks again before `expiresAt` and may
+keep running until `offlineGraceUntil` when the API cannot answer. Like verify, a definitive
+refusal is HTTP 200 with `valid: false`:
+
+| `reason` | Meaning |
+|---|---|
+| `unknown_key` | No licence matches the key or token for this package |
+| `expired`, `revoked`, `refunded` | The licence ended. A running server stops when its offline grace ends |
+| `deactivated` | The deployment was deactivated |
+| `environment_not_covered`, `deployment_limit` | As for verify |
+| `unbound` | The request named no server key (a licence key alone, or no `serverPublicKey` on a deployment that has none) |
+| `server_key_mismatch` | Another server key than the bound one. After moving or re-installing a server, its owner uses **Reset server key** on the licence page, then starts it again |
+| `not_escrowed` | The package has no protected release for that version |
+
+Every answer is logged with its reason. The key itself is never logged or cached. The licence
+owner resets a binding with `POST /v1/me/licenses/:id/deployments/:activationId/reset-server-key`
+(recorded, three per deployment per day).
+
+### GET /v1/signing-keys
+
+```json
+{ "keys": [{ "keyId": "…", "alg": "ed25519", "publicKey": "…", "status": "current" }] }
+```
+
+The registry's release-signing keys. Every published release is signed with the current one;
+`scriptgo add` checks it. This is a different key from the one below. A creator's own escrow keys
+are at `GET /v1/creators/:username/signing-keys`.
+
 ### GET /v1/licenses/public-key
 
 ```json
@@ -147,7 +208,7 @@ personal access token, so it is meant for the dashboard, not for deployments.
 
 ## Rate limits
 
-`verify` is rate-limited per key (60 per minute) and per IP (300 per minute); `activate` and
+`verify` and `key` are rate-limited per key (60 per minute) and per IP (300 per minute); `activate` and
 `deactivate` allow 30 per minute per IP. Verify on start and then at a modest interval, not on
 every tick or every player action. When a call is refused, keep using the last signed token and
 retry later.
