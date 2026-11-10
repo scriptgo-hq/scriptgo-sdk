@@ -130,6 +130,11 @@ cross between languages is fixed in `docs/spec/multi-language.md`.
   configuration is complete, and SCRIPT//GO issues the license after a verified payment event.
   Real checkout is not live yet: it stays off, for every shop, until Tebex approves it in writing.
   The Tebex connector has not run against a live store yet. See [Selling](/docs/selling).
+- **Player perks**: an operator sells a perk to the players of their own servers, and the server
+  asks SCRIPT//GO who holds it through `ScriptGo.perks`. It is wired on OPEN//77, Rust, the .NET
+  kit's Lua guests and the standalone host. It waits for real checkout, like every sale. See [Selling](/docs/selling#an-operator-sells-a-perk).
+- **Free licences**: a creator grants a free licence for their own package to an account or a
+  server key, with nothing sold. See [Protect without selling](/docs/protect-your-work#protect-without-selling).
 - **Compatibility proof**: statuses and package badges come from verification reports.
 - **Imports**: `scriptgo add creator//name` downloads a release and checks its SHA-256 and the
   registry's signature before it writes a file.
@@ -162,13 +167,11 @@ available only once it passes real runs.
 
 | Item | State | What it is |
 |---|---|---|
-| Perks for players | In development | An operator sells a perk to their players, tied to a feature of their own script. See [Selling](/docs/selling#an-operator-sells-a-perk) |
-| Protection without a sale | In development | A creator gives a server a free licence; the release is still bound to that server |
 | Minify at packaging | In development | An optional step that makes packaged script harder to read. A speed bump, never protection |
 | Native C ABI kit | Not started (phase 4) | `libscriptgo` with C headers, for C and C++ engines: Lua 5.4 or LuaJIT, and JavaScript on QuickJS |
 | Node kit | Not started (phase 4, after the C kit) | For Node, Bun and Deno servers: Lua and JavaScript in WebAssembly, isolated per resource |
 | JVM kit | Later | A general kit for Java servers. Only the Hytale plugin runs the core on a JVM today |
 | C# guests | Not started (phase 3) | A spike and a security review come first; until then a `.cs` script is refused |
 | In-memory escrow on more hosts | Planned | Today the in-memory loader is in the .NET kit. Other hosts that run compiled code are marked planned on the [environments page](/environments#protection); hosts that run plain script stay on licence and signing |
-| SDK packages on NuGet and npm | Not published | The .NET kit, the CLI and `@scriptgo/types` |
+| SDK packages on NuGet and npm | Not published | The npm packages, the CLI included, install from the tarballs of the SDK's GitHub release. Nothing is on the npm registry or on NuGet yet |
 | Linux and macOS | Partly measured | The desktop hosts (LÖVE, Godot, Neovim) were measured on Windows only. The .NET kit's test suite and the native escrow library also pass on Linux x64, in a container. Nothing was measured on macOS |

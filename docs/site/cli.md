@@ -13,8 +13,8 @@ The CLI is called `scriptgo`. It talks to the same HTTP API as the website (see
 
 ## Install
 
-The CLI is the `@scriptgo/cli` package. It runs on Node.js 22 or later, on Windows, Linux and
-macOS. Install it from the SDK's GitHub release:
+The CLI is the `@scriptgo/cli` package. It runs on Node.js 22 or later. Install it from the SDK's
+GitHub release:
 
 ```bash
 npm install -g https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.3/scriptgo-cli-0.1.3.tgz

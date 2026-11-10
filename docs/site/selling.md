@@ -45,7 +45,8 @@ What is sold: a licence to run the studio's script.
 ## An operator sells a perk
 
 > [!NOTE]
-> In development. This case is being built and is not usable yet.
+> Built. Like every sale, it waits for real checkout: until then it runs against the mock provider
+> only.
 
 A server operator sells a perk to their players, for example a monthly VIP pass. The pass unlocks a
 feature of the script the operator wrote for their own server.
@@ -56,6 +57,12 @@ feature of the script the operator wrote for their own server.
 4. **The operator's script** unlocks the feature.
 
 The perk renews with the subscription. When the subscription ends, the perk ends with it.
+
+The operator sets it up in [Dashboard → Perks](/dashboard/perks): the perks on sale, then the
+servers linked to the account under **Servers**. Each link has a `sg_srv_` token, shown once, that
+goes in the server's `scriptgo_server_token` setting. The script calls `ScriptGo.perks`. It is
+wired on OPEN//77, Rust (Oxide and Carbon), the .NET kit's Lua guests and the standalone host; each
+adapter's SETUP says what has run there. The protocol is in `docs/spec/perks.md`.
 
 What is sold: a feature of the operator's own code. Not the game, not its content, not access to
 it.
@@ -126,8 +133,9 @@ server_script "server/main.lua"
 test_script "tests/core_test.lua"
 ```
 
-The `scriptgo` CLI is in preview and ships as `@scriptgo/cli`. Sign it in with a personal access
-token from [Dashboard → Settings](/dashboard/settings). See [Quickstart](/docs/quickstart),
+The `scriptgo` CLI is in preview. Install it from the SDK's GitHub release (see
+[CLI](/docs/cli#install)) and sign it in with a personal access token from
+[Dashboard → Settings](/dashboard/settings). See [Quickstart](/docs/quickstart),
 [Manifest](/docs/manifest) and [CLI](/docs/cli).
 
 ## Licences
@@ -156,12 +164,17 @@ can protect and monetize what they build there.
 See also [The SDK](/docs/sdk), the [Runtime API](/docs/runtime) and the
 [environments and their status](/docs/environments).
 
+## Protection without a sale
+
+A creator can give a free licence for one of their own packages, to an account or to a server key:
+[Dashboard → Packages](/dashboard/packages), **Grant a free license**, or `scriptgo grant`. Nothing
+is sold and no store is needed. The release is still bound to that server and delivered the same
+way. See [Protect without selling](/docs/protect-your-work#protect-without-selling).
+
 ## In development
 
-These are announced and being built. None of them is usable yet.
+Announced and being built. Not usable yet.
 
 | Item | What it is |
 |---|---|
-| Perks for players | An operator sells a perk to their players, tied to a feature of their own script: the player, the operator's Tebex store, SCRIPT//GO, the SDK on the server, the operator's script |
-| Protection without a sale | A creator gives a server a free licence. Nothing is sold, and the release is still bound to that server and delivered the same way |
 | Minify at packaging | An optional step that makes packaged script harder to read. It is a speed bump, never protection, and it is never counted as such |

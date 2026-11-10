@@ -120,7 +120,27 @@ The manifest is parsed, never executed. Errors stop the release; warnings are sh
 
 A 4xx or 5xx answer means the API could not answer, not that the license is refused.
 
+### A licence check never reaches the API
+
+**Cause.** The host keeps outbound HTTP to a list of allowed hosts, and `api.scriptgo.dev` is not on
+it. OPEN//77 answers `host_not_allowed`.
+
+**Fix.** Allow `api.scriptgo.dev`: OPEN//77 `http.allowedHosts` in `server.jsonc` (with
+`http.enabled`), Rust and BeamMP `httpAllowedHosts`, Hytale `http.allowedHosts`. If `scriptgo_api`
+points at another API, allow that host instead. Each adapter's SETUP shows where.
+
 Details: [Licensing API](/docs/licensing-api).
+
+## CLI
+
+### `scriptgo login` answers `invalid_token`
+
+**Cause.** The token is wrong, revoked or expired, or it was made on another API. The CLI talks to
+`https://api.scriptgo.dev` unless `--api`, `SCRIPTGO_API` or an earlier login says otherwise, and a
+token from a local API is unknown there.
+
+**Fix.** Create a token in [Dashboard → Settings](/dashboard/settings) on scriptgo.dev, or pass
+`--api` with the API the token belongs to. See [CLI](/docs/cli#sign-in-with-an-access-token).
 
 ## Registry and purchases
 

@@ -39,7 +39,7 @@ Each adapter's README says exactly what was run and what was not.
 
 ## Install the CLI
 
-Node.js 22 or later, on Windows, Linux or macOS:
+Node.js 22 or later:
 
 ```bash
 npm install -g https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.3/scriptgo-cli-0.1.3.tgz
