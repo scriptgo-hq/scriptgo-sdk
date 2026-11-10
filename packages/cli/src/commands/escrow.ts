@@ -1,22 +1,30 @@
+// scriptgo escrow inspect  <bundle.escrow.zip> [--trusted-signer <key>]
+// scriptgo escrow install  <bundle.escrow.zip> --target open77 --out <resources folder> [--trusted-signer <key>] [--force]
 // scriptgo escrow identity --identity <file>
-// scriptgo escrow load --bundle <file> --master <url> --deployment-token <sg_dep_...> --package <creator//name>
-//                      --environment <env> --identity <file> [--trusted-signer <key>] [--version <v>]
-//                      [--once] [--out <dir>] [--lua lua54|lua51|luajit|<path>] [--recheck <seconds>]
+// scriptgo escrow load     --bundle <file> --master <url> --deployment-token <sg_dep_...> --package <creator//name>
+//                          --environment <env> --identity <file> [--trusted-signer <key>] [--version <v>]
+//                          [--once] [--out <dir>] [--lua lua54|lua51|luajit|<path>] [--recheck <seconds>]
 //
-// The REFERENCE escrow loader (not a compiled host: see src/lib/escrow-loader.ts). `load` verifies the
-// bundle, gets the content key wrapped to this server from the master, decrypts in memory and, on
-// request, runs the resource in the standalone Lua host or writes it to disk (--out: licence-only
-// grade, the operator can read it). Without --once it stays up, asks again before each answer
-// expires, and stops when the offline grace of its last valid answer runs out.
+// inspect and install never handle a content key: `inspect` reads a bundle's clear manifest and
+// checks its signature; `install` writes an OPEN//77 resource folder with the scripts still
+// encrypted (the OPEN//77 server decrypts them itself when its resourceEscrow feature is on).
 //
-// Exit codes: 0 loaded (and ran); 1 refused (the master said no, or the bundle does not verify);
-// 2 usage; 3 stopped at the end of offline grace; 4 the master could not answer at start.
+// identity and load are the REFERENCE escrow loader (not a compiled host: see
+// src/lib/escrow-loader.ts). `load` verifies the bundle, gets the content key wrapped to this server
+// from the master, decrypts in memory and, on request, runs the resource in the standalone Lua host
+// or writes it to disk (--out: licence-only grade, the operator can read it). Without --once it
+// stays up, asks again before each answer expires, and stops when the offline grace of its last
+// valid answer runs out.
+//
+// Exit codes of `load`: 0 loaded (and ran); 1 refused (the master said no, or the bundle does not
+// verify); 2 usage; 3 stopped at the end of offline grace; 4 the master could not answer at start.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { readBundle, verifyManifest } from "@scriptgo/escrow";
 import { MANIFEST_FILES, parseManifest } from "@scriptgo/manifest";
-import { parseArgs } from "../lib/args.ts";
+import { parseArgs, type ParsedArgs } from "../lib/args.ts";
 import {
   checkBundle,
   graceEnd,
@@ -28,17 +36,21 @@ import {
   requestKey,
   type KeyAnswer,
 } from "../lib/escrow-loader.ts";
+import { Open77EscrowError, installEscrowForOpen77 } from "../lib/open77-escrow.ts";
 import { defaultSearchPaths, pickInterpreters, standaloneMain } from "../lib/sdk.ts";
 import { loadCredentials } from "./_api-client.ts";
 
-export const summary = "Reference loader for protected (escrow) releases, and the server identity it uses";
+export const summary = "Protected (escrow) releases: inspect a bundle, install it encrypted for OPEN//77, or open it with the reference loader";
 
-const USAGE = `scriptgo escrow identity --identity <file>
+const USAGE = `scriptgo escrow inspect <bundle.escrow.zip> [--trusted-signer <ed25519 public key>]
+scriptgo escrow install <bundle.escrow.zip> --target open77 --out <resources folder> [--trusted-signer <key>] [--force]
+scriptgo escrow identity --identity <file>
 scriptgo escrow load --bundle <file.escrow.zip> --package <creator//name> --environment <env>
     --deployment-token <sg_dep_...> --identity <file> [--master <url>] [--trusted-signer <base64url key>]
     [--version <v>] [--once] [--out <dir>] [--lua lua54|lua51|luajit|<path>] [--recheck <seconds>]
 
-This is a ${LOADER_LABEL}. It shows the protocol and serves hosts that only read files (--out).
+inspect and install never see a content key: install leaves the scripts encrypted on disk.
+load is a ${LOADER_LABEL}. It shows the protocol and serves hosts that only read files (--out).
 For real code escrow, use a compiled host that decrypts in memory (the .NET kit).
 The deployment token may come from SCRIPTGO_DEPLOYMENT_TOKEN, to keep it out of the shell history.`;
 
@@ -65,26 +77,51 @@ function runInLuaHost(dir: string, lua: string, ms: number): number {
   return r.status ?? 1;
 }
 
-export async function run(args: string[]): Promise<number> {
-  const [sub, ...rest] = args;
-  const a = parseArgs(rest, { booleans: ["help", "once"] });
-  if (!sub || sub === "--help" || a.bools.has("help") || (sub !== "identity" && sub !== "load")) {
-    console.log(USAGE);
-    return sub === "--help" || a.bools.has("help") ? 0 : 2;
-  }
-  if (!a.flags.identity) {
-    console.error(`scriptgo escrow ${sub}: --identity <file> is required\n${USAGE}`);
+// ------------------------------------------------------------------ inspect / install (no key involved)
+
+function inspect(file: string, trusted: string | undefined): number {
+  const { manifest, clear, payload } = readBundle(readFileSync(resolve(file)));
+  const verdict = verifyManifest(manifest, { trustedSignerPublicKey: trusted });
+  console.log(`${manifest.package} ${manifest.version}  (${manifest.format}, ${manifest.cipher})`);
+  console.log(`signature: ${verdict.ok ? "valid" : `INVALID (${verdict.reason})`}  signer ${manifest.signerPublicKey}${trusted ? " (pinned)" : " (not pinned)"}`);
+  console.log(`payload:   ${payload.length} bytes, ${manifest.encryptedFiles.length} encrypted file(s)`);
+  for (const f of manifest.encryptedFiles) console.log(`  encrypted  ${f}`);
+  for (const f of [...clear.keys()].sort()) console.log(`  clear      ${f}`);
+  return verdict.ok ? 0 : 1;
+}
+
+function install(file: string, a: ParsedArgs): number {
+  const target = a.flags.target ?? "open77";
+  if (target !== "open77") {
+    console.error(`scriptgo escrow install: unknown target '${target}'. Only open77 loads an encrypted folder from disk; other hosts take the bundle through their loader.`);
     return 2;
   }
-  const identity = loadIdentity(a.flags.identity);
-  if (sub === "identity") {
-    console.log(`${identity.created ? "created" : "found"} server identity ${resolve(a.flags.identity)}`);
-    console.log(`public key   ${identity.publicKey.toString("base64url")}`);
-    console.log(`fingerprint  ${identity.fingerprint}   (the licence page shows it once the deployment is bound)`);
-    console.log("keep the file on this server: its private key is what a released content key is wrapped to");
-    return 0;
+  if (!a.flags.out) {
+    console.error("scriptgo escrow install: --out <resources folder> is required.");
+    return 2;
   }
+  try {
+    const r = installEscrowForOpen77({ bundle: readFileSync(resolve(file)), resourcesRoot: resolve(a.flags.out), trustedSignerPublicKey: a.flags["trusted-signer"], force: a.bools.has("force") });
+    for (const w of r.warnings) console.log(`warning ${w}`);
+    console.log(`installed ${r.package} ${r.version} -> ${r.dest}`);
+    console.log(`  encrypted server scripts (stubs on disk): ${r.stubs.length === 0 ? "none" : r.stubs.join(", ")}`);
+    console.log(`  clear files: ${r.clear.join(", ")}`);
+    console.log("  The scripts stay encrypted on disk. The server needs resourceEscrow enabled, the native loader,");
+    console.log("  and a deployment token for this resource; see the OPEN//77 setup guide.");
+    return 0;
+  } catch (err) {
+    if (err instanceof Open77EscrowError) {
+      console.error(`error ${err.code}: ${err.message}`);
+      return 1;
+    }
+    throw err;
+  }
+}
 
+// ------------------------------------------------------------------ identity / load (the reference loader)
+
+async function load(a: ParsedArgs): Promise<number> {
+  const identity = loadIdentity(a.flags.identity!);
   const deploymentToken = a.flags["deployment-token"] ?? process.env.SCRIPTGO_DEPLOYMENT_TOKEN;
   const master = (a.flags.master ?? loadCredentials().api).replace(/\/$/, "");
   const missing = ["bundle", "package", "environment"].filter((k) => !a.flags[k]);
@@ -113,10 +150,6 @@ export async function run(args: string[]): Promise<number> {
   if (!trustedSigner) console.log("[escrow] warning: no --trusted-signer: the bundle's signature is checked against the key it names, and the master's, not one you pinned");
 
   let temp: string | null = null;
-  const cleanup = () => {
-    if (temp) rmSync(temp, { recursive: true, force: true });
-    temp = null;
-  };
   try {
     const loaded = await loadRelease(bundle, { ...request, trustedSigner });
     let answer: KeyAnswer = loaded.answer;
@@ -176,8 +209,41 @@ export async function run(args: string[]): Promise<number> {
     }
     throw e;
   } finally {
-    cleanup();
+    if (temp) rmSync(temp, { recursive: true, force: true });
   }
+}
+
+export async function run(args: string[]): Promise<number> {
+  const [sub, ...rest] = args;
+  const a = parseArgs(rest, { booleans: ["help", "once", "force"] });
+  const known = ["inspect", "install", "identity", "load"];
+  if (!sub || sub === "--help" || a.bools.has("help") || !known.includes(sub)) {
+    (sub && sub !== "--help" && !a.bools.has("help") ? console.error : console.log)(USAGE);
+    return sub === "--help" || a.bools.has("help") ? 0 : 2;
+  }
+
+  if (sub === "inspect" || sub === "install") {
+    const file = a.positional[0];
+    if (!file) {
+      console.error(`scriptgo escrow ${sub}: give the bundle file\n${USAGE}`);
+      return 2;
+    }
+    return sub === "inspect" ? inspect(file, a.flags["trusted-signer"]) : install(file, a);
+  }
+
+  if (!a.flags.identity) {
+    console.error(`scriptgo escrow ${sub}: --identity <file> is required\n${USAGE}`);
+    return 2;
+  }
+  if (sub === "identity") {
+    const identity = loadIdentity(a.flags.identity);
+    console.log(`${identity.created ? "created" : "found"} server identity ${resolve(a.flags.identity)}`);
+    console.log(`public key   ${identity.publicKey.toString("base64url")}`);
+    console.log(`fingerprint  ${identity.fingerprint}   (the licence page shows it once the deployment is bound)`);
+    console.log("keep the file on this server: its private key is what a released content key is wrapped to");
+    return 0;
+  }
+  return load(a);
 }
 
 // Exported for tests.

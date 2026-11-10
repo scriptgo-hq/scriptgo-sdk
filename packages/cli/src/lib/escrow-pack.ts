@@ -3,6 +3,10 @@
 // content key; the bundle is safe to store/ship, the content key goes to the master only (handed
 // over the authenticated API by `publish`, or written to a SEPARATE secret file by `pack`).
 //
+// What stays clear is decided in one place, `prepareEscrowFiles` (@scriptgo/manifest), which the
+// master calls too when it protects an uploaded archive: files a host sends to game clients, and
+// for a package that can run on OPEN//77 the generated open77.lua and shim, as signed clear files.
+//
 // Honest stance (CREATOR-PROTECTION.md): this is real crypto only where a host can hold the key (the
 // .NET / native kits). On a pure-Lua host the operator can read the key, so escrow there is
 // license-only-grade — the packer still produces a bundle, but the protection claim degrades. The
@@ -13,7 +17,11 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { unzipSync } from "fflate";
 import { buildEscrowRelease, openEscrowRelease, releaseSignerFromEnv, type BuiltEscrow, type ReleaseSigner } from "@scriptgo/escrow";
-import type { ParsedManifest } from "@scriptgo/manifest";
+import { clientFacingFiles, prepareEscrowFiles, type ParsedManifest } from "@scriptgo/manifest";
+import { sdkRoot } from "./sdk.ts";
+
+// Kept as an export of this module for its callers; the rule itself lives in @scriptgo/manifest.
+export { clientFacingFiles };
 
 export interface EscrowPackResult {
   bundlePath: string;
@@ -39,8 +47,9 @@ export function creatorSigner(env: NodeJS.ProcessEnv = process.env): ReleaseSign
 /**
  * Builds the escrow bundle of a plain SCRIPT//GO archive (entries `<name>/<path>`) in memory, and
  * proves it decrypts with its key before anything is shipped. `allowlist` are extra clear-text
- * globs; the manifest and docs are always clear. Each bundle gets a release-level watermark: an
- * opaque token only this build knows, recorded by the master so a leaked copy names its release.
+ * globs; the manifest, the docs and every client-facing file are always clear, and only server-side
+ * code is encrypted. Each bundle gets a release-level watermark: an opaque token only this build
+ * knows, recorded by the master so a leaked copy names its release.
  */
 export function buildEscrow(opts: {
   archive: Uint8Array;
@@ -53,20 +62,24 @@ export function buildEscrow(opts: {
 }): BuiltEscrow {
   const m = opts.manifest;
   const prefix = `${m.name}/`;
-  const files = new Map<string, Buffer>();
+  const source = new Map<string, Buffer>();
   for (const [path, data] of Object.entries(unzipSync(opts.archive))) {
     if (!path.startsWith(prefix)) continue;
-    files.set(path.slice(prefix.length), Buffer.from(data));
+    source.set(path.slice(prefix.length), Buffer.from(data));
   }
-  if (!files.has(opts.manifestFile)) throw new Error(`escrow: the archive has no ${opts.manifestFile}.`);
+  if (!source.has(opts.manifestFile)) throw new Error(`escrow: the archive has no ${opts.manifestFile}.`);
+
+  // The same file set the master builds: client-facing files clear, OPEN//77 files generated and signed.
+  const prepared = prepareEscrowFiles({ manifest: m, manifestFile: opts.manifestFile, files: source, allowlist: opts.allowlist, shimDir: join(sdkRoot, "adapters", "open77") });
+  const files = prepared.files;
 
   const signer = opts.signer ?? creatorSigner();
   const built = buildEscrowRelease({
     files, package: opts.identifier, version: m.version, manifestFile: opts.manifestFile,
-    allowlist: opts.allowlist, signingSeed: signer.seed, watermarkSecret: randomBytes(32).toString("hex"),
+    allowlist: prepared.allowlist, signingSeed: signer.seed, watermarkSecret: randomBytes(32).toString("hex"),
   });
   if (built.encryptedFiles.length === 0) {
-    throw new Error("escrow: nothing would be encrypted: every file is in the clear-text allowlist (--escrow-ignore).");
+    throw new Error("escrow: nothing would be encrypted: every file is client-facing or in the clear-text allowlist (--escrow-ignore). Only server-side code can be protected.");
   }
 
   // Prove the bundle decrypts with the key before shipping either (never ship an unopenable bundle).
