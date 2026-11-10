@@ -6,8 +6,8 @@ storage. Rust's plugin frameworks dropped their Lua support long ago, so the plu
 Lua 5.4 VM through [KeraLua](https://github.com/nlua/KeraLua), the binding OPEN//77's server uses.
 
 **Status: experimental.** On a real Windows dedicated server with Oxide, the conformance probe is
-verified and the escrow chain passes end to end. Carbon is compile-checked only, and no Linux server
-and no connected player have been measured. See "What has run" below.
+verified and the escrow chain passes end to end, and both again with Carbon in place of Oxide. No
+Linux server and no connected player have been measured. See "What has run" below.
 
 Encrypted (escrowed) packages are supported through the native library of `sdk/native`, off by
 default: see "Escrow". That part is planned too, and proven only in the bridge's test process.
@@ -332,8 +332,9 @@ limit is 20 minutes. Without a server folder the run is reported as skipped, nev
     stops the resource by itself at the end of the offline grace (6.4 s after the refund, grace 9 s).
   What that settles: under Unity's Mono, `lua54.dll` and `scriptgo.dll` are found by full path, the
   function-pointer round trip to `luaL_loadbufferx` works, the identity file is created and reused,
-  and Oxide compiles the plugin. What it does not: Carbon, a Linux server (`liblua54.so`,
-  `libscriptgo.so`, `runds.sh`), and anything a connected player triggers.
+  and Oxide compiles the plugin. The same two commands pass on that build with Carbon 2.0.264 in
+  place of Oxide (verified, 30 checks; 32/32). What it does not settle: a Linux server
+  (`liblua54.so`, `libscriptgo.so`, `runds.sh`), and anything a connected player triggers.
 - `dotnet run --project sdk/adapters/rust/tests -c Release`: 45 bridge tests in a **plain .NET 10
   process**. The services are fakes; the KeraLua Lua 5.4.8 VM, the portable core, this glue, the
   conformance probe and the official kits are the real ones. On that host, `sg_probe` passes 25/25

@@ -384,7 +384,7 @@ M.ENVIRONMENTS = {
         },
     },
     rust = {
-        protection = { tier = "escrow", state = "available", note = "Code escrow: the compiled bridge next to the plugin has the native loader decrypt in memory, with a key released to this server only. It is off until the operator turns it on in the plugin config. Measured on a Windows server with Oxide; Carbon and Linux servers are not measured. The operator of the machine can still inspect their own process; that takes real effort and the copy is traceable." },
+        protection = { tier = "escrow", state = "available", note = "Code escrow: the compiled bridge next to the plugin has the native loader decrypt in memory, with a key released to this server only. It is off until the operator turns it on in the plugin config. Measured on Windows servers, with Oxide and with Carbon; Linux servers are not measured. The operator of the machine can still inspect their own process; that takes real effort and the copy is traceable." },
         name = "Rust (Oxide/Carbon)", kind = "mod_platform", status = "experimental", dialects = { "5.4" }, sides = { "server" },
         summary = "An Oxide/Carbon plugin that runs SCRIPT//GO packages on Rust servers through an embedded Lua VM.",
         sales = "allowed", salesNote = "The developer allows selling mods you own.",
@@ -405,7 +405,7 @@ M.ENVIRONMENTS = {
             licensing = "Over the plugin's web requests, to the scriptgo_api convar.",
         },
         limitations = {
-            "Measured on a Windows dedicated server with Oxide and no player connected: the conformance probe and the escrow chain. Carbon is compile-checked only; Linux servers and what a connected player triggers (chat commands, permissions of real Steam ids) are not measured.",
+            "Measured on Windows dedicated servers, with Oxide and with Carbon, and no player connected: the conformance probe and the escrow chain. Linux servers and what a connected player triggers (chat commands, permissions of real Steam ids) are not measured.",
             "No client side.",
             "KeraLua's native Lua 5.4 (lua54.dll or liblua54.so) must be installed in RustDedicated_Data/Plugins/x86_64.",
             "HTTP responses carry no headers.",
