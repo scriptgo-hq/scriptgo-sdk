@@ -34,6 +34,11 @@ internal abstract class Guest(SideRuntime side, string language) : IDisposable
     /// <summary>Runs a script at file scope. Throws <see cref="GuestScriptException"/> on failure.</summary>
     public abstract void RunScript(string path, byte[] source);
 
+    /// <summary>Runs a script at file scope, compiled by the file provider straight into the VM (see
+    /// <see cref="INativeLuaChunks"/>). False when this guest has no such path; the host then reads
+    /// the source and calls <see cref="RunScript"/>. Throws <see cref="GuestScriptException"/> on failure.</summary>
+    public virtual bool TryRunNativeScript(string path) => false;
+
     /// <summary>A global function of that name exists (declarative manifest exports).</summary>
     public abstract bool PublishGlobal(string name);
 

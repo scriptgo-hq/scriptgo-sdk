@@ -1,0 +1,8 @@
+/* GNU ld version script: the shared object exports the sg_* C ABI and nothing else
+   (in particular none of the statically linked libsodium). */
+SCRIPTGO_1 {
+  global:
+    sg_*;
+  local:
+    *;
+};

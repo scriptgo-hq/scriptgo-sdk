@@ -26,6 +26,7 @@ internal sealed unsafe class LuaGuest(SideRuntime side) : Guest(side, "lua")
     private LuaAlloc? _alloc;
     private LuaFunction? _bridge;
     private LuaFunction? _fresh;
+    private LuaFunction? _chunk;
     private int _entryRef;
     private readonly Stack<IntPtr> _running = new();
     private long _allocated;
@@ -50,6 +51,7 @@ internal sealed unsafe class LuaGuest(SideRuntime side) : Guest(side, "lua")
         _alloc = Allocate;
         _bridge = BridgeCall;
         _fresh = FreshCall;
+        _chunk = ChunkCall;
         _lua = new Lua(_alloc, IntPtr.Zero);
         _lua.OpenLibs();
         _lua.NewTable();
@@ -57,6 +59,8 @@ internal sealed unsafe class LuaGuest(SideRuntime side) : Guest(side, "lua")
         _lua.SetField(-2, "call");
         _lua.PushCFunction(_fresh);
         _lua.SetField(-2, "fresh");
+        _lua.PushCFunction(_chunk);
+        _lua.SetField(-2, "chunk");
         _lua.SetGlobal("__sg");
 
         var res = Side.Res;
@@ -196,6 +200,24 @@ internal sealed unsafe class LuaGuest(SideRuntime side) : Guest(side, "lua")
         throw new GuestScriptException(first);
     }
 
+    /// <summary>Runs a script the file provider compiles itself (an escrowed resource): the prelude
+    /// asks <c>__sg.chunk</c> for the function, so the source never passes through managed memory.</summary>
+    public override bool TryRunNativeScript(string path)
+    {
+        var chunk = "@" + Side.Res.Name + "/" + path;
+        var (ok, values) = Enter(_ => Invoke("loadNative", l =>
+        {
+            l.PushString(path);
+            l.PushString(chunk);
+            return 2;
+        }));
+        if (ok) return true;
+        var first = values.Length > 0 ? values[0].ToString() : "error";
+        if (first == "native_chunk_unavailable") return false;
+        if (values.Length > 1) Side.Log(LogLevel.Error, values[1].ToString());
+        throw new GuestScriptException(first);
+    }
+
     public override bool PublishGlobal(string name)
     {
         if (!Alive) return false;
@@ -275,6 +297,53 @@ internal sealed unsafe class LuaGuest(SideRuntime side) : Guest(side, "lua")
     {
         Lua.FromIntPtr(state).PushBoolean(FreshBudget());
         return 1;
+    }
+
+    // __sg.chunk(library | nil, path, chunkname) answers function | false | nil, message.
+    // Asks the file provider to compile a script of this resource (or of a declared dependency)
+    // straight into this state. `false` means the provider does not serve that file natively and
+    // the prelude falls back to reading its text. No managed exception crosses into Lua, and the
+    // allocator does not refuse here (a refusal would surface as an ordinary load error anyway).
+    private int ChunkCall(IntPtr state)
+    {
+        var prevRefuse = _refuseOk;
+        _refuseOk = false;
+        var l = Lua.FromIntPtr(state);
+        var top = l.GetTop();
+        try
+        {
+            var library = top >= 1 && l.Type(1) == LuaType.String ? l.ToString(1, false) : null;
+            var path = top >= 2 && l.Type(2) == LuaType.String ? l.ToString(2, false) : null;
+            var chunkName = top >= 3 && l.Type(3) == LuaType.String ? l.ToString(3, false) : null;
+            if (path is null || chunkName is null || Manifest.ManifestParser.UnsafePathReason(path) is not null
+                || Host.Services.Files is not INativeLuaChunks provider
+                || Host.ChunkRoot(this, library) is not { } root
+                || !provider.HasNativeChunk(root, path))
+            {
+                l.PushBoolean(false);
+                return 1;
+            }
+            switch (provider.LoadChunk(root, path, state, chunkName))
+            {
+                case NativeChunkStatus.Loaded:
+                    return 1; // the compiled function is on top of the stack
+                case NativeChunkStatus.LuaError:
+                    l.PushNil(); // Lua's message is on top: answer nil, message
+                    l.Insert(-2);
+                    return 2;
+                default:
+                    l.PushBoolean(false);
+                    return 1;
+            }
+        }
+        catch (Exception e)
+        {
+            l.SetTop(top);
+            l.PushNil();
+            l.PushString("native_chunk_failed: " + e.Message);
+            return 2;
+        }
+        finally { _refuseOk = prevRefuse; }
     }
 
     // The bridge function the prelude calls: __sg.call(op, ...) → true, values... | false, reason, detail.

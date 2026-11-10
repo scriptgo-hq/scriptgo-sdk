@@ -4,13 +4,13 @@
 -- goes through the host bridge (__sg.call), where the codec copies every value. See
 -- docs/spec/multi-language.md.
 local ctx = ...
-local sg_call, sg_fresh = __sg.call, __sg.fresh
+local sg_call, sg_fresh, sg_chunk = __sg.call, __sg.fresh, __sg.chunk
 __sg = nil
 
 local load, pcall, xpcall, error, type, tostring, tonumber, select, ipairs, setmetatable, getmetatable, rawget =
     load, pcall, xpcall, error, type, tostring, tonumber, select, ipairs, setmetatable, getmetatable, rawget
 local co_create, co_resume, co_status, co_yield = coroutine.create, coroutine.resume, coroutine.status, coroutine.yield
-local sethook, traceback = debug.sethook, debug.traceback
+local sethook, traceback, setupvalue = debug.sethook, debug.traceback, debug.setupvalue
 local pack, unpack = table.pack, table.unpack
 local sort, concat, insert = table.sort, table.concat, table.insert
 local str_match, str_gsub, str_lower, str_sub = string.match, string.gsub, string.lower, string.sub
@@ -421,6 +421,18 @@ env.GetConvar = function(name, default)
     return v
 end
 
+-- A script the host compiles itself, straight from memory it does not want copied into this VM as
+-- a string first (an escrowed resource held by the native loader). Answers the function with the
+-- sandbox as its environment (what load(text, name, "t", env) does: _ENV is upvalue 1 of a main
+-- chunk); false when the host does not serve that file this way; nil, message when it does not compile.
+local function nativeChunk(lib, path, chunkname)
+    local fn, err = sg_chunk(lib, path, chunkname)
+    if fn == nil then return nil, err end
+    if fn == false then return false end
+    setupvalue(fn, 1, env)
+    return fn
+end
+
 -- Modules: `a.b` → a/b.lua then a/b/init.lua in this resource; `@lib` / `@lib/a.b` → a declared
 -- dependency's init.lua / a/b.lua. Answers the module or nil, reason (as the portable core).
 local function validModule(name)
@@ -447,19 +459,24 @@ env.require = function(modname)
         if lib then return sg_call("dependencyFile", lib, path) end
         return sg_call("resourceFile", path)
     end
-    local path = base .. ".lua"
-    local ok, text = read(path)
-    if not ok and text ~= "not_found" then return nil, text end
-    if not ok then
-        path = base .. "/init.lua"
-        ok, text = read(path)
+    -- An escrowed resource is compiled by the host straight from native memory (nativeChunk);
+    -- anything else is read as text, exactly as before.
+    local fn, err
+    for _, path in ipairs({ base .. ".lua", base .. "/init.lua" }) do
+        local chunkname = "@" .. owner .. "/" .. path
+        fn, err = nativeChunk(lib, path, chunkname)
+        if fn == nil then return nil, "module_load_failed: " .. tostring(err) end
+        if fn then break end
+        local ok, text = read(path)
+        if ok then
+            fn, err = load(text, chunkname, "t", env)
+            if not fn then return nil, "module_load_failed: " .. tostring(err) end
+            break
+        elseif text ~= "not_found" then
+            return nil, text
+        end
     end
-    if not ok then
-        if text == "not_found" then return nil, "module_not_found:" .. modname end
-        return nil, text
-    end
-    local fn, err = load(text, "@" .. owner .. "/" .. path, "t", env)
-    if not fn then return nil, "module_load_failed: " .. tostring(err) end
+    if not fn then return nil, "module_not_found:" .. modname end
     local value = fn(modname)
     if value == nil then value = true end
     modules[modname] = value
@@ -694,9 +711,7 @@ end
 local entry = {}
 
 -- Runs a script at file scope (in a hooked coroutine; `current` stays nil, so Wait is refused).
-entry.load = enter(function(source, chunkname)
-    local fn, err = load(source, chunkname, "t", env)
-    if not fn then return false, tostring(err), tostring(err) end
+local function runAtFileScope(fn)
     local co = newCoroutine(fn)
     current, env.source = nil, nil
     local res = pack(co_resume(co))
@@ -706,6 +721,21 @@ entry.load = enter(function(source, chunkname)
     end
     if co_status(co) ~= "dead" then return false, "a script cannot wait at file scope (use CreateThread)" end
     return true
+end
+
+entry.load = enter(function(source, chunkname)
+    local fn, err = load(source, chunkname, "t", env)
+    if not fn then return false, tostring(err), tostring(err) end
+    return runAtFileScope(fn)
+end)
+
+-- The same for a script the host compiles from native memory (an escrowed resource): the source
+-- never enters this VM as a string, and never was a managed one.
+entry.loadNative = enter(function(path, chunkname)
+    local fn, err = nativeChunk(nil, path, chunkname)
+    if fn == false then return false, "native_chunk_unavailable" end
+    if not fn then return false, tostring(err), tostring(err) end
+    return runAtFileScope(fn)
 end)
 
 -- Declarative export: a global function of that name.

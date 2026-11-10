@@ -19,6 +19,26 @@ public interface IResourceFiles
     IReadOnlyList<string> List(string root);
 }
 
+/// <summary>
+/// An optional companion of <see cref="IResourceFiles"/>, for a provider that holds script source in
+/// memory it does not want copied into the managed heap (an escrowed resource held by libscriptgo).
+/// When the host's <see cref="IHostServices.Files"/> also implements this, a Lua script the provider
+/// claims is compiled straight into the guest's <c>lua_State</c> and <see cref="IResourceFiles.Read"/>
+/// is not called for it. JavaScript guests have no such path: Jint takes managed source.
+/// </summary>
+public interface INativeLuaChunks
+{
+    /// <summary>True when this provider compiles <paramref name="relativePath"/> itself.</summary>
+    bool HasNativeChunk(string root, string relativePath);
+
+    /// <summary>Compiles the script into <paramref name="luaState"/> (text mode only). On
+    /// <see cref="NativeChunkStatus.Loaded"/> the function is on top of the Lua stack; on
+    /// <see cref="NativeChunkStatus.LuaError"/> Lua's message is; otherwise nothing was pushed.</summary>
+    NativeChunkStatus LoadChunk(string root, string relativePath, IntPtr luaState, string chunkName);
+}
+
+public enum NativeChunkStatus { Loaded, NotFound, LuaError }
+
 /// <summary>Per-resource persistent storage: one JSON document per key ("res" or "res.client").</summary>
 public interface IHostStorage
 {

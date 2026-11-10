@@ -1,84 +1,53 @@
-// The escrow loader for the .NET kit: given an escrowed bundle, it verifies the release signature,
-// asks the key service for the content key wrapped to this server, unwraps and decrypts IN MEMORY,
-// stamps the delivery watermark, and hands the plaintext file map to the host through
-// EscrowResourceFiles — the host's normal local-resource path, never the KeraLua VM.
+// Escrow for the SCRIPT//GO sandbox: opens an escrowed bundle with ScriptGo.Escrow (verify the
+// signature, get the key released to this server, decrypt in libscriptgo) and mounts the result on
+// the host's file provider. Lua scripts of the release are then compiled straight from native
+// memory (EscrowResourceFiles is an INativeLuaChunks); JavaScript guests read through the managed
+// door, because Jint takes managed source.
 //
-// Refuses on unlicensed / unbound / revoked / wrong-environment (a definitive key-service refusal)
-// and on a bad signature or a wrong content key. A transport error is reported distinctly so the
-// caller can apply the license layer's offline grace.
-using System.Security.Cryptography;
-using System.Text;
+// Refuses on unlicensed / unbound / revoked / wrong-environment (a definitive key-service refusal),
+// on a bad signature and on a wrong key. A transport error is reported distinctly
+// (key_service_unreachable:...), so the caller can retry instead of treating it as a refusal.
+using ScriptGo.Escrow;
 
-namespace ScriptGo.Host.Escrow;
+namespace ScriptGo.Host;
 
-/// <summary>What the master answers for a key request. A definitive refusal has Valid=false and a
-/// reason (the license verify reasons); a transport failure sets TransportError.</summary>
-public sealed record EscrowKeyResult
-{
-    public bool Valid { get; init; }
-    public WrappedKey? WrappedKey { get; init; }
-    /// <summary>Opaque per-delivery watermark token the master computed (traceability); may be null.</summary>
-    public string? DeliveryWatermark { get; init; }
-    public string? Reason { get; init; }
-    /// <summary>The key endpoint was unreachable (4xx/5xx/network): apply offline grace, do not refuse.</summary>
-    public bool TransportError { get; init; }
-
-    public static EscrowKeyResult Granted(WrappedKey key, string? watermark = null) => new() { Valid = true, WrappedKey = key, DeliveryWatermark = watermark };
-    public static EscrowKeyResult Refused(string reason) => new() { Valid = false, Reason = reason };
-    public static EscrowKeyResult Unreachable(string reason) => new() { Valid = false, Reason = reason, TransportError = true };
-}
-
-/// <summary>The seam to the master's key-release endpoint (gated on the existing license verify).
-/// The HTTP client is one implementation; tests inject a fake so the crypto path needs no network.</summary>
-public interface IEscrowKeyService
-{
-    Task<EscrowKeyResult> RequestKeyAsync(EscrowManifest manifest, EscrowServerIdentity identity, CancellationToken cancellation = default);
-}
-
-public sealed record EscrowLoadResult(bool Ok, string? Reason, string? ResourceRoot)
+/// <param name="Ok">The release is mounted.</param>
+/// <param name="Reason">Why not, as ScriptGo.Escrow reports it (<c>refused:revoked</c>, <c>unwrap_failed:...</c>).</param>
+/// <param name="ResourceRoot">The virtual root to pass to host.AddResource(root, checkFolderName: false).</param>
+/// <param name="Content">The opened release: its lease, its watermark, its Revoked event. Dispose it
+/// after stopping the resource; that wipes the decrypted files.</param>
+public sealed record EscrowLoadResult(bool Ok, string? Reason, string? ResourceRoot, EscrowContent? Content = null)
 {
     public static EscrowLoadResult Failure(string reason) => new(false, reason, null);
 }
 
 public static class EscrowLoader
 {
-    /// <summary>Loads an escrowed bundle and mounts the decrypted resource on <paramref name="files"/>.
-    /// On success the returned ResourceRoot is a virtual root to pass to host.AddResource(..., checkFolderName:false).</summary>
+    /// <summary>Opens an escrowed bundle and mounts it on <paramref name="files"/>.</summary>
     public static async Task<EscrowLoadResult> LoadAsync(
         byte[] bundle,
         EscrowResourceFiles files,
-        EscrowServerIdentity identity,
+        EscrowIdentity identity,
         IEscrowKeyService keyService,
         string? trustedSignerPublicKey,
+        EscrowOpenOptions? options = null,
         CancellationToken cancellation = default)
     {
-        EscrowBundle parsed;
-        try { parsed = EscrowBundle.Read(bundle); }
-        catch (Exception e) when (e is InvalidDataException or System.Text.Json.JsonException) { return EscrowLoadResult.Failure("invalid_bundle:" + e.Message); }
+        EscrowContent content;
+        try { content = await EscrowSession.OpenAsync(bundle, identity, keyService, trustedSignerPublicKey, options, cancellation).ConfigureAwait(false); }
+        catch (EscrowException e) { return EscrowLoadResult.Failure(e.Reason); }
+        return new EscrowLoadResult(true, null, files.Mount(content), content);
+    }
 
-        var (ok, reason) = parsed.Verify(trustedSignerPublicKey);
-        if (!ok) return EscrowLoadResult.Failure("signature:" + reason);
-
-        EscrowKeyResult grant;
-        try { grant = await keyService.RequestKeyAsync(parsed.Manifest, identity, cancellation).ConfigureAwait(false); }
-        catch (Exception e) when (e is HttpRequestException or TaskCanceledException) { return EscrowLoadResult.Failure("key_service_unreachable:" + e.Message); }
-        if (!grant.Valid || grant.WrappedKey is null)
-            return EscrowLoadResult.Failure((grant.TransportError ? "key_service_unreachable:" : "refused:") + (grant.Reason ?? "no_key"));
-
-        var aad = Encoding.UTF8.GetBytes(parsed.Manifest.Aad);
-        byte[] contentKey;
-        try { contentKey = identity.Unwrap(grant.WrappedKey, aad); }
-        catch (CryptographicException e) { return EscrowLoadResult.Failure("unwrap_failed:" + e.Message); }
-
-        Dictionary<string, byte[]> decrypted;
-        try { decrypted = parsed.Open(contentKey, trustedSignerPublicKey); }
-        catch (CryptographicException e) { return EscrowLoadResult.Failure("decrypt_failed:" + e.Message); }
-        finally { CryptographicOperations.ZeroMemory(contentKey); }
-
-        if (grant.DeliveryWatermark is not null)
-            decrypted[EscrowFormat.DeliveryMarker] = Encoding.UTF8.GetBytes(grant.DeliveryWatermark + "\n");
-
-        var root = files.Mount(parsed.Manifest.Package, parsed.Manifest.Version, decrypted);
-        return new EscrowLoadResult(true, null, root);
+    /// <summary>
+    /// Ties a started resource to its release's lease: starts the renewal loop, and when the lease
+    /// ends for good (revoked, expired, refunded, unbound, or offline for longer than the grace) the
+    /// resource is stopped on the host's next tick with the reason <c>escrow_revoked:...</c>. The
+    /// decrypted files are wiped at that moment; the guest VM is closed by the stop.
+    /// </summary>
+    public static void BindLease(ScriptGoHost host, string resourceName, EscrowContent content, EscrowRenewalOptions? renewal = null)
+    {
+        content.Revoked += (_, e) => host.StopOnNextTick(resourceName, "escrow_revoked:" + e.Reason);
+        content.StartRenewal(renewal);
     }
 }
