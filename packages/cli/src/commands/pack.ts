@@ -27,11 +27,12 @@ export const summary = "Package a resource: a publishable .zip, or a folder for 
 
 // The shim is three files so the shared part references no server-only native: OPEN//77's
 // validator flags those in a shared_script, and its client sandbox lacks `os` and `setmetatable`.
-const SHIM = [
+export const OPEN77_SHIM = [
   { from: "shim.lua", to: "scriptgo_shim.lua", directive: "shared_script" },
   { from: "shim_server.lua", to: "scriptgo_shim_server.lua", directive: "server_script" },
   { from: "shim_client.lua", to: "scriptgo_shim_client.lua", directive: "client_script" },
 ] as const;
+const SHIM = OPEN77_SHIM;
 
 /**
  * Keeps a shim's `-- @capability <name>` ... `-- @end` sections only for the capabilities the

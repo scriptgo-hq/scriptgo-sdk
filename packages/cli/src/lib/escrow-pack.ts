@@ -11,7 +11,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { unzipSync } from "fflate";
 import { buildEscrowRelease, openEscrowRelease, releaseSignerFromEnv } from "@scriptgo/escrow";
-import type { ParsedManifest } from "@scriptgo/manifest";
+import { expandGlob, type ParsedManifest } from "@scriptgo/manifest";
 
 export interface EscrowPackResult {
   bundlePath: string;
@@ -19,6 +19,19 @@ export interface EscrowPackResult {
   clearFiles: string[];
   encryptedFiles: string[];
   bytes: number;
+}
+
+/** Paths a host sends to game clients: they cannot be secret, so they must be clear in the bundle. */
+export function clientFacingFiles(m: ParsedManifest, all: string[]): string[] {
+  const out = new Set<string>();
+  const add = (pattern: string): void => {
+    for (const f of expandGlob(pattern, all)) out.add(f);
+  };
+  for (const p of [...m.sharedScripts, ...m.clientScripts, ...m.files, ...m.webFiles]) add(p);
+  // OPEN//77 loads its environment scripts as shared scripts, so they reach clients too.
+  for (const p of m.environmentScripts["open77"] ?? []) add(p);
+  if (m.webUiPage) add(m.webUiPage);
+  return [...out].sort();
 }
 
 /**
@@ -43,10 +56,14 @@ export function packEscrow(opts: {
   }
   if (!files.has(opts.manifestFile)) throw new Error(`escrow: the archive has no ${opts.manifestFile}.`);
 
+  // Files a host sends to game clients (shared and client scripts, files, web files) cannot be
+  // secret: they stay clear, so only server-side code is encrypted.
+  const clientFacing = clientFacingFiles(m, [...files.keys()]);
+
   const signer = releaseSignerFromEnv(process.env, join(homedir(), ".scriptgo", "release-signing.key"));
   const built = buildEscrowRelease({
     files, package: opts.identifier, version: m.version, manifestFile: opts.manifestFile,
-    allowlist: opts.allowlist, signingSeed: signer.seed, watermarkSecret: undefined,
+    allowlist: [...clientFacing, ...opts.allowlist], signingSeed: signer.seed, watermarkSecret: undefined,
   });
 
   // Prove the bundle decrypts with the key before shipping either (never ship an unopenable bundle).
