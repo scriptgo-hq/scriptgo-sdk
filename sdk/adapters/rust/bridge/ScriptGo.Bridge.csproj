@@ -24,6 +24,10 @@
     <PackageReference Include="KeraLua" Version="1.4.9" />
   </ItemGroup>
   <ItemGroup>
+    <!-- The bridge tests (plain .NET process) read the escrow manifest parser directly. -->
+    <InternalsVisibleTo Include="ScriptGo.Bridge.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <!-- The portable core, unchanged, and the Rust glue. Loaded from memory: no file is unpacked. -->
     <EmbeddedResource Include="../../../lua/scriptgo/*.lua" LogicalName="scriptgo/%(Filename).lua" />
     <EmbeddedResource Include="../lua/*.lua" LogicalName="rust/%(Filename).lua" />

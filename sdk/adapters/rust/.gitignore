@@ -1,2 +1,4 @@
 bin/
 obj/
+# The native escrow library (libscriptgo) is copied here for the bridge tests. Never committed.
+native/
