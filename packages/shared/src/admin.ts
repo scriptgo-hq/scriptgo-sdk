@@ -190,4 +190,45 @@ export const RevokeLicenseBody = z.object({ reason: z.string().trim().min(3).max
 
 export const IngestTokenCreated = z.object({ id: z.string(), token: z.string() });
 
+// ---------------------------------------------------------------- escrow (staff)
+
+/** One answer of POST /v1/licenses/key, as logged: a release or a refusal with its reason. */
+export const KeyEventRow = z.object({
+  id: z.string(),
+  at: Timestamp,
+  outcome: z.enum(["released", "refused"]),
+  reason: z.string().nullable(),
+  /** The package the request named, as sent. */
+  packageRef: z.string(),
+  package: z.string().nullable(),
+  version: z.string().nullable(),
+  environment: z.string(),
+  licenseId: z.string().nullable(),
+  deploymentId: z.string().nullable(),
+  deploymentName: z.string().nullable(),
+  serverKeyFingerprint: z.string().nullable(),
+});
+export type KeyEventRow = z.infer<typeof KeyEventRow>;
+
+export const MarkerLookupBody = z.object({ marker: z.string().trim().min(8).max(4000), reason: z.string().trim().min(3).max(2000) });
+export type MarkerLookupBody = z.infer<typeof MarkerLookupBody>;
+
+/**
+ * What a watermark resolves to. delivery: a per-delivery marker from the key endpoint (one licence,
+ * one deployment). release: the release-level watermark in a signed escrow manifest (which release,
+ * not who). unknown: no record. Traceability only: a marker says which licence and deployment a
+ * copy was delivered to; it does not by itself prove who leaked it.
+ */
+export const MarkerLookupResult = z.object({
+  kind: z.enum(["delivery", "release", "unknown"]),
+  marker: z.string(),
+  release: z.object({ package: z.string(), version: z.string() }).nullable(),
+  license: z.object({ id: z.string(), status: z.string(), holderUserId: z.string(), holderName: z.string(), holderEmail: z.string() }).nullable(),
+  deployment: z
+    .object({ id: z.string(), name: z.string(), environment: z.string(), status: z.string(), serverKeyFingerprint: z.string().nullable() })
+    .nullable(),
+  deliveries: z.object({ count: z.number().int().nonnegative(), firstAt: Timestamp.nullable(), lastAt: Timestamp.nullable(), recent: z.array(Timestamp) }),
+});
+export type MarkerLookupResult = z.infer<typeof MarkerLookupResult>;
+
 export const StoreApprovalBody = z.object({ approved: z.boolean(), reason: z.string().trim().min(3).max(5000) });

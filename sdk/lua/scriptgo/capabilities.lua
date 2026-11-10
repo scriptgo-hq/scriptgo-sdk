@@ -30,8 +30,16 @@ end
 -- blockedOn: for an adapter that is written but has not passed a real run, what that run waits for,
 --   said neutrally. Whether adapter code exists and whether a real run passed are not declared here:
 --   tools/gen-environments.mjs reads them from the repository and from verification/reports.
+-- protection: what a buyer's server gets there (ADR-0027), as { tier, state, note }.
+--   tier "escrow": the host runs compiled code outside the guest VM and can hold a key, so an
+--     encrypted release is decrypted in memory. tier "license": licence check and signed releases
+--     only; the host is plain script and its operator can read what it loads, so no code-secrecy
+--     claim. tier "none": the environment is free-only (sales = "free_only"), nothing is sold.
+--   state "available" | "planned": whether that tier works there today. note: one honest sentence.
+--   A tier never weakens `sales`; gen-environments refuses "none" on a sellable environment.
 M.ENVIRONMENTS = {
     standalone = {
+        protection = { tier = "license", state = "available", note = "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim." },
         name = "Lua Standalone",
         status = "available",
         dialects = { "5.1", "5.4", "luajit" },
@@ -55,6 +63,7 @@ M.ENVIRONMENTS = {
         },
     },
     love2d = {
+        protection = { tier = "license", state = "available", note = "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim." },
         name = "LÖVE",
         status = "beta",
         dialects = { "luajit" },
@@ -86,6 +95,7 @@ M.ENVIRONMENTS = {
         },
     },
     godot = {
+        protection = { tier = "license", state = "planned", note = "Licence check and signed releases, once the adapter has HTTP. The adapter is script-level, so the operator can read what it loads; a native GDExtension loader would be a later upgrade." },
         name = "Godot 4",
         status = "beta",
         dialects = { "5.4", "luajit" },
@@ -118,6 +128,7 @@ M.ENVIRONMENTS = {
         },
     },
     luanti = {
+        protection = { tier = "license", state = "available", note = "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim." },
         name = "Luanti",
         status = "beta",
         dialects = { "5.1", "luajit" },
@@ -148,6 +159,7 @@ M.ENVIRONMENTS = {
         },
     },
     open77 = {
+        protection = { tier = "escrow", state = "planned", note = "Code escrow as an opt-in, default-off server feature: the compiled server decrypts in memory, the key is handled natively and plaintext never reaches the disk. The fallback loader that writes the decrypted copy to disk is licence-only protection." },
         name = "OPEN//77",
         -- A layer on top of an existing game (players need the game); every other entry is an engine
         -- or runtime that hosts Lua itself.
@@ -184,9 +196,10 @@ M.ENVIRONMENTS = {
             summary = "OPEN//77 runs its own Lua runtime with the same resource shape. `scriptgo pack --target open77` adapts a package to it: a generated `open77.lua` manifest, the package's files, and a three-file shim (shared, server, client), loaded first, that maps `ScriptGo.*` onto OPEN//77's `Open77.*` API. The packed manifest asks only for the permissions the package's capabilities need.",
         },
     },
-    openresty = { name = "OpenResty", status = "planned", dialects = { "luajit" }, summary = "Lua HTTP services on Nginx.", sides = { "server" }, capabilities = {}, notes = {}, limitations = {} },
-    defold = { name = "Defold", status = "planned", dialects = { "luajit" }, summary = "2D games with Defold.", sides = { "server", "client" }, capabilities = {}, notes = {}, limitations = {} },
+    openresty = { name = "OpenResty", status = "planned", dialects = { "luajit" }, summary = "Lua HTTP services on Nginx.", sides = { "server" }, protection = { tier = "license", state = "planned", note = "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim." }, capabilities = {}, notes = {}, limitations = {} },
+    defold = { name = "Defold", status = "planned", dialects = { "luajit" }, summary = "2D games with Defold.", sides = { "server", "client" }, protection = { tier = "license", state = "planned", note = "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim." }, capabilities = {}, notes = {}, limitations = {} },
     neovim = {
+        protection = { tier = "license", state = "available", note = "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim." },
         name = "Neovim",
         status = "beta",
         dialects = { "luajit" },
@@ -219,6 +232,7 @@ M.ENVIRONMENTS = {
         },
     },
     cctweaked = {
+        protection = { tier = "none", state = "available", note = "Free packages only here, so nothing is sold or licensed. Releases are still signed." },
         -- "Minecraft" only as the secondary part of the name, as the Minecraft Usage Guidelines ask.
         name = "CC: Tweaked (Minecraft)",
         -- A layer on top of a game players must own (Minecraft: Java Edition), like OPEN//77.
@@ -261,6 +275,7 @@ M.ENVIRONMENTS = {
         },
     },
     dotnet = {
+        protection = { tier = "escrow", state = "available", note = "Code escrow: the kit's compiled loader decrypts in memory with a key released to this server only. The operator of the machine can still inspect their own process; that takes real effort and the copy is traceable." },
         name = ".NET kit",
         status = "experimental",
         dialects = { "5.4" },
@@ -295,6 +310,7 @@ M.ENVIRONMENTS = {
     -- Planned mod platforms (docs/research/game-modding-landscape.md). No adapter yet: no
     -- capabilities, no install steps. `sales` says whether paid packages are possible there.
     hytale = {
+        protection = { tier = "escrow", state = "planned", note = "Code escrow is planned: a JVM plugin with a native library would hold the key. Until it exists, licence check and signed releases only." },
         -- The plugin is built (sdk/adapters/hytale, ADR-0017) but has not run on a real Hytale server:
         -- the server files need the owner's Hytale account. Planned until a real run passes.
         name = "Hytale", kind = "mod_platform", status = "planned", dialects = { "5.2" }, sides = { "server" },
@@ -332,6 +348,7 @@ M.ENVIRONMENTS = {
         blockedOn = "Waiting for the Hytale server files, which come with a Hytale account, and for a JDK 25 to build the plugin against them.",
     },
     garrysmod = {
+        protection = { tier = "license", state = "available", note = "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim." },
         name = "Garry's Mod", kind = "mod_platform", status = "beta", dialects = { "luajit" }, sides = { "server" },
         summary = "Packages on Garry's Mod dedicated servers (roleplay, sandbox, game modes): one server addon runs them in GLua (`scriptgo pack --target garrysmod`).",
         sales = "allowed", salesNote = "The developer allows selling mods you own, outside the Steam Workshop.",
@@ -365,6 +382,7 @@ M.ENVIRONMENTS = {
         },
     },
     rust = {
+        protection = { tier = "escrow", state = "planned", note = "Code escrow is planned: the decryptor would live in the compiled bridge next to the Oxide/Carbon plugin. Until it exists, licence check and signed releases only." },
         name = "Rust (Oxide/Carbon)", kind = "mod_platform", status = "planned", dialects = { "5.4" }, sides = { "server" },
         summary = "An Oxide/Carbon plugin that runs SCRIPT//GO packages on Rust servers through an embedded Lua VM.",
         sales = "allowed", salesNote = "The developer allows selling mods you own.",
@@ -400,6 +418,7 @@ M.ENVIRONMENTS = {
     -- BeamMP has an adapter (sdk/adapters/beammp, ADR-0019) but no run on a real server yet:
     -- BeamMP-Server refuses to start without the owner's Keymaster AuthKey, so it stays planned.
     beammp = {
+        protection = { tier = "license", state = "planned", note = "Licence check and signed releases, once paid packages are confirmed there. The server plugin is plain Lua, so the operator can read what it loads: no code-secrecy claim." },
         name = "BeamMP", kind = "mod_platform", status = "planned", dialects = { "5.3" }, sides = { "server" },
         summary = "One BeamMP server plugin runs SCRIPT//GO packages on BeamMP servers (BeamNG.drive multiplayer), for driving and roleplay servers.",
         sales = "review", salesNote = "No published rule on selling mods: free packages only until the rights holder confirms in writing.",
@@ -432,12 +451,14 @@ M.ENVIRONMENTS = {
         blockedOn = "Waiting for a server key: BeamMP-Server does not start without an AuthKey from the BeamMP Keymaster, which the server owner requests.",
     },
     roblox = {
+        protection = { tier = "license", state = "planned", note = "Licence check and signed releases at most, and only after the legal review. No code-secrecy claim." },
         name = "Roblox", kind = "mod_platform", status = "planned", dialects = { "luau" }, sides = { "server", "client" },
         summary = "A Luau compatibility layer for Roblox experiences.",
         sales = "review", salesNote = "Roblox sells creations through its own store: free packages only until a legal review.",
         capabilities = {}, notes = {}, limitations = {},
     },
     fivem = {
+        protection = { tier = "none", state = "available", note = "Free packages only here, so nothing is sold or licensed. Releases are still signed." },
         -- ADR-0020. Adapter and `scriptgo pack --target fivem` written and unit-tested against a
         -- stub of the natives; planned until a real FXServer run passes (it needs the owner's
         -- Cfx.re registration key).
@@ -477,24 +498,28 @@ M.ENVIRONMENTS = {
         blockedOn = "Waiting for a server key: FXServer does not start without a Cfx.re registration key (sv_licenseKey).",
     },
     redm = {
+        protection = { tier = "none", state = "available", note = "Free packages only here, so nothing is sold or licensed. Releases are still signed." },
         name = "RedM", kind = "mod_platform", status = "planned", dialects = { "5.4" }, sides = { "server", "client" },
         summary = "The same shim on RedM roleplay servers.",
         sales = "free_only", salesNote = "The platform's creator terms keep paid content on its own marketplace: free packages only.",
         capabilities = {}, notes = {}, limitations = {},
     },
     kcdmp = {
+        protection = { tier = "none", state = "available", note = "Free packages only here, so nothing is sold or licensed. Releases are still signed." },
         name = "KCD:MP", kind = "mod_platform", status = "planned", dialects = { "5.4" }, sides = { "server", "client" },
         summary = "Game modes and client scripts for KCD:MP medieval roleplay servers (Kingdom Come: Deliverance II).",
         sales = "free_only", salesNote = "The game's developer does not allow selling mods: free packages only.",
         capabilities = {}, notes = {}, limitations = {},
     },
     zomboid = {
+        protection = { tier = "none", state = "available", note = "Free packages only here, so nothing is sold or licensed. Releases are still signed." },
         name = "Project Zomboid", kind = "mod_platform", status = "planned", dialects = { "5.1" }, sides = { "server", "client" },
         summary = "Project Zomboid server and client mods, for survival and roleplay servers.",
         sales = "free_only", salesNote = "The game's terms do not allow selling mods without approval: free packages only.",
         capabilities = {}, notes = {}, limitations = {},
     },
     dst = {
+        protection = { tier = "none", state = "available", note = "Free packages only here, so nothing is sold or licensed. Releases are still signed." },
         name = "Don't Starve Together", kind = "mod_platform", status = "planned", dialects = { "5.1" }, sides = { "server", "client" },
         summary = "Don't Starve Together server and client mods.",
         sales = "free_only", salesNote = "The game's developer does not allow paid or paywalled mods: free packages only.",

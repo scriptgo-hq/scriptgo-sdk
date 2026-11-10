@@ -66,6 +66,21 @@ export const LicenseSummary = z.object({
 });
 export type LicenseSummary = z.infer<typeof LicenseSummary>;
 
+/**
+ * Escrow binding of a deployment: which server key it is bound to (fingerprint only; the public key
+ * is not secret but the fingerprint is what people compare) and when a content key was last released.
+ */
+export const ActivationBinding = z.object({
+  bound: z.boolean(),
+  serverKeyFingerprint: z.string().nullable(),
+  boundAt: Timestamp.nullable(),
+  lastKeyReleaseAt: Timestamp.nullable(),
+  /** How many times the owner reset the server key (each one is audited). */
+  resets: z.number().int().nonnegative(),
+  lastResetAt: Timestamp.nullable(),
+});
+export type ActivationBinding = z.infer<typeof ActivationBinding>;
+
 export const Activation = z.object({
   id: z.string(),
   name: z.string(),
@@ -74,6 +89,7 @@ export const Activation = z.object({
   lastVerifiedAt: Timestamp.nullable(),
   status: ActivationStatus,
   offlineGraceUntil: Timestamp.nullable(),
+  binding: ActivationBinding.default({ bound: false, serverKeyFingerprint: null, boundAt: null, lastKeyReleaseAt: null, resets: 0, lastResetAt: null }),
 });
 export type Activation = z.infer<typeof Activation>;
 

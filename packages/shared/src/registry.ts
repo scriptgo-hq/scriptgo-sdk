@@ -13,6 +13,8 @@ import {
   EnvironmentStatus,
   IntegrationType,
   ListingStatus,
+  ProtectionState,
+  ProtectionTier,
   OfferInterval,
   Provider,
   ReleaseStatus,
@@ -24,6 +26,10 @@ import { ParsedManifestSchema } from "./manifest.ts";
 
 export const LastRun = z.object({ status: CompatibilityStatus, ranAt: Timestamp, runId: z.string() });
 
+/** What a buyer's server gets in one environment: the tier, whether it works today, one honest sentence. */
+export const EnvironmentProtection = z.object({ tier: ProtectionTier, state: ProtectionState, note: z.string() });
+export type EnvironmentProtection = z.infer<typeof EnvironmentProtection>;
+
 export const Environment = z.object({
   slug: z.string(),
   name: z.string(),
@@ -32,6 +38,8 @@ export const Environment = z.object({
   /** Whether the rights holder of the underlying game allows paid packages there. */
   sales: EnvironmentSales,
   salesNote: z.string(),
+  /** Protection tier (ADR-0027). Never weaker or stronger than what the adapter really does. */
+  protection: EnvironmentProtection.default({ tier: "none", state: "available", note: "" }),
   luaDialects: z.array(z.string()),
   /** Guest languages the environment's host runs ("lua", "ts", "js"). */
   languages: z.array(z.string()).default(["lua"]),
@@ -118,6 +126,43 @@ export const RightsDeclaration = z.object({
 });
 export type RightsDeclaration = z.infer<typeof RightsDeclaration>;
 
+/**
+ * The registry's ed25519 signature on a published release (ADR-0028). `payload` is the canonical
+ * JSON that was signed: { v, package, version, sha256, size, escrow, publishedAt }. Verify it with a
+ * key from GET /v1/signing-keys, then compare payload.sha256 with the bytes you downloaded.
+ */
+export const ReleaseSignature = z.object({ alg: z.literal("ed25519"), keyId: z.string(), payload: z.string(), signature: z.string() });
+export type ReleaseSignature = z.infer<typeof ReleaseSignature>;
+
+/**
+ * Public facts about a release's encrypted (escrow) variant. Nothing here is secret: it is what the
+ * bundle's clear `escrow.json` says, plus whether the master holds the sealed content key. The key
+ * itself is never in any response other than POST /v1/licenses/key, wrapped to one bound server.
+ */
+export const ReleaseEscrowInfo = z.object({
+  format: z.string(),
+  cipher: z.string(),
+  kdf: z.string(),
+  /** Release identity bound into the ciphertext and every wrapped key. */
+  aad: z.string(),
+  /** ed25519 public key (raw base64url) that signed escrow.json, and its short fingerprint. */
+  signerPublicKey: z.string(),
+  signerKeyId: z.string(),
+  /** master: a per-creator key the master holds sealed; creator: a key the creator holds (CLI). */
+  signerOrigin: z.enum(["master", "creator"]).nullable(),
+  /** Globs left in clear text (manifest, docs, creator-named config), FiveM `escrow_ignore` style. */
+  allowlist: z.array(z.string()),
+  clearFiles: z.array(z.string()),
+  encryptedFiles: z.array(z.string()),
+  /** A release-level watermark is baked into the signed manifest (traceability, not prevention). */
+  watermarked: z.boolean(),
+  /** Who built the bundle: the creator's CLI, or the master from an uploaded archive. */
+  builtBy: z.enum(["cli", "server"]),
+  /** The master holds this release's content key, sealed at rest. */
+  sealedKeyPresent: z.boolean(),
+});
+export type ReleaseEscrowInfo = z.infer<typeof ReleaseEscrowInfo>;
+
 export const PackageVersion = z.object({
   version: z.string(),
   status: ReleaseStatus,
@@ -127,6 +172,10 @@ export const PackageVersion = z.object({
   changelog: z.string().nullable(),
   /** Moderation overlay: the release is visible with a notice but not downloadable. */
   restricted: z.boolean().default(false),
+  /** Set when the release is delivered as an encrypted bundle (sha256/size then describe the bundle). */
+  escrow: ReleaseEscrowInfo.nullable().default(null),
+  /** The registry's signature on this release; null only for releases published before signing. */
+  signature: ReleaseSignature.nullable().default(null),
 });
 export type PackageVersion = z.infer<typeof PackageVersion>;
 
@@ -259,8 +308,42 @@ export const Release = z.object({
   files: z.array(z.object({ path: z.string(), sha256: z.string(), size: z.number().int().nonnegative() })),
   rights: RightsDeclaration.nullable(),
   restricted: z.boolean(),
+  escrow: ReleaseEscrowInfo.nullable().default(null),
+  signature: ReleaseSignature.nullable().default(null),
 });
 export type Release = z.infer<typeof Release>;
+
+/** Public signing keys. Release signing is a different key from the licence-token signer. */
+export const SigningKey = z.object({ keyId: z.string(), alg: z.literal("ed25519"), publicKey: z.string(), status: z.enum(["current", "retired"]) });
+export type SigningKey = z.infer<typeof SigningKey>;
+export const SigningKeys = z.object({ keys: z.array(SigningKey) });
+export type SigningKeys = z.infer<typeof SigningKeys>;
+
+/** A creator's escrow-manifest signing keys (public halves only). */
+export const CreatorSigningKey = z.object({
+  keyId: z.string(),
+  alg: z.literal("ed25519"),
+  publicKey: z.string(),
+  origin: z.enum(["master", "creator"]),
+  createdAt: Timestamp,
+  retiredAt: Timestamp.nullable(),
+});
+export type CreatorSigningKey = z.infer<typeof CreatorSigningKey>;
+export const CreatorSigningKeys = z.object({ keys: z.array(CreatorSigningKey) });
+export type CreatorSigningKeys = z.infer<typeof CreatorSigningKeys>;
+
+/** Key-release activity of one package: real counts from the key endpoint's log, nothing estimated. */
+export const KeyActivity = z.object({
+  days: z.number().int().positive(),
+  released: z.number().int().nonnegative(),
+  refused: z.number().int().nonnegative(),
+  refusalsByReason: z.record(z.string(), z.number().int().nonnegative()),
+  /** Distinct deployments that received a key in the window. */
+  deployments: z.number().int().nonnegative(),
+  lastReleasedAt: Timestamp.nullable(),
+  lastRefusedAt: Timestamp.nullable(),
+});
+export type KeyActivity = z.infer<typeof KeyActivity>;
 
 export const CreateCreatorProfileBody = z.object({
   username: Username,
