@@ -69,7 +69,8 @@ dotnet test --project sdk/dotnet/ScriptGo.Host.Tests
 | `@scriptgo/types` | TypeScript declarations of the runtime API, for scripts in TypeScript |
 
 In this repository they run from their TypeScript sources; `pnpm run build` emits `dist/`, which is
-what npm receives. A tag `v<version>` publishes them (`.github/workflows/release.yml`). The CLI
+what npm receives. A tag `v<version>` publishes them (`.github/workflows/release.yml`): its GitHub
+release carries the tarballs, installable by URL, and npm gets them once the scope is live. The CLI
 is not on npm yet: run it from a checkout as above. `ScriptGo.Escrow` for NuGet is packed by
 [`sdk/dotnet/pack.ps1`](sdk/dotnet/pack.ps1).
 

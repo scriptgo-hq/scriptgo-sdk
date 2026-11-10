@@ -1,13 +1,14 @@
-name: Release to npm
+name: Release
 
 # Push a tag `v<version>` whose version matches every published package.json, for example v0.1.0.
-# Needs the repository secret NPM_TOKEN (an npm automation token with publish rights on @scriptgo).
+# The GitHub release of the tag gets the packed tarballs (installable by URL). npm also gets them when
+# the repository secret NPM_TOKEN is set (an automation token with publish rights on @scriptgo).
 on:
   push:
     tags: ["v*"]
 
 permissions:
-  contents: read
+  contents: write # the GitHub release
   id-token: write # npm provenance
 
 jobs:
@@ -32,7 +33,15 @@ jobs:
           done
       - run: pnpm run typecheck
       - run: pnpm run test
-      - name: Publish
+      - name: Tarballs on the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p release
+          for p in shared manifest escrow types; do (cd "packages/$p" && pnpm pack --pack-destination ../../release); done
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "SCRIPT//GO SDK ${GITHUB_REF_NAME#v}" --notes "npm packages as tarballs."
+          gh release upload "$GITHUB_REF_NAME" release/*.tgz --clobber
+      - name: Publish to npm
         if: env.HAS_NPM_TOKEN == 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
