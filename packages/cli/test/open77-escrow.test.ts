@@ -98,6 +98,16 @@ describe("escrow packer", () => {
   });
 });
 
+describe("installEscrowForOpen77 with target rust", () => {
+  it("uses the portable manifest and stubs every encrypted Lua file", () => {
+    const { bundle, signer } = pack(join(tmp, "p-rust"));
+    const r = installEscrowForOpen77({ bundle, resourcesRoot: join(tmp, "resources-rust"), trustedSignerPublicKey: signer, target: "rust" });
+    expect(r.stubs).toEqual(["server/main.lua"]);
+    expect(readFileSync(join(r.dest, "server/main.lua"), "utf8")).not.toContain("proprietary");
+    for (const f of ["scriptgo.lua", "escrow.json", "payload.enc"]) expect(existsSync(join(r.dest, f))).toBe(true);
+  });
+});
+
 describe("installEscrowForOpen77", () => {
   it("writes an OPEN//77 folder whose server scripts stay encrypted on disk", () => {
     const { bundle, signer } = pack(join(tmp, "p2"));

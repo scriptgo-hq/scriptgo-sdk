@@ -43,7 +43,7 @@ import { loadCredentials } from "./_api-client.ts";
 export const summary = "Protected (escrow) releases: inspect a bundle, install it encrypted for OPEN//77, or open it with the reference loader";
 
 const USAGE = `scriptgo escrow inspect <bundle.escrow.zip> [--trusted-signer <ed25519 public key>]
-scriptgo escrow install <bundle.escrow.zip> --target open77 --out <resources folder> [--trusted-signer <key>] [--force]
+scriptgo escrow install <bundle.escrow.zip> --target open77|rust --out <resources folder> [--trusted-signer <key>] [--force]
 scriptgo escrow identity --identity <file>
 scriptgo escrow load --bundle <file.escrow.zip> --package <creator//name> --environment <env>
     --deployment-token <sg_dep_...> --identity <file> [--master <url>] [--trusted-signer <base64url key>]
@@ -92,8 +92,8 @@ function inspect(file: string, trusted: string | undefined): number {
 
 function install(file: string, a: ParsedArgs): number {
   const target = a.flags.target ?? "open77";
-  if (target !== "open77") {
-    console.error(`scriptgo escrow install: unknown target '${target}'. Only open77 loads an encrypted folder from disk; other hosts take the bundle through their loader.`);
+  if (target !== "open77" && target !== "rust") {
+    console.error(`scriptgo escrow install: unknown target '${target}'. open77 and rust load an encrypted folder from disk; other hosts take the bundle through their loader.`);
     return 2;
   }
   if (!a.flags.out) {
@@ -101,13 +101,13 @@ function install(file: string, a: ParsedArgs): number {
     return 2;
   }
   try {
-    const r = installEscrowForOpen77({ bundle: readFileSync(resolve(file)), resourcesRoot: resolve(a.flags.out), trustedSignerPublicKey: a.flags["trusted-signer"], force: a.bools.has("force") });
+    const r = installEscrowForOpen77({ bundle: readFileSync(resolve(file)), resourcesRoot: resolve(a.flags.out), trustedSignerPublicKey: a.flags["trusted-signer"], force: a.bools.has("force"), target });
     for (const w of r.warnings) console.log(`warning ${w}`);
     console.log(`installed ${r.package} ${r.version} -> ${r.dest}`);
     console.log(`  encrypted server scripts (stubs on disk): ${r.stubs.length === 0 ? "none" : r.stubs.join(", ")}`);
     console.log(`  clear files: ${r.clear.join(", ")}`);
-    console.log("  The scripts stay encrypted on disk. The server needs resourceEscrow enabled, the native loader,");
-    console.log("  and a deployment token for this resource; see the OPEN//77 setup guide.");
+    console.log("  The scripts stay encrypted on disk. The server needs escrow enabled, the native loader,");
+    console.log(`  and a deployment token for this resource; see the ${target === "rust" ? "Rust adapter's" : "OPEN//77"} setup guide.`);
     return 0;
   } catch (err) {
     if (err instanceof Open77EscrowError) {

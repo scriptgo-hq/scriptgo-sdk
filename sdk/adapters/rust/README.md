@@ -127,8 +127,9 @@ A stub names the release and is never executed:
 
 The stub is what discovery, script globs and file listings see. A script the manifest lists needs
 its stub. An encrypted module that only `require` reaches does not: the bridge answers its stub
-itself. This adapter has no installer for the layout yet: the folder is the unzipped bundle plus
-the stubs.
+itself. `scriptgo escrow install <bundle.escrow.zip> --target rust --out <resources folder>` writes
+this layout from a bundle without decrypting anything: the unzipped bundle plus a stub for every
+encrypted Lua file.
 
 ### Configuration
 
@@ -249,13 +250,13 @@ and cannot do to an escrowed one. `escrow.shared_vm_isolation` in the tests show
 
 It **can**:
 - call its exports, trigger and hear events: that is its public interface;
-- reach its **global** functions and tables, call them and replace them. The core's environments
-  keep honest resources apart, but they are not a security boundary: a promise, for instance,
-  carries the core's host object, and the host object leads to every resource's environment;
-- stop it, reach the host services through that same object (storage, HTTP), and use up the VM's
-  memory and time.
+- use up the VM's memory and time: one state is one budget.
 
 It **cannot**, by any way we know:
+- reach its globals, replace its functions, stop it, or use the host services in its name. A
+  promise used to carry the core's host object, which led to every resource's environment; the
+  core no longer exposes it (`sdk/lua/scriptgo/host.lua`). The environments are still a
+  separation between resources of one VM, not a hardened sandbox: treat a shared VM accordingly;
 - read the script: the text is never a Lua value. It goes from the native library's memory into
   the compiler;
 - turn a function into bytecode: `string.dump` is removed for the whole VM while escrow is on, and

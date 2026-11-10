@@ -23,8 +23,16 @@ Host.__index = Host
 local Promise = {}
 Promise.__index = Promise
 
+-- A promise does not carry the host: resources hold promises, and the host object leads to every
+-- other resource's environment and to the host services. The link lives in a private weak table,
+-- and the metatable is closed so one resource cannot replace the methods the others call.
+local promiseHost = setmetatable({}, { __mode = "k" })
+Promise.__metatable = "scriptgo.promise"
+
 local function newPromise(host)
-    return setmetatable({ state = "pending", waiters = {}, host = host }, Promise)
+    local promise = setmetatable({ state = "pending", waiters = {} }, Promise)
+    promiseHost[promise] = host
+    return promise
 end
 
 function Promise:_settle(state, values, reason)
@@ -54,14 +62,16 @@ function Promise:await()
     if self.state == "resolved" then return unpack(self.values, 1, self.values.n) end
     if self.state == "rejected" then return nil, self.reason end
     if self.state == "cancelled" then return nil, "promise_cancelled" end
-    local side = self.host.currentSide
+    local host = promiseHost[self]
+    local side = host and host.currentSide
     if not (side and side.current) then return nil, "await_requires_scheduler_coroutine" end
     return coroutine.yield({ await = self })
 end
 
 -- Schedules a continuation; returns its task id (not a new promise, as in Open77).
 function Promise:next(onResolved, onRejected)
-    local side = self.host.currentSide
+    local host = promiseHost[self]
+    local side = host and host.currentSide
     if not side then return nil, "next_requires_resource" end
     local promise = self
     local thread = side:spawn(function()

@@ -843,43 +843,28 @@ internal static partial class Program
                 print("OP requiremain=" .. tostring(main) .. " why=" .. tostring(why2))
                 print("OP globals=" .. tostring(Config) .. " " .. tostring(rawget(_G, "Quote")))
                 print("OP export=" .. tostring(exports.paid:price(2)))
-                -- The core's environments are not a security boundary: a promise carries the core's host
-                -- object, and the host object leads to every resource's environment.
-                local core = promise.new().host
-                local theirs = core and core.resources.paid.sides.server.env
-                print("OP reach=" .. tostring(theirs ~= nil) .. " config=" .. tostring(theirs and theirs.Config.rate) .. " call=" .. tostring(theirs and theirs.Quote(2)))
-                theirs.Quote = function() return "REPLACED" end
-                print("OP replaced=" .. tostring(theirs.Quote(2)))
-                -- What that reach does not give: the text or the bytecode of a function, its locals, its upvalues.
-                print("OP tools=" .. tostring(theirs.string.dump) .. " " .. tostring(theirs.debug) .. " " .. tostring(theirs.load) .. " " .. tostring(debug) .. " " .. tostring(load))
-                print("OP tostring=" .. tostring(tostring(theirs.Reveal):match("^function: ") ~= nil) .. " secret=" .. tostring(theirs.secret))
-                -- The same object holds the host services of every resource.
-                print("OP services=" .. type(core.adapter.storage.load) .. " " .. type(core.adapter.readFile))
+                -- A promise used to carry the core's host object, which led to every resource's
+                -- environment and to the host services. It no longer does (sdk/lua/scriptgo/host.lua).
+                local p = promise.new()
+                print("OP reach=" .. tostring(p.host ~= nil) .. " meta=" .. tostring(getmetatable(p)))
                 print("OP DONE")
             end)
             """, "dependency \"paid\"");
-        // A resource that declares nothing can stop another one through the same object.
+        // A resource that declares nothing has no handle on another one.
         Ordinary(rig.Resources, "stopper", """
             CreateThread(function()
                 while GetResourceState("paid") ~= "started" do Wait(50) end
                 Wait(200)
-                local core = promise.new().host
-                print("ST stop=" .. tostring(core:stop("paid", "by another resource")) .. " " .. core:resourceState("paid"))
+                print("ST reach=" .. tostring(promise.new().host ~= nil) .. " " .. GetResourceState("paid"))
             end)
             """);
         rig.Boot();
         Assert(rig.UntilLog("OP DONE"), "the operator resource did not finish:\n" + rig.Log.Dump());
-        Assert(rig.UntilLog("ST stop="), "the stopper resource did not finish:\n" + rig.Log.Dump());
-        // Could: reach the other resource's environment through the core, call and replace its globals.
-        Assert(rig.Log.Has("OP reach=true config=7 call=12"), rig.Log.Dump());
-        Assert(rig.Log.Has("OP replaced=REPLACED"), rig.Log.Dump());
-        // Could not, even so: get at the script. No dump, no debug, no load; a local is not a global.
-        Assert(rig.Log.Has("OP tools=nil nil nil nil nil"), rig.Log.Dump());
-        Assert(rig.Log.Has("OP tostring=true secret=nil"), rig.Log.Dump());
-        // Could: use the host services through the core, and stop the other resource.
-        Assert(rig.Log.Has("OP services=function function"), rig.Log.Dump());
-        Assert(rig.Log.Has("SECRET STOPPING") && rig.Log.Has("ST stop=true stopped"), rig.Log.Dump());
-        Assert(rig.Line("paid") == "paid 1.2.0  stopped  [escrow not running]", "a stop from Lua must also wipe the release: " + rig.Line("paid"));
+        Assert(rig.UntilLog("ST reach="), "the stopper resource did not finish:\n" + rig.Log.Dump());
+        // Could not: reach the core's host object, and through it the other resource's environment.
+        Assert(rig.Log.Has("OP reach=false meta=scriptgo.promise"), rig.Log.Dump());
+        // Could not: stop the other resource. It is still running.
+        Assert(rig.Log.Has("ST reach=false started") && !rig.Log.Has("SECRET STOPPING"), rig.Log.Dump());
         // Could not: turn a function into bytecode, or replace the string methods other resources use.
         Assert(rig.Log.Has("OP dump=nil viamethod=nil"), rig.Log.Dump());
         Assert(rig.Log.Has("OP meta=false"), rig.Log.Dump());

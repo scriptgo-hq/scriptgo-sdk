@@ -69,7 +69,14 @@ export function installEscrowForOpen77(opts: {
   trustedSignerPublicKey?: string;
   /** Replace an existing folder that is not an escrow install. */
   force?: boolean;
+  /**
+   * The host the folder is for. "open77" (default) needs the signed open77.lua of the release.
+   * "rust" is the Oxide/Carbon bridge: it reads the portable manifest, has no client side, and
+   * expects a stub at the path of every encrypted script, modules included.
+   */
+  target?: "open77" | "rust";
 }): Open77EscrowInstall {
+  const target = opts.target ?? "open77";
   const entries = unzipSync(opts.bundle);
   const rawEscrowJson = entries[ESCROW_JSON];
   const payload = entries[ESCROW_PAYLOAD];
@@ -91,11 +98,14 @@ export function installEscrowForOpen77(opts: {
   for (const p of manifest.encryptedFiles) if (!safeRelative(p)) throw new Open77EscrowError("unsafe_path", `unsafe path in the bundle: ${p}`);
 
   // open77.lua must be in the bundle, as a clear file the signature covers. It is used as is.
-  const manifestFile = "open77.lua";
+  // The Rust bridge reads the portable manifest instead.
+  const manifestFile = target === "rust" ? (["scriptgo.lua", "scriptgo.json"].find((f) => clear.has(f)) ?? "scriptgo.lua") : "open77.lua";
   if (!clear.has(manifestFile)) {
     throw new Open77EscrowError(
-      "not_open77",
-      "this release was not packed for OPEN//77: its bundle has no signed open77.lua. The creator packs it for OPEN//77 (Lua scripts only, and open77 in the manifest's environments, or none listed) and publishes it again.",
+      target === "rust" ? "no_manifest" : "not_open77",
+      target === "rust"
+        ? "the bundle has no clear scriptgo.lua manifest."
+        : "this release was not packed for OPEN//77: its bundle has no signed open77.lua. The creator packs it for OPEN//77 (Lua scripts only, and open77 in the manifest's environments, or none listed) and publishes it again.",
     );
   }
   const parsed = parseManifest(Buffer.from(clear.get(manifestFile)!).toString("utf8"), { fileName: manifestFile });
@@ -104,20 +114,25 @@ export function installEscrowForOpen77(opts: {
 
   const all = [...clear.keys(), ...manifest.encryptedFiles];
   const encrypted = new Set(manifest.encryptedFiles);
-  const shipped = [...m.sharedScripts, ...m.serverScripts, ...m.clientScripts, ...(m.environmentScripts["open77"] ?? [])];
+  const shipped = [...m.sharedScripts, ...m.serverScripts, ...(target === "rust" ? [] : [...m.clientScripts, ...(m.environmentScripts["open77"] ?? [])])];
   const foreign = shipped.filter((p) => scriptLanguage(p) !== "lua");
-  if (foreign.length > 0) throw new Open77EscrowError("open77_lua_only", `OPEN//77 runs Lua scripts only: ${foreign.join(", ")}`);
+  if (foreign.length > 0) throw new Open77EscrowError(target === "rust" ? "rust_lua_only" : "open77_lua_only", `${target === "rust" ? "The Rust bridge" : "OPEN//77"} runs Lua scripts only: ${foreign.join(", ")}`);
 
-  const leaked = clientFacingFiles(m, all).filter((f) => encrypted.has(f));
-  if (leaked.length > 0) {
-    throw new Open77EscrowError(
-      "client_file_encrypted",
-      `these files are sent to game clients, so they cannot be encrypted: ${leaked.join(", ")}. Re-pack the release (the packer keeps client and shared files clear).`,
-    );
+  if (target === "open77") {
+    const leaked = clientFacingFiles(m, all).filter((f) => encrypted.has(f));
+    if (leaked.length > 0) {
+      throw new Open77EscrowError(
+        "client_file_encrypted",
+        `these files are sent to game clients, so they cannot be encrypted: ${leaked.join(", ")}. Re-pack the release (the packer keeps client and shared files clear).`,
+      );
+    }
   }
 
+  // OPEN//77 loads the server scripts its manifest names. The Rust bridge also loads modules a
+  // script requires, so there every encrypted Lua file gets its stub.
   const serverScripts = new Set<string>();
-  for (const p of m.serverScripts) for (const f of expandGlob(p, all)) serverScripts.add(f);
+  if (target === "rust") for (const f of manifest.encryptedFiles) { if (scriptLanguage(f) === "lua") serverScripts.add(f); }
+  else for (const p of m.serverScripts) for (const f of expandGlob(p, all)) serverScripts.add(f);
   const stubs = [...serverScripts].filter((f) => encrypted.has(f)).sort();
   const unused = manifest.encryptedFiles.filter((f) => !serverScripts.has(f)).sort();
 
@@ -143,8 +158,8 @@ export function installEscrowForOpen77(opts: {
   const warnings: string[] = [];
   if (!opts.trustedSignerPublicKey) warnings.push("no --trusted-signer given: the signature proves integrity, not who signed. Pin the creator's release key.");
 
-  // Re-check the installed folder with the parser the OPEN//77 rules are encoded in.
-  const check = parseManifest(readFileSync(join(dest, "open77.lua"), "utf8"), { fileName: "open77.lua" });
+  // Re-check the installed folder with the parser the host's rules are encoded in.
+  const check = parseManifest(readFileSync(join(dest, manifestFile), "utf8"), { fileName: manifestFile });
   if (!check.ok) throw new Open77EscrowError("manifest", check.errors.map((e) => e.message).join("; "));
   const listed = (function walk(dir: string, prefix: string): string[] {
     return readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? walk(join(dir, d.name), `${prefix}${d.name}/`) : [`${prefix}${d.name}`]));
