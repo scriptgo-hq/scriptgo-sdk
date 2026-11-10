@@ -266,6 +266,14 @@ key or token, answered 429, which a loader treats as "could not answer". Every a
 `escrow_key_events`: outcome, reason, package, release, licence, deployment, server-key fingerprint
 and, for a release, the delivery marker. No row can hold a key.
 
+The log is trimmed by the worker, once an hour (`LicensingService.pruneKeyEvents`): refusals that
+matched no licence after `ESCROW_KEY_LOG_UNMATCHED_RETENTION_DAYS` (30); refusals of a known licence
+and the repeated releases of one delivery marker after `ESCROW_KEY_LOG_RETENTION_DAYS` (400, above
+the longest activity window the API serves). The first and the last release of every delivery
+marker are never removed, so a marker found in a leaked copy keeps resolving to its licence and
+deployment with the dates of its first and latest delivery; the count staff see is the number of
+releases still in the log. `0` turns a rule off. Without a running worker nothing is trimmed.
+
 `POST /v1/me/licenses/:id/deployments/:activationId/reset-server-key` unbinds a deployment for an
 honest migration: audited, at most three per deployment per 24 hours (429 `reset_limit`).
 
