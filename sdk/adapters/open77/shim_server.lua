@@ -162,10 +162,13 @@ do
                 end, req.method or "GET", req.body, req.headers)
                 if ok == false then done({ status = 0, body = "", error = reason }) end
             end,
+            -- The module resumes with up to three values; they cross the promise as one table.
             await = function(register)
                 local p = promise.new()
-                register(function(...) p:resolve(...) end)
-                return Citizen.Await(p)
+                register(function(a, b, c) p:resolve({ a, b, c }) end)
+                local r = Citizen.Await(p)
+                if type(r) ~= "table" then return nil, "await_failed" end
+                return r[1], r[2], r[3]
             end,
             identifier = function(id)
                 if validPlayer(id) then return Open77.players.identifier(id) end

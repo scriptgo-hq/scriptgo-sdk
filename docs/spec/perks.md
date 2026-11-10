@@ -33,7 +33,7 @@ their identifier lets them claim somebody's perk.
 | Environment | Identifier |
 |---|---|
 | Lua Standalone | `local:<name>` of the simulated local players: for tests and tooling |
-| OPEN//77 | `Open77.players.identifier(id)`, the player's durable authenticated identifier |
+| OPEN//77 | `Open77.players.identifier(id)`, the player's durable authenticated identifier (the account the OPEN//77 master verified). A masterless `devLocalAuth` server gives its players none: they have no perk and cannot be sold one |
 | Rust (Oxide/Carbon) | `steam:<steamid64>` |
 | .NET kit | What the integrator's `IHostPlayers.Identifier(id)` returns (the console host: `local:<name>`) |
 
@@ -188,8 +188,8 @@ The link is signed by the API: a compact JWS (EdDSA) whose payload binds the ope
 The buyer is tied to their identifier without typing a name, and a link cannot be turned into one for
 another player. The signing key is its own ed25519 key, derived from the server secret for this one
 purpose; a token signed with the license-token key or the release key is refused. A link stops
-working when it expires or when the server link that asked for it is revoked. The token is about 430
-characters long.
+working when it expires or when the server link that asked for it is revoked. The whole link is about
+530 characters long.
 
 ## What the player sees
 
@@ -299,7 +299,7 @@ local perks = PerksModule.new({
 | Environment | `perks` | Why |
 |---|---|---|
 | Lua Standalone | partial | The core over curl; players are simulated (`local:<name>`): tests and tooling |
-| OPEN//77 | partial | The shim, server side, over `Open77.http.request` (the operator allows the API host); one client per packed resource |
+| OPEN//77 | partial | The shim, server side, over `Open77.http.request` (the operator allows the API host); one client per packed resource. Run on a real dedicated server (`tools/perks-e2e.mjs --host open77`), without an authenticated player |
 | Rust (Oxide/Carbon) | supported | The core over the plugin's web requests; `steam:<steamid64>`. Unit-tested in the bridge; not run on a real server with a connected player |
 | .NET kit | partial | Lua guests only; JavaScript and TypeScript guests get `capability_unavailable:perks@dotnet` |
 | LÖVE, Neovim | unavailable | One local player, or no player: nobody to sell to |
@@ -331,5 +331,7 @@ Staff, after a report: `GET /v1/admin/perks[?operator=]`, `POST /v1/admin/perks/
   checkout through it stays off until Tebex approves in writing.
 - A perk is as secure as the platform's player identifier and as the server that asks: an operator
   controls their own server and their own script.
-- The purchase link is long (about 430 characters); a chat line may not hold it.
+- The purchase link is long (about 530 characters); a chat line may not hold it.
+- On OPEN//77 the player identifier exists only for players the master authenticated; it was not
+  exercised with such a player (the runs are masterless).
 - There is no gift (buying for another player) and no operator-granted free perk yet.
