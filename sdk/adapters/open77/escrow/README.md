@@ -123,6 +123,5 @@ offered. Build: `dotnet build runner/ScriptGo.Open77.Escrow.Runner.csproj`.
   within about 45 seconds of the end of its grace, not at the exact second.
 - Key answers are kept in memory only. After a server restart with the master unreachable, encrypted
   resources stay stopped until it answers.
-- The native library is built and tested on Windows x64. The Linux build is written but has not been
-  compiled or run.
+- The native library is built and tested on Windows x64 and Linux x64. On Linux the OPEN//77 escrow tests (73) pass and the end-to-end script reaches 32/32 against a server built there, in a container (`tools/escrow-e2e-linux.ps1 -Loader open77`); no production host, no players.
 - Client-side code is not protected. Keep valuable logic on the server.

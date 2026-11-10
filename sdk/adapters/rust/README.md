@@ -280,9 +280,10 @@ None of this is about the operator. The operator is not limited to writing resou
   passes as an argument; `Marshal.GetFunctionPointerForDelegate` gives back the native address of
   a Lua C function (used to find the Lua library the VM runs on; if it does not, the bridge falls
   back to the `lua54` it loaded by path, or refuses with `native_missing`).
-- **Windows x64 only so far.** `libscriptgo.so` has never been built (`sdk/native/README.md`), so
-  nothing here has run on Linux, where most Rust servers are. `sg_identity_*` on POSIX, the
-  library's SONAME and `dladdr` are untested.
+- **No Rust server on either system.** On Linux, `libscriptgo.so` is built (`sdk/native/README.md`)
+  and the 45 bridge tests pass in a plain .NET 10 process, 17 of them with the real library
+  (2026-11-10, container). That covers `dlopen` of both libraries by full path and the POSIX
+  identity file; it does not cover Mono, nor `runds.sh` and its `LD_LIBRARY_PATH`.
 - The identity is sealed for the account the server runs as. Running the server under another
   account, or as a service after a first start from a console session, gives `unbound` until the
   licence is bound again.

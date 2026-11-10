@@ -62,7 +62,35 @@ The script needs Visual Studio 2022 with the MSVC v143 toolset and its CMake com
 
 `.deps/`, `build/` and `dist/` are gitignored. From a non-interactive shell pass `-AgentShell`.
 
-### Linux and macOS (written, **not built or tested here**)
+### Linux x64 (built and tested in a Debian 12 container)
+
+```sh
+./build-linux.sh                              # on a Linux machine, from sdk/native
+pwsh -File sdk/native/build-linux.ps1         # from Windows: the same script in Docker (debian:12)
+pwsh -File sdk/native/build-linux.ps1 -Sanitize   # AddressSanitizer + UBSan, tests only
+```
+
+`build-linux.sh`:
+
+1. downloads the libsodium 1.0.22 release tarball, checks it against a pinned SHA-256 and builds
+   it as a static, position-independent archive (distribution packages are often older than the
+   1.0.19 this library needs, and a static link is the point);
+2. builds `libscriptgo.so` with CMake and runs the 19 CTest cases, the Lua load test against the
+   distribution's `liblua5.4.so.0`;
+3. checks that the library exports only `sg_*` functions and does not link libsodium dynamically;
+4. writes `dist/linux-<arch>/` (`libscriptgo.so` stripped, the header, the notices) and prints the
+   size, the SHA-256 and the newest glibc symbol version the library needs.
+
+Measured on 2026-11-10 in `debian:12` (GCC 12, x86-64): 19/19 tests, `libscriptgo.so` (356,040 bytes, SHA-256 `e73eabe3e0e6f8e242a84f27aeb9ed70c50ee02c5a1a65527383413ff5e3f4bc`),
+28 exports, all `sg_*`, `libc.so.6` as its only dependency, glibc 2.33 or newer (the build host's
+glibc sets that floor: build on an older distribution to lower it). The same suite built with AddressSanitizer and UBSan (`-Sanitize`) also passes 19/19 with no report; two clean builds gave byte-identical libraries.
+
+What that run does and does not cover: `src/identity_posix.c` (the identity file, mode 0600), the
+GNU ld export list and the guarded allocations ran; the result was then loaded by the .NET
+package, by the Rust bridge and by an OPEN//77 server build, all on Linux (`TEST_RESULTS.md`). It
+ran as root in a container, on one distribution and one CPU; arm64 is scripted and was not built.
+
+By hand, with your own libsodium:
 
 ```sh
 cmake -S sdk/native -B sdk/native/build/release -DCMAKE_BUILD_TYPE=Release \
@@ -74,12 +102,11 @@ ctest --test-dir sdk/native/build/release --output-on-failure
 Needs `pkg-config` and libsodium 1.0.19 or newer **with its static archive** (`libsodium.a`). The
 build stops when only the shared library is present; `-DSG_ALLOW_SHARED_SODIUM=ON` accepts a
 dynamic link and prints a warning, because a replaced `libsodium.so` could then observe keys.
-Exports are limited to `sg_*` by `src/exports.map` (GNU ld) and `src/exports.macos.txt` (ld64).
 
-This path was written with care and never compiled: the only machine available was Windows x64.
-`src/identity_posix.c`, the non-MSVC branches of `CMakeLists.txt` and the two export lists are
-unverified until the suite has run on the target. Treat the first Linux or macOS build as a port
-to finish, not as a supported platform.
+### macOS (written, **not built or tested**)
+
+The same CMake project, with `src/exports.macos.txt` (ld64) as the export list. Nobody has compiled
+it: treat the first macOS build as a port to finish, not as a supported platform.
 
 ## Using it from C
 
@@ -173,4 +200,5 @@ archive and is not instrumented, and nobody has run a coverage-guided fuzzer on 
 What the suite cannot show on one machine: that a DPAPI-sealed identity really fails for another
 Windows account or on another computer (the test only damages the sealed blob), what the library
 answers on a CPU without AES-NI (`SG_ERR_NO_AES` is returned by a code path that never ran here),
-and anything at all about Linux or macOS.
+anything about macOS or Linux arm64, and a Linux identity file read by another user (the run was
+root in a container).

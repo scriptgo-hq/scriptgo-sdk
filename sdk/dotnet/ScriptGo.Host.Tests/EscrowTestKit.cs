@@ -44,7 +44,8 @@ internal static class EscrowKit
     public static readonly EscrowBackend[] Backends = [EscrowBackend.Native, EscrowBackend.Managed];
 
     /// <summary>On Windows x64 the native library is part of the build and its absence is a failure.
-    /// Elsewhere it has not been built yet (sdk/native/README.md), so native tests are inconclusive.</summary>
+    /// Elsewhere it is built on demand (sdk/native/build-linux.sh; macOS not yet), so without it the
+    /// native tests are inconclusive: read the skipped count before calling a Linux run complete.</summary>
     public static void RequireNative()
     {
         if (EscrowNativeLibrary.IsAvailable) return;

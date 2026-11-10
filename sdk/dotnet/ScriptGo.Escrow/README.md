@@ -95,8 +95,8 @@ when you pass `EscrowBackend.Managed`, or `allowManagedFallback: true`; `identit
 same bundles.
 
 The native library ships in this package under `runtimes/<rid>/native/`. **Today that is
-`win-x64` only**; the Linux and macOS builds are written and not yet built or tested
-(`sdk/native/README.md`). It is located by absolute path next to `ScriptGo.Escrow.dll`
+`win-x64` and `linux-x64`** (each packed when its build is present in `sdk/native/dist`); the
+macOS build is written and not yet built or tested (`sdk/native/README.md`). It is located by absolute path next to `ScriptGo.Escrow.dll`
 (`runtimes/<rid>/native/`, then the assembly's own folder), never through `PATH`;
 `EscrowNativeLibrary.UseLibraryAt(path)` overrides the search, and
 `EscrowNativeLibrary.LoadedFrom` tells where it came from. It needs a CPU with hardware AES

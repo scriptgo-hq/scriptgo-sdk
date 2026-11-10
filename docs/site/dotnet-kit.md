@@ -5,7 +5,8 @@ order: 8
 ---
 
 > [!WARNING] Experimental
-> The .NET kit has been measured with .NET 10 on Windows x64 only, and it is not on NuGet yet:
+> The .NET kit has been measured with .NET 10 on Windows x64 (its test suite also passes on Linux
+> x64 in a container), and it is not on NuGet yet:
 > reference it from the repository. Its API may change.
 
 The .NET kit is a library, `ScriptGo.Host`, that a game engine or server written in C# embeds.
@@ -148,4 +149,6 @@ run the conformance probes in it, as described in [Create an adapter](/docs/crea
 - C# guests are not built yet (phase 3 of the plan). A `.cs` script is refused by the manifest.
 - Declarative manifest `exports` are found as global functions; a TypeScript bundle's top-level
   functions are not globals, so TypeScript resources register exports with `exports(name, fn)`.
-- Measured on Windows x64 only.
+- Measured on Windows x64. On Linux x64 its test suite passes in a container, the escrow tests
+  included, with the native library built there; no game or engine was run on Linux. Not measured
+  on macOS.

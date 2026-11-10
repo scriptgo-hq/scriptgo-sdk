@@ -131,4 +131,4 @@ cross between languages is fixed in `docs/spec/multi-language.md`.
 | C# guests | Not started (phase 3) | A spike and a security review come first; until then a `.cs` script is refused |
 | In-memory escrow on more hosts | Planned | Today the in-memory loader is in the .NET kit. Other hosts that run compiled code are marked planned on the [environments page](/environments#protection); hosts that run plain script stay on licence and signing |
 | SDK packages on NuGet and npm | Not published | The .NET kit, the CLI and `@scriptgo/types` |
-| Linux and macOS | Not measured | The .NET kit and the desktop hosts (LÖVE, Godot, Neovim) were measured on Windows only |
+| Linux and macOS | Partly measured | The desktop hosts (LÖVE, Godot, Neovim) were measured on Windows only. The .NET kit's test suite and the native escrow library also pass on Linux x64, in a container. Nothing was measured on macOS |

@@ -108,7 +108,7 @@ record the decisions.
 
 The native loader needs hardware AES (AES-NI and PCLMUL on x86-64, the crypto extensions on ARM64)
 and reports `SG_ERR_NO_AES` without it; it has no software fallback. It is built and tested on
-Windows x64 only; the Linux and macOS builds are written and unbuilt.
+Windows x64 and Linux x64 (`sdk/native/README.md`); the macOS build is written and unbuilt.
 
 The honest stance at the top of this document applies unchanged. Moving the key and the plaintext
 into native memory raises the cost of reading them out of a process. It does not stop the operator

@@ -67,9 +67,10 @@ There is also a fourth option that is not an integration: `ScriptGo.Host`, the c
 sandbox for .NET. If you do not have a sandbox yet, that is the shorter road, and it uses
 `ScriptGo.Escrow` underneath (`sdk/examples/host-escrow-dotnet`).
 
-Status, plainly: `libscriptgo` is built and tested on **Windows x64 only**. The Linux and macOS
-builds are written and have not been compiled (`sdk/native/README.md`). Until they are, a .NET host
-on those systems can run the managed fallback backend, which decrypts in managed memory and is
+Status, plainly: `libscriptgo` is built and tested on **Windows x64 and Linux x64** (the Linux one
+in a Debian 12 container: `sdk/native/build-linux.sh`, glibc 2.33 or newer). The macOS build is
+written and has not been compiled (`sdk/native/README.md`). Until it is, a .NET host on macOS, or
+on a Linux older than that glibc, can run the managed fallback backend, which decrypts in managed memory and is
 weaker against memory inspection; the package makes you opt in to it by name.
 
 ## 4. The call sequence
