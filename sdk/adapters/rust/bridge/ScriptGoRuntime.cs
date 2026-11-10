@@ -17,6 +17,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using KeraLua;
+using ScriptGo.Bridge.Escrow;
 using LuaState = KeraLua.Lua;
 
 namespace ScriptGo.Bridge
@@ -38,6 +39,34 @@ namespace ScriptGo.Bridge
         public TimeSpan HttpTimeout = TimeSpan.FromSeconds(15);
         /// <summary>Folders searched for lua54.dll / liblua54.so before the VM starts; null leaves it to the runtime.</summary>
         public List<string> NativeSearchDirs;
+        /// <summary>Code escrow (encrypted resources); null or not enabled: an escrowed folder is refused with escrow_disabled.</summary>
+        public EscrowOptions Escrow;
+    }
+
+    /// <summary>
+    /// Code escrow settings (sdk/adapters/rust/README.md, "Escrow"). Off by default. No secret goes in
+    /// here: the deployment tokens are files in <see cref="TokensDirectory"/>, and the server's private
+    /// key stays inside the native library, sealed in <see cref="IdentityFile"/>.
+    /// </summary>
+    public sealed class EscrowOptions
+    {
+        public bool Enabled;
+        /// <summary>Base URL of the key service; the bridge posts to &lt;master&gt;/v1/licenses/key. https, or http on loopback.</summary>
+        public string Master;
+        /// <summary>The licence environment asked for.</summary>
+        public string Environment = "rust";
+        /// <summary>Where the native library keeps this server's X25519 identity. Licences are bound to its public half.</summary>
+        public string IdentityFile;
+        /// <summary>A folder with one &lt;resource&gt;.token file per escrowed resource: one line, the deployment token.</summary>
+        public string TokensDirectory;
+        /// <summary>ed25519 public keys (base64url) allowed to sign a release. Empty: the signer the key service names.</summary>
+        public List<string> TrustedSigners = new List<string>();
+        /// <summary>Refuse a start when any clear file differs from the signed release (by default only the manifest must match).</summary>
+        public bool StrictClearFiles;
+        /// <summary>Full path of scriptgo.dll / libscriptgo.so; null searches <see cref="RuntimeOptions.NativeSearchDirs"/>.</summary>
+        public string NativeLibrary;
+        /// <summary>Seconds between two attempts while the key service refuses or cannot be reached.</summary>
+        public int RenewRetrySeconds = 60;
     }
 
     public struct CommandResult
@@ -73,11 +102,16 @@ namespace ScriptGo.Bridge
         private int _tracebackRef = -1;
         private int _pendingHttp;
 
+        private readonly EscrowManager _escrow;
+        private readonly List<EscrowEvent> _escrowEvents = new List<EscrowEvent>();
+
         private sealed class HttpCompletion
         {
             public long Id;
             public HttpResponseData Response;
             public string Error;
+            /// <summary>Set for a request the bridge made itself (the escrow key service): called instead of the Lua side.</summary>
+            public Action<HttpResponseData, string> Callback;
         }
 
         public ScriptGoRuntime(IHostServices services, RuntimeOptions options)
@@ -86,6 +120,9 @@ namespace ScriptGo.Bridge
             _o = options ?? new RuntimeOptions();
             if (_s.Clock == null || _s.Files == null || _s.Log == null) throw new ArgumentException("Clock, Files and Log are required services");
             _roots = _o.SearchDirs.Where(d => !string.IsNullOrEmpty(d)).Select(Normalize).ToList();
+            EscrowManager.SendHttp send = null;
+            if (_s.Http != null) send = (request, done) => StartHttp(request, new HttpCompletion { Callback = done });
+            _escrow = new EscrowManager(_s, _o.Escrow, _o.AdapterVersion, _o.NativeSearchDirs, send);
         }
 
         public bool Booted => _rtRef >= 0;
@@ -96,6 +133,8 @@ namespace ScriptGo.Bridge
         /// <summary>HTTP requests not answered yet.</summary>
         public int PendingHttp => Volatile.Read(ref _pendingHttp);
         public string Environment => "rust";
+        /// <summary>Code escrow in one line: "off", or the key service and environment it is on for.</summary>
+        public string EscrowSummary => _escrow.Summary;
 
         // Boot -------------------------------------------------------------------------------------------
         /// <summary>Creates the VM, loads the core and the glue, discovers and starts resources.</summary>
@@ -117,6 +156,13 @@ namespace ScriptGo.Bridge
                 throw new BridgeException("native Lua library " + NativeLua.FileName + " not found: " + e.Message);
             }
             _lua.Encoding = Encoding.UTF8;
+            if (_escrow.Enabled)
+            {
+                // Encrypted scripts are compiled by luaL_loadbufferx of the Lua library this VM runs on.
+                string module, why;
+                var loadBufferX = NativeLua.ResolveLoadBufferX(_lua, out module, out why);
+                _escrow.AttachLua(loadBufferX, module, why);
+            }
 
             // Keep debug.traceback for error messages before anything can touch it.
             _lua.GetGlobal("debug");
@@ -141,6 +187,10 @@ namespace ScriptGo.Bridge
             Register("config", Config);
             Register("notify", Notify);
             Register("httpRequest", HttpRequest);
+            Register("escrowBegin", EscrowBegin);
+            Register("escrowLoad", _escrow.Load);
+            Register("escrowRelease", l => { _escrow.Release(Str(l, 1) ?? ""); return 0; });
+            Register("escrowStatus", l => { PushString(l, _escrow.Status(Str(l, 1) ?? "")); return 1; });
             int hostIndex = _lua.GetTop();
 
             // Narrow the VM's globals before any Lua runs. Resources never see _G (the core builds their
@@ -156,6 +206,22 @@ namespace ScriptGo.Bridge
                 for _, k in ipairs({ 'execute', 'exit', 'remove', 'rename', 'tmpname', 'getenv', 'setlocale' }) do os[k] = nil end
                 os.clock = H.now
             ");
+            // With escrow on, one VM also holds scripts their creator did not publish in clear. Two things
+            // every resource could otherwise reach are closed for the whole VM, before the core copies
+            // the libraries into resource environments (README, "Escrow: what shares the VM"):
+            // - string.dump, which turns a function into bytecode;
+            // - the string metatable, shared by all resources: a resource that replaced a method in it
+            //   would see every ("text"):method() call of every other resource. String methods now
+            //   resolve in a private copy, and getmetatable("") answers false.
+            if (_escrow.Enabled)
+            {
+                DoChunk("@scriptgo/rust-escrow-sandbox.lua", @"
+                    string.dump = nil
+                    local methods = {}
+                    for k, v in pairs(string) do methods[k] = v end
+                    debug.setmetatable('', { __index = methods, __metatable = false })
+                ");
+            }
 
             // The core: every module chunk in a preload table, then init.lua(nil, nil, preload).
             _lua.NewTable();
@@ -259,6 +325,12 @@ namespace ScriptGo.Bridge
             while (_completions.TryDequeue(out c))
             {
                 Interlocked.Decrement(ref _pendingHttp);
+                if (c.Callback != null)
+                {
+                    try { c.Callback(c.Response, c.Error); }
+                    catch (Exception e) { _s.Log.Write(LogLevel.Error, "scriptgo", "http callback: " + e.GetType().Name + ": " + e.Message); }
+                    continue;
+                }
                 if (!BeginRt("httpDone")) continue;
                 _lua.PushInteger(c.Id);
                 int n = 4;
@@ -282,7 +354,27 @@ namespace ScriptGo.Bridge
                 }
                 CallRtLogged("httpDone", n, 0);
             }
+            PumpEscrow();
             if (BeginRt("tick")) CallRtLogged("tick", 0, 0);
+        }
+
+        // Key answers, renewals and ended graces become events for the Lua glue (rt.escrow), which starts,
+        // fails or stops the resource. Always on the main thread, never inside a Lua call.
+        private void PumpEscrow()
+        {
+            _escrow.Pump(_escrowEvents);
+            if (_escrowEvents.Count == 0) return;
+            var events = _escrowEvents.ToArray();
+            _escrowEvents.Clear();
+            foreach (var e in events)
+            {
+                if (!BeginRt("escrow")) return;
+                PushString(_lua, e.Resource);
+                PushString(_lua, e.Kind);
+                PushString(_lua, e.Code);
+                PushString(_lua, e.Detail);
+                CallRtLogged("escrow", 4, 0);
+            }
         }
 
         public void PlayerJoin(int id, string name)
@@ -398,6 +490,8 @@ namespace ScriptGo.Bridge
             _rtRef = -1;
             _lua.Close();
             _lua = null;
+            // After the VM: wipes and frees every decrypted release and the server identity.
+            _escrow.Dispose();
         }
 
         // Host functions (H.*) -----------------------------------------------------------------------------
@@ -434,7 +528,10 @@ namespace ScriptGo.Bridge
         {
             string root, rel;
             if (!TryResolve(Str(l, 1), out root, out rel) || rel.Length == 0) { l.PushNil(); return 1; }
-            var bytes = _s.Files.Read(root, rel);
+            // An encrypted file of a running escrowed resource reads as its stub even when the installer
+            // wrote none (a module only `require` reaches): the stub is public, and the chunk itself comes
+            // from native memory.
+            var bytes = _s.Files.Read(root, rel) ?? _escrow.Stub(root, rel);
             if (bytes == null) { l.PushNil(); return 1; }
             l.PushBuffer(bytes);
             return 1;
@@ -548,12 +645,36 @@ namespace ScriptGo.Bridge
                 PushString(l, "invalid_url");
                 return 2;
             }
-            StartHttp(id, new HttpRequestData(method, url, headers, body));
+            StartHttp(new HttpRequestData(method, url, headers, body), new HttpCompletion { Id = id });
             l.PushBoolean(true);
             return 1;
         }
 
-        private void StartHttp(long id, HttpRequestData request)
+        // H.escrowBegin(resource, root, script1, script2, ...) -> "ready" | "pending" | "refused", code, detail
+        private int EscrowBegin(LuaState l)
+        {
+            var name = Str(l, 1) ?? "";
+            string root, rel;
+            BeginResult result;
+            if (!TryResolve(Str(l, 2), out root, out rel) || rel.Length != 0)
+            {
+                result = new BeginResult { Verdict = "refused", Code = EscrowReason.InvalidManifest, Detail = "not a resource folder" };
+            }
+            else
+            {
+                var scripts = new List<string>();
+                int top = l.GetTop();
+                for (int i = 3; i <= top; i++) scripts.Add(Str(l, i) ?? "");
+                result = _escrow.Begin(name, root, scripts);
+            }
+            PushString(l, result.Verdict);
+            PushString(l, result.Code);
+            PushString(l, result.Detail);
+            return 3;
+        }
+
+        // Sends a request off the main thread; `c` comes back through Tick() with the answer or the error.
+        private void StartHttp(HttpRequestData request, HttpCompletion c)
         {
             Interlocked.Increment(ref _pendingHttp);
             Task<HttpResponseData> send;
@@ -565,13 +686,13 @@ namespace ScriptGo.Bridge
             catch (Exception e)
             {
                 cts.Dispose();
-                _completions.Enqueue(new HttpCompletion { Id = id, Error = "request_failed: " + e.Message });
+                c.Error = "request_failed: " + e.Message;
+                _completions.Enqueue(c);
                 return;
             }
             var timeout = Task.Delay(_o.HttpTimeout);
             Task.WhenAny(send, timeout).ContinueWith(winner =>
             {
-                var c = new HttpCompletion { Id = id };
                 if (winner.Result != send) c.Error = "timeout";
                 else if (send.IsFaulted) c.Error = "request_failed: " + send.Exception.GetBaseException().Message;
                 else if (send.IsCanceled) c.Error = "timeout";

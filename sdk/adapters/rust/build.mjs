@@ -1,10 +1,16 @@
 // Builds the distributable Rust (Oxide/Carbon) plugin: dist/rust/ mirrors a dedicated server's root, so
 // a server owner copies its content over the server folder.
 //
-//   node sdk/adapters/rust/build.mjs [--out <dir>] [--with <resourceDir>]... [--dotnet <path>]
+//   node sdk/adapters/rust/build.mjs [--out <dir>] [--with <resourceDir>]... [--dotnet <path>] [--native <dir>]
 //
 //   RustDedicated_Data/Managed/ScriptGo.Bridge.dll, KeraLua.dll   managed side ("// Reference: ScriptGo.Bridge")
 //   RustDedicated_Data/Plugins/x86_64/lua54.dll, liblua54.so      native Lua 5.4 (KeraLua's builds)
+//   RustDedicated_Data/Plugins/x86_64/scriptgo.dll, libscriptgo.so  the escrow library, ONLY with --native
+//
+// --native <dir> (or SCRIPTGO_NATIVE_DIR) points at a build of sdk/native: the folder that holds
+// scriptgo.dll / libscriptgo.so, or its parent with win-x64/ and linux-x64/ in it (sdk/native/dist).
+// Whatever is found there is shipped next to lua54; nothing is built or downloaded here. Without it
+// the plugin is complete for clear packages and refuses an escrowed one with native_missing.
 //   oxide/plugins/ScriptGo.cs, carbon/plugins/ScriptGo.cs         the plugin (keep the one for your framework)
 //   oxide|carbon/data/ScriptGo/resources/<name>/                  resources given with --with
 //   THIRD-PARTY-NOTICES.txt                                       KeraLua and Lua licences
@@ -81,8 +87,32 @@ export function keraLuaPackage() {
   throw new Error(`KeraLua ${key} not found in the NuGet package folders`);
 }
 
-export function buildPlugin(outDir, { withResources = [], dotnet } = {}) {
+/**
+ * The escrow library files found under a build of sdk/native: `dir` itself, then dir/win-x64 and
+ * dir/linux-x64. Returns { files: [{ name, path }], notices: <path or null> }.
+ */
+export function findNativeEscrow(dir) {
+  const root = resolve(dir);
+  const files = [];
+  let notices = null;
+  for (const [name, rid] of [["scriptgo.dll", "win-x64"], ["libscriptgo.so", "linux-x64"]]) {
+    for (const folder of [root, join(root, rid)]) {
+      if (!existsSync(join(folder, name))) continue;
+      files.push({ name, path: join(folder, name) });
+      if (!notices && existsSync(join(folder, "THIRD-PARTY-NOTICES.txt"))) notices = join(folder, "THIRD-PARTY-NOTICES.txt");
+      break;
+    }
+  }
+  return { files, notices };
+}
+
+export function buildPlugin(outDir, { withResources = [], dotnet, native = process.env.SCRIPTGO_NATIVE_DIR } = {}) {
   const dest = resolve(outDir);
+  // Checked before anything is built or deleted: a wrong path must not cost a build.
+  const escrow = native ? findNativeEscrow(native) : null;
+  if (escrow && escrow.files.length === 0) {
+    throw new Error(`no scriptgo.dll or libscriptgo.so under ${resolve(native)} (expected a build of sdk/native: its dist folder, or dist/<rid>)`);
+  }
   const bridge = buildBridge(findDotnet(dotnet));
   const kera = keraLuaPackage();
   if (existsSync(dest)) rmSync(dest, { recursive: true });
@@ -95,6 +125,7 @@ export function buildPlugin(outDir, { withResources = [], dotnet } = {}) {
   cpSync(join(kera.dir, "lib", "netstandard2.0", "KeraLua.dll"), join(managed, "KeraLua.dll"));
   cpSync(join(kera.dir, "runtimes", "win-x64", "native", "lua54.dll"), join(natives, "lua54.dll"));
   cpSync(join(kera.dir, "runtimes", "linux-x64", "native", "liblua54.so"), join(natives, "liblua54.so"));
+  for (const f of escrow?.files ?? []) cpSync(f.path, join(natives, f.name));
 
   for (const framework of ["oxide", "carbon"]) {
     mkdirSync(join(dest, framework, "plugins"), { recursive: true });
@@ -111,7 +142,13 @@ export function buildPlugin(outDir, { withResources = [], dotnet } = {}) {
   writeFileSync(
     join(dest, "THIRD-PARTY-NOTICES.txt"),
     `SCRIPT//GO for Rust redistributes KeraLua ${kera.version} (KeraLua.dll, lua54.dll, liblua54.so).\n\n` +
-      `KeraLua\n${keraLicense.trim()}\n\n${LUA_LICENSE}`,
+      `KeraLua\n${keraLicense.trim()}\n\n${LUA_LICENSE}` +
+      (escrow
+        ? `\n${"=".repeat(80)}\nThe escrow library (${escrow.files.map((f) => f.name).join(", ")})\n${"=".repeat(80)}\n\n` +
+          (escrow.notices
+            ? readFileSync(escrow.notices, "utf8")
+            : "Built from sdk/native, which links libsodium (ISC) and miniz (MIT) statically: see sdk/native/THIRD-PARTY-NOTICES.txt.\n")
+        : ""),
   );
   return dest;
 }
@@ -134,13 +171,23 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const args = process.argv.slice(2);
   let out = join(repo, "dist", "rust");
   let dotnet;
+  let native = process.env.SCRIPTGO_NATIVE_DIR;
   const withRes = [];
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--out") out = args[++i];
     else if (args[i] === "--with") withRes.push(args[++i]);
     else if (args[i] === "--dotnet") dotnet = args[++i];
+    else if (args[i] === "--native") native = args[++i];
   }
-  const dest = buildPlugin(out, { withResources: withRes, dotnet });
+  const dest = buildPlugin(out, { withResources: withRes, dotnet, native });
   console.log(`built ${dest}`);
-  for (const f of listDist(dest)) if (!f.includes("/resources/")) console.log(`  ${f}`);
+  const files = listDist(dest);
+  for (const f of files) if (!f.includes("/resources/")) console.log(`  ${f}`);
+  const shipped = files.filter((f) => /\/(scriptgo\.dll|libscriptgo\.so)$/.test(f)).map((f) => basename(f));
+  console.log(
+    shipped.length > 0
+      ? `escrow library included: ${shipped.join(", ")}` +
+          (shipped.length < 2 ? ` (the other platform's file was not in ${resolve(native)}: escrow will answer native_missing there)` : "")
+      : "escrow library not included (pass --native <build of sdk/native> or set SCRIPTGO_NATIVE_DIR): escrowed packages will be refused with native_missing",
+  );
 }

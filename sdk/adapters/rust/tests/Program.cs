@@ -4,6 +4,7 @@
 // services are fakes standing in for the plugin's (data files, BasePlayer, permissions, config, chat,
 // web requests). What is real: the KeraLua Lua 5.4 VM, the portable core, the Rust glue, the
 // conformance probe and the official kits. Passing here never makes the `rust` environment verified.
+// The escrow tests are in EscrowTests.cs (same process, same caveat; the native library is the real one).
 //
 //   dotnet run --project sdk/adapters/rust/tests -- [<repo root>]
 using System.Collections.Concurrent;
@@ -12,7 +13,7 @@ using System.Text;
 using System.Text.Json;
 using ScriptGo.Bridge;
 
-internal static class Program
+internal static partial class Program
 {
     private static string _repo = "";
     private static string _tmp = "";
@@ -48,6 +49,7 @@ internal static class Program
             Test("kits.sg_inventory", () => Kit("sg_inventory"));
             Test("kits.sg_inventory_giveitem_permission", InventoryGive);
             Test("verify.report_shape", ReportShape);
+            RunEscrowTests();
         }
         finally
         {
@@ -55,7 +57,8 @@ internal static class Program
         }
         Console.WriteLine();
         foreach (var f in Failures) Console.WriteLine("FAIL " + f);
-        Console.WriteLine($"{_passed} passed, {Failures.Count} failed");
+        Console.WriteLine($"{_passed} passed, {Failures.Count} failed, {_skipped} skipped"
+            + (_skipped > 0 ? " (skipped: the native escrow library is absent; a skip is not a pass)" : $" ({_nativeTests} with the real native escrow library)"));
         return Failures.Count == 0 ? 0 : 1;
     }
 
