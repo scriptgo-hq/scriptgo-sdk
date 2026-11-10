@@ -81,8 +81,8 @@ export class ApiClient {
     return h;
   }
 
-  async raw(method: string, path: string, init: { json?: unknown; form?: FormData } = {}): Promise<Response> {
-    const headers = this.headers(init.json !== undefined ? { "content-type": "application/json" } : {});
+  async raw(method: string, path: string, init: { json?: unknown; form?: FormData; headers?: Record<string, string> } = {}): Promise<Response> {
+    const headers = this.headers({ ...(init.json !== undefined ? { "content-type": "application/json" } : {}), ...(init.headers ?? {}) });
     const body = init.json !== undefined ? JSON.stringify(init.json) : init.form;
     let res: Response;
     try {

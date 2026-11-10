@@ -124,6 +124,21 @@ local function run()
         local ok, err = addWithDeps(host, normalize(root))
         if not ok then die(err) end
     end
+    -- Host-enforced licenses: config "licenses": { "<resource>": { "deploymentToken": "sg_dep_...",
+    -- "package": "creator//name" } }. A guarded resource starts on a valid answer of the licensing
+    -- API only, is checked again every `interval` seconds (default 600) and is stopped when the
+    -- offline grace of its last valid answer runs out. A license check, not code secrecy.
+    if type(cfg.licenses) == "table" then
+        for name, lic in pairs(cfg.licenses) do
+            if host.resources[name] and type(lic) == "table" then
+                host:guardLicense(name, {
+                    deploymentToken = lic.deploymentToken, licenseKey = lic.licenseKey,
+                    package = lic.package, interval = tonumber(lic.interval),
+                })
+            end
+        end
+        host:tick(adapter.now and adapter.now() or nil) -- the first check, before anything starts
+    end
     local results = host:startAll()
     local failed = 0
     for name, state in pairs(results) do
