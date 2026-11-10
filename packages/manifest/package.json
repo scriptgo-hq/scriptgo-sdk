@@ -1,20 +1,55 @@
 {
   "name": "@scriptgo/manifest",
-  "private": true,
+  "version": "0.1.0",
+  "description": "SCRIPT//GO manifest parser and validator (scriptgo.toml), with the package file rules.",
+  "license": "MIT",
   "type": "module",
+  "homepage": "https://scriptgo.dev",
+  "bugs": "https://github.com/scriptgo-hq/scriptgo-sdk/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/scriptgo-hq/scriptgo-sdk.git",
+    "directory": "packages/manifest"
+  },
+  "keywords": [
+    "scriptgo",
+    "lua",
+    "scripting",
+    "game-server",
+    "mods"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "exports": {
     ".": "./src/index.ts"
   },
   "types": "./src/index.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    },
+    "types": "./dist/index.d.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "build": "tsc -p tsconfig.build.json && node ../../tools/dts-extensions.mjs dist",
+    "prepack": "tsc -p tsconfig.build.json && node ../../tools/dts-extensions.mjs dist"
   },
   "dependencies": {},
   "devDependencies": {
     "typescript": "^5.8.0",
     "vitest": "^3.2.0",
     "@types/node": "^22.15.0"
-  },
-  "license": "MIT"
+  }
 }
