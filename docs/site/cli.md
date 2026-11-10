@@ -57,6 +57,7 @@ scoped to one user. Revoke it from the same settings page if it leaks.
 | `scriptgo publish [dir]` | Uploads a release of the resource and publishes it |
 | `scriptgo add creator//package` | Installs a package into `./resources` |
 | `scriptgo license activate\|verify` | Activates a deployment or verifies a license |
+| `scriptgo grant create\|list\|revoke` | Grants, lists or revokes free licenses for your own packages. Nothing is sold |
 | `scriptgo escrow inspect\|install\|identity\|load` | Protected releases: read a bundle, install it encrypted for OPEN//77, or open it with the reference loader |
 
 ### scriptgo init
@@ -231,6 +232,33 @@ See [Licensing API](/docs/licensing-api).
 A **protected** release arrives as its encrypted bundle, and only for a licensed customer: log in
 as the license holder, or pass `--deployment-token`. The bundle is saved as
 `./resources/<resource>-<version>.escrow.zip` and is not extracted.
+
+### scriptgo grant
+
+```bash
+scriptgo grant create inventory-pro --to <account id> --deployments 2 --expires-days 90 --note "Night City RP"
+scriptgo grant create inventory-pro --server-key <server public key> --environment standalone --name their-server
+scriptgo grant list   inventory-pro
+scriptgo grant revoke <license id> --reason "the partnership ended"
+```
+
+Grants a **free license** for one of your own packages, so a protected release runs on the servers
+you chose. Nothing is sold and no payment provider is involved. It needs `scriptgo login` as the
+package's creator.
+
+- `--to` names another account by its account id (`scriptgo login` prints it; it is also in
+  Dashboard → Settings) or by a creator username. An e-mail address is refused.
+- `--server-key` is for an operator without an account. They run `scriptgo escrow identity` on
+  their server and send you the public key. You hold the license, its one deployment is bound to
+  that key, and the deployment token is printed **once** for you to hand over. It does not work on
+  another server.
+- `list` shows each grant with its status, and says why when no new grant can be issued (a
+  moderation hold, no published release, the daily allowance used up).
+- `revoke` needs `--reason`. The key endpoint refuses the license from then on; a running server
+  stops when its offline grace ends.
+
+A granted license is an ordinary license: same binding, same key endpoint, same revocation. See
+[Protect without selling](/docs/protect-your-work#protect-without-selling).
 
 ### scriptgo escrow
 

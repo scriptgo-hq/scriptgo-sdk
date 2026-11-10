@@ -18,7 +18,7 @@ Every purchase on SCRIPT//GO involves three parties, and every purchase screen n
 
 A license is only granted by a **signed provider webhook** that SCRIPT//GO verified, or by an
 **audited administrative grant**. Returning from the checkout page grants nothing on its own.
-Checkout stays disabled until the provider approves the store.
+Checkout through Tebex stays disabled until Tebex approves SCRIPT//GO in writing. A seller's store needs no approval by SCRIPT//GO staff.
 
 ## The flow
 

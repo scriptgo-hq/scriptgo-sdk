@@ -126,15 +126,21 @@ Details: [Licensing API](/docs/licensing-api).
 
 ### "Checkout not available yet"
 
-**Cause.** One of the gates that protect every real payment is closed:
+**Cause.** The page states the reason next to the button. It is one of these:
 
-- checkout is turned off for the platform until the payment provider approves it in writing;
-- the creator's store is not approved yet (it stays in **Sandbox** or **Checkout off**);
-- the offer is classified **Pending review**, because it touches a proprietary third-party game
-  or its rights are unclear. Its button reads **Under review** until a reviewer approves it.
+- checkout is turned off for the platform until the payment provider approves it in writing
+  (this is about the provider, not about any seller);
+- the seller has not declared their rights for a published release yet: the offer reads
+  **Rights not declared** and its button **Not on sale yet**. Nobody reviews an offer before sale;
+  this step is the seller's;
+- the seller has not connected a store, or the offer has no price;
+- a moderation decision taken after a report holds the offer (**On hold**), the package's sales,
+  its listing, or the seller's store (**Suspended**). The seller is notified and can appeal.
 
 **Fix.** As a customer, use the free tier if there is one, or ask to be notified. As a creator,
-check [Dashboard → Stores](/dashboard/stores) and your offer's classification.
+declare your rights on a release and publish it, check [Dashboard → Stores](/dashboard/stores),
+and read [your notices](/dashboard/notices) if a decision holds something. A store needs no
+approval by SCRIPT//GO staff.
 
 ### My package does not show "Verified"
 

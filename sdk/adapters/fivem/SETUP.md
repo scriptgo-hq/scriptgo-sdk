@@ -28,10 +28,15 @@ scriptgo pack my_resource --target fivem --out dist
 
 4. `ScriptGo.ui.notify` sends a chat message through FXServer's `chat` resource.
 
-**Free packages only.** Rockstar's Creator Platform License Agreement (§3.1(6)) forbids a
-third-party marketplace that sells or licenses server content for FiveM. So `pack` refuses a
-package with `licensed true`, and `ScriptGo.licensing` raises
-`capability_unavailable:licensing@fivem`.
+**No licence check.** The shim has none: `ScriptGo.licensing` raises
+`capability_unavailable:licensing@fivem`, and `pack` refuses a package that needs one
+(`licensed true`, or the `licensing` capability), because the shim could not enforce it. This is
+a technical limit of the adapter, not a selling rule.
+
+**The platform's own rules.** Rockstar's Creator Platform License Agreement (2026-09-10, §3.1(6))
+forbids a third-party marketplace that sells or licenses server content for FiveM. SCRIPT//GO does
+not enforce a platform's rules: you answer to the platform's rights holder for what you run on
+your server.
 
 FiveM's `require` finds no resource module, and the client has no `os`, so `pack` refuses code
 that uses either. To pack it anyway, with warnings, pass `--allow-unportable`.

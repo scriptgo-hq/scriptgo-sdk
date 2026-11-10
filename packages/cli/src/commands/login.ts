@@ -28,10 +28,11 @@ export async function run(args: string[]): Promise<number> {
   }
   const api = (a.flags.api ?? loadCredentials().api).replace(/\/$/, "");
   try {
-    const me = await new ApiClient(api, token).get<{ user: { email: string; name: string }; creatorProfile: { username: string } | null }>("/v1/me");
+    const me = await new ApiClient(api, token).get<{ user: { id: string; email: string; name: string }; creatorProfile: { username: string } | null }>("/v1/me");
     const file = saveCredentials({ api, token });
     const who = me.data.creatorProfile ? `${me.data.user.name} (creator ${me.data.creatorProfile.username})` : me.data.user.name;
     console.log(`logged in to ${api} as ${who}; token saved to ${file}`);
+    console.log(`account id: ${me.data.user.id}   (give it to a creator who wants to grant you a free license)`);
     if (!me.data.creatorProfile) console.log("note: this account has no creator profile yet, so `scriptgo publish` will be refused");
     return 0;
   } catch (e) {

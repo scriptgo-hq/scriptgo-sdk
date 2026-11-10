@@ -20,7 +20,9 @@ file in the same change.**
 ```ts
 EnvironmentStatus   = "available" | "beta" | "experimental" | "planned"
 EnvironmentKind     = "runtime" | "mod_platform"   // mod_platform: a layer on top of an existing game
-EnvironmentSales    = "allowed" | "free_only" | "review"   // the underlying game's rule on selling mods
+PlatformRules       = "no_restriction" | "restricts_paid" | "unsettled"
+                    // what the platform's own rights holder says about paid scripts (ADR-0037): information
+                    // for the operator who runs a script there, never a SCRIPT//GO rule; it gates nothing
 AdapterState        = "verified" | "written" | "none"   // a real run passed | adapter code, no real run yet | no code yet
 IntegrationType     = "cli" | "library" | "addon" | "mod" | "plugin" | "program" | "shim" | "kit"
 CapabilitySupport   = "supported" | "partial" | "fallback" | "unavailable"
@@ -29,22 +31,26 @@ ReleaseStatus       = "draft" | "validating" | "validation_failed" | "ready" | "
 Visibility          = "private" | "unlisted" | "public"
 ListingStatus       = "active" | "restricted" | "suspended"
 OfferInterval       = "free" | "month" | "year" | "perpetual"
-Classification      = "free" | "software_license" | "authorized_app_feature" | "pending_review" | "rejected"
+Classification      = "free" | "software_license" | "seller_declared" | "authorized_app_feature"
+                    | "undeclared" | "on_hold" | "rejected"   // see "Selling rules" below
 LicenseStatus       = "active" | "grace" | "cancelled_active" | "expired" | "revoked" | "refunded"
+LicenseSource       = "provider" | "admin" | "creator"   // a payment event | a staff grant | a free grant by the package's creator
+GrantRecipientKind  = "account" | "server_key"
 ActivationStatus    = "pending" | "active" | "offline_grace" | "deactivated" | "blocked"
-StoreStatus         = "not_connected" | "sandbox" | "checkout_off" | "live" | "needs_attention"
+StoreStatus         = "not_connected" | "sandbox" | "checkout_off" | "live" | "needs_attention" | "suspended"
 CaseStatus          = "received" | "under_review" | "action_taken" | "no_action" | "escalated" | "appeal_open" | "closed"
 Category            = "inventory" | "permissions" | "economy" | "events" | "ui" | "admin" | "framework"
                     | "vehicles" | "housing" | "quests" | "library" | "other"
 VerifyFailureReason = "expired" | "revoked" | "refunded" | "environment_not_covered" | "deployment_limit"
                     | "unknown_key" | "deactivated"
 KeyReleaseFailureReason = VerifyFailureReason | "unbound" | "server_key_mismatch" | "not_escrowed"
-ProtectionTier      = "escrow" | "license" | "none"   // what a buyer's server gets in an environment (ADR-0027)
+ProtectionTier      = "escrow" | "license" | "none"   // what a server gets in an environment (ADR-0027); "none": the adapter has no licence check
 ProtectionState     = "available" | "planned"
 ```
 
 ```ts
-// On every Environment (list and detail). "none" is exactly the free_only environments.
+// On every Environment (list and detail). The tier follows what the adapter can do, never a selling
+// rule: "none" means the adapter has no licence check, so a package runs there without one.
 EnvironmentProtection = { tier: ProtectionTier, state: ProtectionState, optIn: boolean, note: string }
 // On a published release (Release, PackageVersion). Verify with GET /v1/signing-keys.
 ReleaseSignature  = { alg: "ed25519", keyId, payload, signature }
@@ -88,8 +94,8 @@ Environment = {
   name: string,                       // "LÖVE"
   kind: EnvironmentKind,
   status: EnvironmentStatus,
-  sales: EnvironmentSales,
-  salesNote: string,                  // one line: the rule and why; "" when allowed without condition
+  platformRules: PlatformRules,       // the platform's own terms on paid scripts; never blocks or conditions a sale
+  platformRulesNote: string,          // one factual sentence with its source; "" when there is nothing to report
   luaDialects: string[],              // as sdk/environments.json writes them: "5.1", "5.4", "LuaJIT"
   languages: string[],                // guest languages its host runs: ["lua"], or ["lua", "ts", "js"] on dotnet
   sides: string[],                    // ["server"] or ["server", "client"]
@@ -171,28 +177,43 @@ GET  /v1/checkout/:checkoutId                    → { checkoutId, status: "pend
 ```
 
 ```ts
-LicenseSummary = { id, package: PackageSummary, offer: Offer, status: LicenseStatus,
+LicenseSummary = { id, package: PackageSummary,
+                   offer: Offer | null,           // null for a license granted by the creator: nothing was sold
+                   origin: { source: LicenseSource,
+                             grantedBy: string | null,              // creator grants: the creator's username
+                             recipient: GrantRecipientKind | null },// creator grants: an account, or a server key
+                   status: LicenseStatus,
                    currentPeriodEnd: string | null, deploymentsUsed: number, deploymentsAllowed: number }
 LicenseDetail = LicenseSummary & {
   keyPreview: string,                 // "sg_live_…a91c"
   environments: string[],
   activations: { id, name, environment, adapterVersion, lastVerifiedAt, status: ActivationStatus, offlineGraceUntil }[],
-  history: { at, event, source: "provider" | "user" | "admin" | "system", reference }[],
+  history: { at, event, source: "provider" | "user" | "admin" | "system" | "creator", reference }[],
+                                      // "creator": the creator who granted the license (the grant, its revocation)
   keyRevealAvailable: boolean,        // POST .../reveal can still show the issued key
   seller: { creator: string, provider: "tebex" | "mock" | null },
   revokedReason: string | null,
+  revokedBy: "creator" | "staff" | "provider" | null,   // the granting creator, staff, or a lost payment dispute
   graceUntil: string | null
 }
 ```
+
+A license granted by a creator (`origin.source = "creator"`, see *Creator grants* below) is an
+ordinary license on every route of this section and of *Licensing*: the same key, reveal, rotation,
+deployments, binding, key endpoint and offline grace. It has no offer and no payment provider
+(`offer: null`, `seller.provider: null`). A grant to a server key is held by the creator who granted
+it (`origin.recipient = "server_key"`).
 
 The mock provider's checkout page is served by the API at `/v1/mock-provider/checkout/:checkoutId`
 (only when COMMERCE_MOCK_PROVIDER_ENABLED, which the API refuses in production). Its buttons POST to
 `/v1/mock-provider/checkout/:checkoutId/:action`, `action` one of `pay`, `pay_then_cancel`,
 `cancel`, `refund`, `cancel_subscription`, `renew`; each builds the provider events, signs them
 (`X-SG-Signature`) and delivers them to `/v1/webhooks/mock`, then answers 303 to
-`${PUBLIC_WEB_URL}/checkout/:checkoutId` (`?cancelled=1` after *Cancel*). Licenses are only ever
-granted by a verified webhook or an audited admin grant, never by the redirect: the web page polls
-`GET /v1/checkout/:checkoutId`.
+`${PUBLIC_WEB_URL}/checkout/:checkoutId` (`?cancelled=1` after *Cancel*). A paid license is only ever
+issued by a verified webhook, never by the redirect: the web page polls
+`GET /v1/checkout/:checkoutId`. The two other ways a license exists involve no payment and are both
+audited: a staff grant (`POST /v1/admin/licenses/grant`) and a creator grant
+(`POST /v1/creator/packages/:name/grants`).
 
 ## Creator (session or PAT; requires a creator profile)
 
@@ -216,17 +237,29 @@ GET  /v1/creator/packages/:name/key-activity?days=30  → KeyActivity   (counts 
 GET  /v1/creator/releases/:id                    → Release with validation report
 POST /v1/creator/releases/:id/rights { ownsCode, targetsProprietaryGame, thirdPartyAssets[] }
 POST /v1/creator/releases/:id/publish            → Release (409 publish_blocked, details.blockers: string[])
-                                                 (a release that declares a free_only environment rejects every paid offer of the package)
+                                                 (publishing puts the package's paid offers on the rights declaration of the new release:
+                                                  they can be bought at once, with no review, whatever environments the release lists)
 POST /v1/creator/releases/:id/deprecate { reason } → Release
 POST /v1/creator/releases/:id/yank { reason }    → Release   (its download then answers 410)
 POST /v1/creator/packages/:name/offers { name, interval, price, environments, deployments, providerProductId, provider? }
                                                  → 201 Offer   (provider defaults to the creator's Tebex store, else mock)
-                                                 (422 environment_free_only: a paid offer whose environments, or whose package's non-yanked releases, include a free_only environment)
+                                                 (no environment refuses a paid offer; the offer is `undeclared`, with no purchase path,
+                                                  until a published release carries the creator's rights declaration)
 DELETE /v1/creator/offers/:id                    → 204   (offer withdrawn; licenses already sold are unaffected)
 GET  /v1/creator/stores                          → Store[]
 POST /v1/creator/stores { provider: "mock" | "tebex", credentials }  → Store
 POST /v1/creator/stores/:id/test-event           → { delivered: boolean, status: number }  (mock store only)
-GET  /v1/creator/customers                       → { license, customer: { username }, offer }[]
+GET  /v1/creator/packages/:name/grants           → GrantList
+POST /v1/creator/packages/:name/grants { to | serverKey, environments?, environment?, deploymentName?,
+                                         deployments?, expiresInDays?, note? }
+                                                 → 201 { grant: GrantRow, deploymentToken: string | null }
+       400 (neither or both of to/serverKey; serverKey without environment; a malformed key)
+       404 recipient_not_found   409 grant_blocked (details.reason) | package_private | already_granted
+       422 grant_to_self | unknown_environment | environment_not_declared | environment_unprotected
+       429 grant_limit
+POST /v1/creator/grants/:id/revoke { reason }    → GrantRow   (404 for a license that was not granted by you)
+GET  /v1/creator/customers                       → { license, customer: { username }, offer: Offer | null, source: LicenseSource }[]
+                                                 (a grant to a server key is held by the creator: it is in GrantList, not here)
 GET  /v1/creator/analytics?days=30&package=      → { downloads: Series, activations: Series, verifications: Series }
 ```
 
@@ -235,6 +268,76 @@ KeyActivity = { days, released, refused, refusalsByReason: Record<KeyReleaseFail
                 deployments,            // distinct deployments that received a key in the window
                 lastReleasedAt, lastRefusedAt }
 ```
+
+### Creator grants: protect without selling (ADR-0036)
+
+A creator can issue a **free license** for one of their own packages. Nothing is sold: no offer, no
+checkout, no store and no payment event exist behind it, and no payment provider is involved. It is
+for a creator who wants a protected release to run on servers they chose (their own, a partner's, a
+tester's) with the same binding, logging and revocation a sold license has.
+
+```ts
+// POST body. Exactly one of `to` and `serverKey`.
+{ to?: string,             // the recipient's account id (GET /v1/me → user.id; shown in Dashboard → Settings and by
+                           // `scriptgo login`), or a creator username. Never an e-mail address.
+  serverKey?: string,      // the server's X25519 public key, base64url, 43 characters (`scriptgo escrow identity`)
+  environments?: string[], // account grants: environments covered; default: what the latest release declares
+  environment?: string,    // server-key grants: the environment of that server (required)
+  deploymentName?: string, // server-key grants: default "server"
+  deployments?: number,    // account grants: 1..100, default 1. A server-key grant is always 1
+  expiresInDays?: number | null,   // 1..3650; null (default) = until revoked
+  note?: string }          // the creator's own note, up to 200 characters; not shown to the holder
+
+GrantRow  = { id,                      // the license id
+              package: "creator//name", status: LicenseStatus, createdAt, expiresAt, revokedAt, revokedReason,
+              recipient: { kind: GrantRecipientKind,
+                           name,                       // account: the holder's display name; server_key: the deployment's name
+                           serverKeyFingerprint },     // server_key: fingerprint of the bound key, else null
+              environments: string[], deploymentsUsed, deploymentsAllowed, lastKeyReleaseAt, note }
+GrantList = { grants: GrantRow[], canGrant: boolean, blockedCode: string | null, blockedReason: string | null,
+              perDay: number, grantedToday: number }
+```
+
+- **To an account** (`to`). The account holds the license as a buyer would: it appears in
+  `GET /v1/me/licenses`, the key is revealed once, deployments are added and bound on first use. The
+  holder is told by e-mail (the message carries no key). An e-mail address is not accepted as `to`:
+  the answer, or the list of grants, would tell the creator whether that address has an account. An
+  account id is random and a creator username is public, so `404 recipient_not_found` reveals nothing.
+- **To a server key** (`serverKey`). For an operator who has no account, or wants none. They run
+  their loader's identity command on the server and send the creator the public key it prints. The
+  license is then **held by the creator**; its single deployment is created by the grant, already
+  bound to that key, and its **deployment token is returned once** in this answer (stored hashed,
+  never listed again) for the creator to hand over. The operator downloads the bundle with
+  `X-ScriptGo-Deployment-Token` and the loader asks `POST /v1/licenses/key` with it. The key endpoint
+  is unchanged: the content key is wrapped to the bound key only, and a request that presents any
+  other key is `server_key_mismatch`, so the token is useless on another machine. Moving the server
+  takes the holder's audited reset (`POST /v1/me/licenses/:id/deployments/:activationId/reset-server-key`,
+  by the creator here) like any deployment. A lost token is renewed by re-activating the same
+  deployment name with the license key, which never swaps the bound key.
+- **Who.** The package's own creator only (`404` for anyone else's package). Staff keep their own
+  grant (`POST /v1/admin/licenses/grant`, which needs an offer) and can revoke any license.
+- **Holds.** A grant needs no offer and depends on none. It is refused with `409 grant_blocked` and
+  `details.reason` while staff action holds the package or nothing can be delivered:
+  `listing_suspended`, `listing_restricted`, `sales_restricted`, `no_release` (no published release
+  that is neither yanked nor restricted). Also `409 package_private` (nobody but the creator could
+  download it). A license granted earlier follows the same staff action afterwards: the key endpoint
+  does not release the key of a restricted or yanked release, and the download refuses a restricted
+  listing. An environment's `platformRules` block nothing, a grant included; a server-key grant for
+  an environment whose protection tier is `none` (its adapter has no licence check) is
+  `422 environment_unprotected`.
+- **Limits.** One live grant per account and package, and per server key and package
+  (`409 already_granted`). `LICENSE_CREATOR_GRANTS_PER_PACKAGE_PER_DAY` (25) grants per package per
+  rolling 24 hours, revoked ones included (`429 grant_limit`; 0 lifts the cap). The routes are
+  rate-limited per IP like the other creator routes.
+- **Revocation.** `POST /v1/creator/grants/:id/revoke` works on licenses this creator granted, never
+  on one that was paid for. It is what a staff revoke is: `POST /v1/licenses/key` and
+  `/v1/licenses/verify` answer `revoked` from the next request, the bundle is no longer delivered,
+  and a running server stops when the offline grace of its last valid answer ends. Not reversible:
+  grant again.
+- **Audit.** `license.issued` with `source: "creator"`, the recipient kind, the holder and
+  `payment: "none"`; `license.deployment_added` and `license.deployment_server_key_bound` for a
+  server-key grant; `license.revoked` with `by: "creator"` and the reason. The deployment token and
+  the license key are in no audit record.
 
 The content key of a protected release is sealed at rest, is in no log and no audit record, and is in
 no response of this API other than `POST /v1/licenses/key`, wrapped to one bound server. Publishing
@@ -248,7 +351,8 @@ Release = { id, packageName, version, status: ReleaseStatus, createdAt, sha256, 
                       required: boolean, durationMs: number | null, message: string | null, log: string | null }[],
             blockers: string[] }
 CreatorPackageDetail = PackageSummary & { description, repository, releases: Release[], offers: Offer[] }
-Store = { id, provider, status: StoreStatus, approved: boolean,
+Store = { id, provider, status: StoreStatus,
+          suspended: boolean, suspendedReason: string | null,   // suspended by staff after a report (ADR-0037); no staff approval exists
           checkoutEnabled: boolean, checkoutDisabledReason: string | null,
           webhookUrl: string,                 // where to point the provider's webhooks
           webhook: { lastEventAt, deliveries24h, failures24h },
@@ -347,21 +451,59 @@ Accepted events answer `200 { received: true, duplicate, status }`, `status` one
 mismatch, acknowledged so the provider stops retrying). Events are idempotent on
 (provider, event id): a duplicate is a no-op.
 
+## Selling rules (ADR-0037)
+
+- **The seller decides.** SCRIPT//GO does not review an offer before sale. An offer's
+  `classification` follows the creator's rights declaration for the newest published release:
+  none yet → `undeclared` (no purchase path; `checkoutDisabledReason` tells the seller to declare,
+  and no reviewer is involved); declared as their own, independent software → `software_license`;
+  declared as their own code that targets a third-party game platform → `seller_declared` (sold on
+  the seller's declaration). Both declared classes can be bought at once. Publishing a release
+  computes it again. The seller answers for what they sell.
+- **Staff act on reports.** Nothing enters a review queue by itself. After a report, staff can
+  restrict a release, restrict a package's sales, suspend its listing or suspend the seller's store
+  (decisions on the report), or put one offer on hold or withdraw it (`on_hold`, `rejected`). Each
+  is audited, sends the creator a notice and can be appealed; a reversal on appeal undoes it.
+  `GET /v1/admin/review/offers` lists the offers on hold; nothing enters it by itself
+  (`?package=` shows one package's offers, so that staff can put one on hold).
+- **No environment gates a sale.** A script is sold as a SCRIPT//GO script. The environments a
+  package lists are places where it runs; `platformRules` reports each platform's own terms, for
+  the operator who runs it there and answers to that platform's rights holder.
+- **No store approval.** A store sells once its own configuration is complete.
+  `COMMERCE_CHECKOUT_ENABLED` is the payment provider's switch for the whole platform, not a
+  judgement on a seller. A suspended store (`Store.suspended`) has no purchase path, on any provider.
+- **A hold closes the purchase path, not the licences already sold.** Restricted sales, a suspended
+  listing or store, and an offer on hold stop new purchases (`POST /v1/checkout` answers
+  `409 checkout_disabled` with the reason). They do not revoke a licence, and the key endpoint
+  keeps releasing keys to existing holders, so a paying customer's server keeps running. What the
+  key endpoint does refuse is a release that is restricted or yanked; a restricted listing also
+  refuses downloads. Revoking a licence is a separate, explicit act.
+
 ## Admin
 
 Moderation routes accept the `moderator` or `admin` role; routes marked *(admin)* need `admin`.
 
 ```
-GET  /v1/admin/review/offers?status=pending|all        → ReviewOffer[]
-POST /v1/admin/review/offers/:id/decision { classification, reason }      → ReviewOffer
+GET  /v1/admin/review/offers?status=on_hold|all&package=creator//name  → ReviewOffer[]
+                                       (on_hold, the default: the offers staff put on hold after a report; nothing
+                                        enters this list by itself. package: the offers of one package, any state)
+POST /v1/admin/review/offers/:id/decision { classification: "on_hold" | "rejected" | "software_license" | "seller_declared"
+                                            | "authorized_app_feature" | "free", reason, caseId? }      → ReviewOffer
+                                       (on_hold, rejected: no purchase path; the creator gets a notice and can appeal;
+                                        caseId names the report, 422 unknown_case. software_license, seller_declared:
+                                        lift a hold, back on the seller's declaration. Audited)
 GET  /v1/admin/review/releases?status=open|all         → ReviewRelease[]
 POST /v1/admin/review/releases/:reviewId/decision { decision: "approve" | "restrict" | "reinstate", reason }
                                                        → ReviewRelease
 GET  /v1/admin/reports?status                          → CaseSummary[]
 GET  /v1/admin/reports/:id                             → CaseDetail   (:id = report id or case id RPT-YYYY-NNNNNN)
 POST /v1/admin/reports/:id/review                      → CaseDetail   (moves it to under_review)
-POST /v1/admin/reports/:id/decision    { action: "no_action" | "restrict_release" | "restrict_sales" | "suspend_listing",
+POST /v1/admin/reports/:id/decision    { action: "no_action" | "restrict_release" | "restrict_sales" | "suspend_listing"
+                                                 | "suspend_store",
                                          reasons: string, escalate: boolean }  → CaseDetail
+                                       (suspend_store: every store of the reported package's creator; 422 no_store when
+                                        there is none to suspend. Like every decision but no_action: a notice, an appeal
+                                        window, and a reversal on appeal undoes it)
 GET  /v1/admin/reports/:id/evidence/:evidenceId        → file (attachment, nosniff)
 POST /v1/admin/appeals/:id/decision { outcome: "upheld" | "reversed", reasons } → CaseDetail
                                        409 same_reviewer when the caller took the decision under appeal
@@ -374,7 +516,10 @@ POST /v1/admin/compatibility-runs      (CI ingest token, or admin session) Compa
 POST /v1/admin/licenses/grant          (admin) { userId, offerId, reason } → 201 LicenseDetail (audited grant)
 POST /v1/admin/licenses/:id/revoke     (admin) { reason }                  → { ok: true }
 GET  /v1/admin/stores                  (admin) → (Store & { creator })[]
-POST /v1/admin/stores/:id/approval     (admin) { approved, reason }       → Store & { creator }
+POST /v1/admin/stores/:id/reinstate    (admin) { reason }                  → Store & { creator }
+                                       (lifts a suspension without an appeal; audited, the seller is told;
+                                        409 not_suspended. No route suspends or approves a store: a
+                                        suspension is the `suspend_store` decision on a report)
 POST /v1/admin/ingest-tokens           (admin, browser session) { name }  → 201 { id, token: "sg_adm_..." } (shown once)
 GET  /v1/admin/ingest-tokens           (admin) → { id, name, preview, createdAt, lastUsedAt }[]
 DELETE /v1/admin/ingest-tokens/:id     (admin) → 204
@@ -430,8 +575,9 @@ log; `recent` lists the 20 latest. The worker trims the log (ADR-0034): unmatche
 What is configured and what is missing before a Tebex store can sell. Both routes compute their
 answer from real state on each call: the server's settings, whether a sealed credential exists (never
 its value), the offers, and the webhook deliveries the server recorded. Nothing is stored as "ready",
-no secret is returned, and a `GET` changes nothing: checkout still opens only with
-`COMMERCE_CHECKOUT_ENABLED=true` and an approved store (ADR-0007). The owner's checklist is
+no secret is returned, and a `GET` changes nothing: checkout through Tebex still opens only with
+`COMMERCE_CHECKOUT_ENABLED=true` (ADR-0007). A store needs no staff approval (ADR-0037): every
+check is one the server verifies by itself. The owner's checklist is
 `docs/ops/TEBEX-GO-LIVE.md`. Schemas: `packages/shared/src/readiness.ts`.
 
 ```
@@ -444,7 +590,7 @@ GET /v1/admin/commerce/readiness       (admin) → CommerceReadiness
 ReadinessCheck    = { id: string, label: string, status: "ok" | "missing" | "warning" | "blocked",
                       detail: string, fix: string | null }
 ReadinessSummary  = { ready: boolean, remaining: string[] }
-StoreReadiness    = { storeId, provider: "tebex", creator: string, webhookUrl: string, approved: boolean,
+StoreReadiness    = { storeId, provider: "tebex", creator: string, webhookUrl: string, suspended: boolean,
                       checks: ReadinessCheck[], summary: ReadinessSummary, generatedAt: Timestamp }
 CommerceReadiness = { platform: { checks: ReadinessCheck[], summary: ReadinessSummary },
                       stores: StoreReadiness[], generatedAt: Timestamp }
@@ -452,10 +598,10 @@ CommerceReadiness = { platform: { checks: ReadinessCheck[], summary: ReadinessSu
 
 `status`: `ok` configured or proven by a recorded event; `missing` the operator or the creator still
 has to supply something; `warning` worth a look, does not block; `blocked` waits for a decision
-outside configuration (the written approval, a review). `summary.ready` is true when no check is
-`missing` or `blocked`; `summary.remaining` has one line per such check, in order. With every Tebex
-value in place it is exactly `["Approval of this store by SCRIPT//GO staff", "Written approval from
-Tebex, then COMMERCE_CHECKOUT_ENABLED=true"]`, then only the second line, then empty.
+outside configuration (the payment provider's written approval, or a moderation decision that
+holds an offer or the store). `summary.ready` is true when no check is `missing` or `blocked`;
+`summary.remaining` has one line per such check, in order. With every Tebex value in place it is
+exactly `["Written approval from Tebex, then COMMERCE_CHECKOUT_ENABLED=true"]`, then empty.
 
 Store checks, in order (`id`): `store_connected`, `webhook_secret` (saved yes/no), `public_token`
 (saved yes/no; needed to open a checkout basket), `webhook_url` (the URL to paste in Tebex; `missing`
@@ -463,8 +609,10 @@ when `PUBLIC_API_URL` is not a public https address), `webhook_delivery` (the la
 for this store: accepted → `ok`, refused → `missing` with the reason; none recorded → `warning`,
 because the validation webhook is answered but not recorded), `webhook_failures` (last 24 hours),
 `product_mapping` (every active paid Tebex offer carries a provider product id; unmapped offers are
-named), `offer_review` and `published_release` (only when the store has paid offers),
-`store_approval`, `checkout_flag`.
+named), then, only when the store has paid offers, `rights_declared` (offers that are `undeclared`:
+the seller's own step), `offer_holds` (offers staff put on hold or withdrew after a report) and
+`published_release`; `store_suspended` (present only while staff have suspended the store);
+`checkout_flag`.
 
 Platform checks, in order: `public_api_url`, `ip_allowlist` (`TEBEX_ENFORCE_IP_ALLOWLIST`),
 `trust_proxy` (a warning when the sender check is on and `TRUST_PROXY` is false), `mock_provider`,

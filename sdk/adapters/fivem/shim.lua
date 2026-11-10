@@ -16,10 +16,11 @@
 -- citizenfx/fivem ext/native-decls (signatures and apisets) and
 -- data/shared/citizen/scripting/lua/scheduler.lua (GetPlayers, PerformHttpRequest, exports).
 --
--- Licensing is deliberately absent: FiveM is a free-only environment for SCRIPT//GO. The Rockstar
--- Games Creator Platform License Agreement (2026-09-10, §3.1(6)) forbids a third-party
--- marketplace that sells or licenses other creators' server content to server admins, so
--- ScriptGo.licensing raises capability_unavailable:licensing@fivem here.
+-- There is no licence check here: ScriptGo.licensing raises capability_unavailable:licensing@fivem.
+-- The shim was written without one after the Rockstar Games Creator Platform License Agreement
+-- (2026-09-10, §3.1(6)), which forbids a third-party marketplace that sells or licenses other
+-- creators' server content to server admins. That is the platform's own rule, which the operator
+-- who runs a script here answers for; it is not a SCRIPT//GO selling rule (ADR-0037).
 --
 -- Written for Lua 5.4 (FiveM's runtime) and kept loadable by Lua 5.1 and LuaJIT, so the unit
 -- tests (sdk/lua/spec/fivem_shim_spec.lua) run on every interpreter the SDK is tested with.
@@ -356,7 +357,7 @@ else
     }
 end
 
--- Free-only environment: no licensing (see the header).
+-- No licence check in this shim (see the header).
 SG.licensing = { activate = refuse("licensing"), verify = refuse("licensing") }
 
 -- OPEN//77-compatible names for the portable subset, as on every SCRIPT//GO host.

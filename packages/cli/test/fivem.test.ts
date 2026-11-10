@@ -64,16 +64,20 @@ describe("packForFivem", () => {
     expect(r.warnings.join(" ")).toMatch(/sg_eventbus >=1\.0\.0/);
   });
 
-  it("refuses a licensed package: FiveM is free-only", () => {
+  it("refuses a package that needs a licence check: the shim has none (a technical limit, not a selling rule)", () => {
     const r = packForFivem(readResource(join(repoRoot, "examples", "packages", "inventory_pro")), join(tmp, "out"));
-    expect(r.errors.map((e) => e.code)).toContain("fivem_free_only");
+    expect(r.errors.map((e) => e.code)).toContain("fivem_licensing_unavailable");
+    expect(r.errors[0]!.message).toMatch(/no licence check/);
+    expect(r.errors[0]!.message).toMatch(/not a selling rule/);
+    // The platform's terms are quoted as the platform's own rule, with their source.
     expect(r.errors[0]!.message).toMatch(/§3\.1\(6\)/);
+    expect(r.errors[0]!.message).not.toMatch(/free-only|free only/i);
     expect(r.dest).toBe("");
   });
 
   it("refuses a required licensing capability and warns about an optional one", () => {
     const req = resource("needs_lic", { "scriptgo.lua": manifest("needs_lic", 'capabilities { "licensing" }\nserver_script "s.lua"\n'), "s.lua": "print(1)\n" });
-    expect(packForFivem(readResource(req), join(tmp, "out")).errors.map((e) => e.code)).toEqual(["fivem_free_only"]);
+    expect(packForFivem(readResource(req), join(tmp, "out")).errors.map((e) => e.code)).toEqual(["fivem_licensing_unavailable"]);
     const opt = resource("opt_lic", { "scriptgo.lua": manifest("opt_lic", 'optional_capabilities { "licensing" }\nserver_script "s.lua"\n'), "s.lua": "print(1)\n" });
     const r = packForFivem(readResource(opt), join(tmp, "out"));
     expect(r.errors).toEqual([]);
@@ -216,11 +220,11 @@ describe("verifyFivem", () => {
     }
   });
 
-  it("refuses to pack a licensed package before any server starts", async () => {
+  it("refuses to pack a package that needs a licence check before any server starts", async () => {
     const pro = readResource(join(repoRoot, "examples", "packages", "inventory_pro"));
     const r = await verifyFivem(pro, pro.result.ok ? pro.result.manifest : null!, search, { ...base, licenseKey: "k", launcher: [process.execPath, fake] });
     expect(r.status).toBe("failing");
-    expect(r.checks.find((c) => c.name === "packs:inventory_pro")!.message).toMatch(/fivem_free_only/);
+    expect(r.checks.find((c) => c.name === "packs:inventory_pro")!.message).toMatch(/fivem_licensing_unavailable/);
     expect(r.checks.some((c) => c.name === "server_run")).toBe(false);
   });
 });

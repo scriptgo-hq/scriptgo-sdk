@@ -75,6 +75,19 @@ rotation = a new release. Revocation (refund/dispute/sub-end — already modelle
 release fail; within offline grace the resource keeps running, then stops. No new revocation
 machinery: escrow hangs off the existing license state.
 
+### Granted licences: protect without selling (ADR-0036)
+
+A licence does not have to be sold. The package's creator can grant one for free
+(`POST /v1/creator/packages/:name/grants`, `scriptgo grant create`): to an account, or to a server
+public key an operator presents, in which case the grant creates the deployment already bound to
+that key and returns its deployment token once. Nothing in this document changes for such a
+licence: the same bundle, the same key endpoint, the same binding (a pre-bound deployment behaves as
+one bound on first use: any other key is `server_key_mismatch`), the same watermark, the same
+offline grace. Revocation by the creator is the `revoked` refusal a staff revoke produces. No
+payment provider is involved at any step. The honest stance above applies unchanged: a granted
+licence gives delivery to chosen servers, traceability and revocation, not code secrecy on a host
+whose operator can read what it runs.
+
 ## Watermarking (traceability, not prevention)
 
 A release-level watermark (HMAC over `${package}@${version}`) is baked into the signed manifest; a
@@ -314,7 +327,9 @@ absence, and never prevention.
 
 `node tools/escrow-e2e.mjs` runs the whole chain against a throwaway database and the mock provider
 and prints a numbered table; `--loader dotnet` or `--loader "<command>"` drives a real host with the
-same steps. `apps/api/test/escrow-chain.test.ts` and `escrow-file-set.test.ts` cover the master.
+same steps. `--grant` runs it with no payment at all: the creator grants a licence to an account and
+to a server key, and revokes where the default run refunds (`apps/api/test/grants.test.ts` covers
+the same on the master). `apps/api/test/escrow-chain.test.ts` and `escrow-file-set.test.ts` cover the master.
 
 `sdk/adapters/open77/escrow/PROPOSAL.md`.
 

@@ -10,7 +10,8 @@ import { Timestamp } from "./common.ts";
  *   ok       configured, or proven by a recorded event
  *   missing  something the operator or the creator still has to supply
  *   warning  worth a look, does not block selling
- *   blocked  waits for a decision outside configuration: the written approval, a review
+ *   blocked  waits for a decision outside configuration: the payment provider's written approval,
+ *            or a moderation decision that holds an offer or the store
  */
 export const ReadinessStatus = z.enum(["ok", "missing", "warning", "blocked"]);
 export type ReadinessStatus = z.infer<typeof ReadinessStatus>;
@@ -43,7 +44,8 @@ export const StoreReadiness = z.object({
   creator: z.string(),
   /** The endpoint to paste in Tebex > Developers > Webhooks. */
   webhookUrl: z.string(),
-  approved: z.boolean(),
+  /** Staff suspended this store after a report: nothing can be bought through it. */
+  suspended: z.boolean(),
   checks: z.array(ReadinessCheck),
   summary: ReadinessSummary,
   generatedAt: Timestamp,

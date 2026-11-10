@@ -9,7 +9,7 @@
 //   beammp    Resources/Server/scriptgo/: the BeamMP plugin with the resource and its dependencies
 //             (lib/beammp.ts).
 //   fivem     a FiveM resource folder: a generated fxmanifest.lua, the one-file shim, the resource
-//             (lib/fivem-pack.ts). Free only: a licensed package is refused.
+//             (lib/fivem-pack.ts). The shim has no licence check: a package that needs one is refused.
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { zipSync } from "fflate";

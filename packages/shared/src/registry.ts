@@ -9,7 +9,7 @@ import {
   Classification,
   CompatibilityStatus,
   EnvironmentKind,
-  EnvironmentSales,
+  PlatformRules,
   EnvironmentStatus,
   IntegrationType,
   ListingStatus,
@@ -41,9 +41,13 @@ export const Environment = z.object({
   name: z.string(),
   kind: EnvironmentKind,
   status: EnvironmentStatus,
-  /** Whether the rights holder of the underlying game allows paid packages there. */
-  sales: EnvironmentSales,
-  salesNote: z.string(),
+  /**
+   * The platform's own terms on paid scripts, for the operator who runs a script there and answers
+   * for it (ADR-0037). Information only: it never blocks or conditions a sale on SCRIPT//GO.
+   */
+  platformRules: PlatformRules,
+  /** One factual sentence with its source; "" when there is nothing to report. */
+  platformRulesNote: z.string(),
   /** Protection tier (ADR-0027). Never weaker or stronger than what the adapter really does. */
   protection: EnvironmentProtection.default({ tier: "none", state: "available", optIn: false, note: "" }),
   luaDialects: z.array(z.string()),

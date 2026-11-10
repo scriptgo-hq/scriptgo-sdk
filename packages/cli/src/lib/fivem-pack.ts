@@ -6,10 +6,13 @@
 // (citizenfx/fivem, citizen-scripting-core ResourceScriptingComponent.cpp), so `ScriptGo` exists
 // before any script of the resource runs, on both sides.
 //
-// FiveM is a free-only environment (ADR-0020): the Rockstar Games Creator Platform License
-// Agreement (2026-09-10, §3.1(6)) forbids a third-party marketplace that sells or licenses other
-// creators' server content to server admins. A licensed package, or one that requires the
-// `licensing` capability, is refused.
+// The shim has no licence check (ADR-0020 wrote it without one, after the Rockstar Games Creator
+// Platform License Agreement of 2026-09-10, §3.1(6)). So a package that needs one, `licensed true`
+// or a required `licensing` capability, is refused here: the shim could not enforce it and the
+// package would run unchecked. That is a technical limit of this adapter, not a selling rule: no
+// environment blocks a paid offer on SCRIPT//GO (ADR-0037), and what the platform's terms say about
+// paid server content is the platform's own rule, which the operator who runs a script there
+// answers for.
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { expandGlob, validateResourceFiles, type ParsedManifest } from "@scriptgo/manifest";
@@ -17,8 +20,8 @@ import { scanSource, type PortabilityIssue } from "./portability.ts";
 import { listFiles, sdkRoot, type LoadedResource } from "./sdk.ts";
 
 export const FIVEM_SHIM_FILE = "scriptgo_shim.lua";
-export const FREE_ONLY_RULE =
-  "FiveM is free-only on SCRIPT//GO: the Rockstar Games Creator Platform License Agreement (2026-09-10, §3.1(6)) forbids a third-party marketplace that sells or licenses server content to server admins";
+export const NO_LICENCE_CHECK =
+  "The FiveM shim has no licence check, so it could not enforce one: this is a technical limit of the adapter, not a selling rule. What the Rockstar Games Creator Platform License Agreement (2026-09-10, §3.1(6)) says about paid server content is the platform's own rule, which the operator who runs a script there answers for";
 
 export interface FivemIssue {
   code: string;
@@ -94,15 +97,18 @@ export function fivemPortability(root: string, m: ParsedManifest, files: string[
   return issues;
 }
 
-/** Refusals that follow from `sales = "free_only"`; optional licensing is only a warning. */
-export function fivemFreeOnly(m: ParsedManifest, warnings: string[]): FivemIssue[] {
+/**
+ * Refusals that follow from the shim having no licence check; optional licensing is only a warning.
+ * A package that is sold but does not ask for a licence check packs like any other.
+ */
+export function fivemLicensingUnavailable(m: ParsedManifest, warnings: string[]): FivemIssue[] {
   const errors: FivemIssue[] = [];
-  if (m.licensed) errors.push({ code: "fivem_free_only", message: `${m.name} is licensed (licensed true). ${FREE_ONLY_RULE}` });
+  if (m.licensed) errors.push({ code: "fivem_licensing_unavailable", message: `${m.name} is licensed (licensed true). ${NO_LICENCE_CHECK}` });
   if (m.capabilities.includes("licensing")) {
-    errors.push({ code: "fivem_free_only", message: `${m.name} requires the licensing capability, which FiveM does not provide. ${FREE_ONLY_RULE}` });
+    errors.push({ code: "fivem_licensing_unavailable", message: `${m.name} requires the licensing capability, which the FiveM shim does not provide. ${NO_LICENCE_CHECK}` });
   }
   if (!m.licensed && m.optionalCapabilities.includes("licensing")) {
-    warnings.push("licensing is unavailable on FiveM (free-only): ScriptGo.licensing raises capability_unavailable:licensing@fivem there");
+    warnings.push("licensing is unavailable on FiveM (the shim has no licence check): ScriptGo.licensing raises capability_unavailable:licensing@fivem there");
   }
   return errors;
 }
@@ -151,7 +157,7 @@ export function fivemManifest(m: ParsedManifest, warnings: string[]): string {
 
 /**
  * Writes `<parent>/<name>/` as a FiveM resource: the referenced files, the shim and a generated
- * fxmanifest.lua. Refuses licensed packages (free-only) and code FiveM's Lua cannot run, unless
+ * fxmanifest.lua. Refuses a package that needs a licence check (the shim has none) and code FiveM's Lua cannot run, unless
  * `allowUnportable` turns the portability findings into warnings.
  */
 export function packForFivem(
@@ -168,8 +174,8 @@ export function packForFivem(
   if (m.format === "open77") {
     return { dest: "", warnings, errors: [{ code: "fivem_open77_format", message: "an open77.lua resource uses OPEN//77 natives; give it a scriptgo.lua to pack it for FiveM" }] };
   }
-  const freeOnly = fivemFreeOnly(m, warnings);
-  if (freeOnly.length > 0) return { dest: "", warnings, errors: freeOnly };
+  const noLicensing = fivemLicensingUnavailable(m, warnings);
+  if (noLicensing.length > 0) return { dest: "", warnings, errors: noLicensing };
   const portability = fivemPortability(res.root, m, files);
   if (portability.length > 0 && !opts.allowUnportable) {
     return { dest: "", warnings, errors: portability.map((p) => ({ code: p.code, message: `${p.file}:${p.line} ${p.message}` })) };

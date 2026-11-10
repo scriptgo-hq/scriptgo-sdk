@@ -36,21 +36,24 @@ The computer runs Lua 5.2 (the Cobalt VM): no `//`, no bitwise operators (use `b
 `collectgarbage`; the core checks for the latter. Code that runs about 7 seconds without yielding is
 stopped by CC: Tweaked ("Too long without yielding"); the host yields every tick.
 
-## Selling and licensing
+## The platform's rules, and licensing
 
-**Free only.** The [Minecraft EULA](https://www.minecraft.net/en-us/eula), "USING mods": "Any Mods you
-create for Minecraft: Java Edition from scratch belong to you (including pre-run Mods and in-memory
-Mods) and you can do whatever you want with them, as long as you don't sell them for money / try to
-make money from them and so long as you don't distribute Modded Versions of the game." The
-registry entry says `sales = "free_only"`; the API refuses a paid offer for a package that targets
-`cctweaked` and rejects the paid offers of a package once it publishes a release that does.
+**The platform's own rules on paid mods.** The [Minecraft EULA](https://www.minecraft.net/en-us/eula),
+"USING mods": "Any Mods you create for Minecraft: Java Edition from scratch belong to you (including
+pre-run Mods and in-memory Mods) and you can do whatever you want with them, as long as you don't
+sell them for money / try to make money from them and so long as you don't distribute Modded
+Versions of the game." The registry reports it as `platformRules = "restricts_paid"` with this
+sentence as its note. It is information for the operator who runs a script here and answers for it:
+SCRIPT//GO does not enforce a platform's rules, and no environment blocks a paid offer (ADR-0037).
 
-**No licence checks.** The [Minecraft Usage Guidelines](https://www.minecraft.net/en-us/usage-guidelines),
+**No licence check in this adapter.** The [Minecraft Usage Guidelines](https://www.minecraft.net/en-us/usage-guidelines),
 "Extended functionality and modifications": a mod may be created, used or distributed if "The mod
 cannot be used to directly or indirectly verify whether a player owns or has access to out-of-game
-content, products, or services that affect in-game features and functions". The adapter therefore
-sets `capabilities.licensing = false` whatever the config says, and the registry marks `licensing`
-unavailable. These are the rights holder's rules quoted as they read; they are not legal advice.
+content, products, or services that affect in-game features and functions". The adapter was built
+without a licence check for that reason: it sets `capabilities.licensing = false` whatever the
+config says, and the registry marks `licensing` unavailable and the protection tier `none`. That
+is a technical fact about this adapter. These are the rights holder's rules quoted as they read;
+they are not legal advice.
 
 **Name.** The Usage Guidelines allow the Minecraft name only as a secondary part of a name, hence
 "CC: Tweaked (Minecraft)", and ask for the disclaimer above.
