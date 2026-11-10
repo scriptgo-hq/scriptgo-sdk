@@ -22,9 +22,9 @@ local J = rawget(_G, "json") or Open77.json
 -- capability on, so `capabilities.has` answers for what this packed resource can really call.
 local CAPS = {
     events = true, logging = true, storage = true, commands = true, ui = false,
-    players = false, permissions = false, config = false, http = false, licensing = false,
+    players = false, permissions = false, config = false, http = false, licensing = false, perks = false,
 }
-local ALL = { "events", "logging", "storage", "players", "permissions", "commands", "config", "ui", "http", "licensing" }
+local ALL = { "events", "logging", "storage", "players", "permissions", "commands", "config", "ui", "http", "licensing", "perks" }
 
 local function unavailable(cap)
     return "capability_unavailable:" .. cap .. "@open77"
@@ -60,7 +60,7 @@ SG.runtime = {
     luaVersion = function() return _VERSION end,
     environment = function() return "open77" end,
     side = function() return side end,
-    adapterVersion = function() return "open77-shim-0.3.0" end,
+    adapterVersion = function() return "open77-shim-0.4.0" end,
 }
 
 SG.resource = {
@@ -109,6 +109,10 @@ SG.config = { get = refuse("config") }
 SG.ui = { notify = refuse("ui") }
 SG.http = { request = refuse("http") }
 SG.licensing = { activate = refuse("licensing"), verify = refuse("licensing") }
+SG.perks = {
+    has = refuse("perks"), list = refuse("perks"), refresh = refuse("perks"), purchaseLink = refuse("perks"),
+    catalog = refuse("perks"), on = refuse("perks"), off = refuse("perks"), status = refuse("perks"),
+}
 
 -- For the side files only.
 SG._open77 = {

@@ -93,8 +93,6 @@ return function(scriptgo, opts)
         adapter.capabilities.licensing = false
         adapter.capabilities.perks = false
     end
-    -- Seconds between two pulls of the perk event queue (config.perksPollSeconds; the core's default is 30).
-    adapter.perksPollSeconds = tonumber(cfg.perksPollSeconds)
 
     local logLevel = { debug = 0, info = 1, warn = 2, error = 3 }
     local minLevel = logLevel[opts.logLevel or "info"] or 1

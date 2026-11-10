@@ -62,11 +62,13 @@ public sealed partial class ScriptGoHost : IDisposable
         if (Options.Commands) provided.Add("commands");
         if (services.Config is not null) provided.Add("config");
         if (services.Ui is not null) provided.Add("ui");
-        if (services.Http is not null) { provided.Add("http"); provided.Add("licensing"); }
+        if (services.Http is not null) { provided.Add("http"); provided.Add("licensing"); provided.Add("perks"); }
         foreach (var c in provided)
         {
             if (c is "events" or "logging" || Options.Capabilities is null || Options.Capabilities.Contains(c)) _capabilities.Add(c);
         }
+        // Player perks are the portable core's module, running over the kit's HTTP: no HTTP, no perks.
+        if (!_capabilities.Contains("http")) _capabilities.Remove("perks");
         Now = services.Clock.MonotonicMilliseconds() / 1000.0;
     }
 
@@ -86,6 +88,13 @@ public sealed partial class ScriptGoHost : IDisposable
             .Concat(_capabilities.Where(c => c.StartsWith("x-", StringComparison.Ordinal)).Order(StringComparer.Ordinal)).ToList();
 
     public bool HasCapability(string capability) => _capabilities.Contains(capability);
+
+    /// <summary>
+    /// Capabilities a guest of that language can rely on. Player perks are implemented once, in Lua
+    /// (the portable core's perks module, which the Lua guest runs): JavaScript and TypeScript guests
+    /// do not have them yet, and are told so (<c>capability_unavailable:perks@&lt;environment&gt;</c>).
+    /// </summary>
+    internal IEnumerable<string> CapabilitiesFor(string language) => language == "lua" ? Capabilities : Capabilities.Where(c => c != "perks");
 
     internal static string Unavailable(string capability, string environment) => $"capability_unavailable:{capability}@{environment}";
 
@@ -203,6 +212,14 @@ public sealed partial class ScriptGoHost : IDisposable
             return Fail(res, $"requires scriptgo {m.ScriptgoVersion}, host is {RuntimeVersion}");
         foreach (var c in m.Capabilities)
             if (!_capabilities.Contains(c)) return Fail(res, Unavailable(c, Environment));
+        // A resource that requires perks and brings a JavaScript or TypeScript server script cannot
+        // have them here: only Lua guests run the perks module.
+        if (m.Capabilities.Contains("perks"))
+        {
+            var own = m.EnvironmentScripts.TryGetValue(Environment, out var envScripts) ? envScripts : [];
+            if (m.SharedScripts.Concat(m.ServerScripts).Concat(own).Any(p => ManifestParser.LanguageOf(p) is { } lang && lang != "lua"))
+                return Fail(res, Unavailable("perks", Environment));
+        }
         // Only the scripts this host would run count: its sides and its own environment scripts.
         var env = m.EnvironmentScripts.TryGetValue(Environment, out var e) ? e : [];
         var runs = new List<IReadOnlyList<string>> { m.SharedScripts, env };

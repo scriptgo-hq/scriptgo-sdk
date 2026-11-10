@@ -337,6 +337,9 @@
       activate: (opts) => licensing('activate', opts),
       verify: (opts) => licensing('verify', opts),
     }),
+    // Player perks are implemented once, in Lua (the portable core's module): this guest does not
+    // have the capability, so reading a member says so (capability_unavailable:perks@<environment>).
+    perks: capTable('perks', {}),
     notifications: {
       send: (target, payload) => ScriptGo.ui.notify(target, payload),
       broadcast: (payload) => ScriptGo.ui.notify(-1, payload),

@@ -957,7 +957,6 @@ function Host:_perks()
         storage = storage,
         environment = self.environment,
         adapterVersion = adapter.adapterVersion,
-        pollSeconds = adapter.perksPollSeconds,
     })
     return self.perks
 end

@@ -50,6 +50,7 @@ internal static partial class Program
             Test("kits.sg_inventory_giveitem_permission", InventoryGive);
             Test("verify.report_shape", ReportShape);
             RunEscrowTests();
+            RunPerksTests();
         }
         finally
         {

@@ -94,6 +94,27 @@ describe("packForOpen77", () => {
     expect(readFileSync(join(r.dest, "open77.lua"), "utf8")).not.toMatch(/http\.request/);
   });
 
+  it("ships the core's perks module in the server shim, only for a resource that asks for perks", () => {
+    const core = readFileSync(join(repoRoot, "sdk", "lua", "scriptgo", "perks.lua"), "utf8").replace(/\r\n/g, "\n").trimEnd();
+    const res = readResource(join(repoRoot, "examples", "packages", "vip_perks"));
+    const r = packForOpen77(res, tmp);
+    expect(r.errors).toEqual([]);
+    const server = readFileSync(join(r.dest, "scriptgo_shim_server.lua"), "utf8");
+    // The one implementation, word for word: nothing about perks is written twice for OPEN//77.
+    expect(server).toContain(core);
+    expect(server).not.toMatch(/^\s*--\s*@(include|capability|end)\b/m);
+    expect(server).toMatch(/O\.caps\.perks = true/);
+    expect(readFileSync(join(r.dest, "open77.lua"), "utf8")).toMatch(/"http\.request"/);
+    expect(r.warnings.join(" ")).toMatch(/scriptgo_server_token/);
+    // Nothing in what was added needs a library the OPEN//77 sandbox does not have.
+    expect(scanSource(server, "scriptgo_shim_server.lua", "server")).toEqual([]);
+    expect(scanSource(readFileSync(join(r.dest, "scriptgo_shim.lua"), "utf8"), "scriptgo_shim.lua", "shared")).toEqual([]);
+    // The client shim and a resource without perks carry none of it.
+    expect(readFileSync(join(r.dest, "scriptgo_shim_client.lua"), "utf8")).not.toMatch(/perks/);
+    const plain = packForOpen77(readResource(join(repoRoot, "sdk", "packages", "sg_inventory")), tmp);
+    expect(readFileSync(join(plain.dest, "scriptgo_shim_server.lua"), "utf8")).not.toMatch(/purchaseLink|scriptgo_server_token/);
+  });
+
   it("refuses code that cannot run in the OPEN//77 sandbox unless forced", () => {
     const dir = mkdtempSync(join(tmpdir(), "scriptgo-unportable-"));
     try {

@@ -54,6 +54,27 @@ export function stripCapabilitySections(text: string, caps: Set<string>): string
   return out.join("\n");
 }
 
+/**
+ * Replaces each `-- @include <path>` line (relative to the shim's folder) with that file, word for
+ * word. It is how a kept section carries a module of the portable core, so that logic written once
+ * for every host (player perks: sdk/lua/scriptgo/perks.lua) is not written again for OPEN//77. Run
+ * after `stripCapabilitySections`, so a module is only shipped with the capability that needs it.
+ */
+export function expandIncludes(text: string, shimDir: string): string {
+  return text
+    .split("\n")
+    .map((line) => {
+      const m = /^\s*--\s*@include\s+(\S+)\s*$/.exec(line);
+      if (!m) return line;
+      const file = resolve(shimDir, m[1]!);
+      // Only the SDK's own Lua, next to the adapters: never a path out of the SDK.
+      const sdk = resolve(shimDir, "..", "..");
+      if (!file.startsWith(sdk) || !file.endsWith(".lua")) throw new Error(`shim: @include ${m[1]} is outside the SDK`);
+      return readFileSync(file, "utf8").replace(/\r\n/g, "\n").trimEnd();
+    })
+    .join("\n");
+}
+
 const quote = (s: string): string => JSON.stringify(s);
 const list = (items: string[]): string => `{ ${items.map(quote).join(", ")} }`;
 
@@ -97,8 +118,8 @@ export function open77Manifest(m: ParsedManifest, warnings: string[], source = "
   // The shim reads the server ACL for ScriptGo.permissions and sends notifications over the network.
   if (caps.has("permissions")) permissions.add("acl.read");
   if (caps.has("ui")) permissions.add("network.events");
-  // ScriptGo.http and ScriptGo.licensing go through Open77.http.request (server side).
-  if (caps.has("http") || caps.has("licensing")) permissions.add("http.request");
+  // ScriptGo.http, ScriptGo.licensing and ScriptGo.perks go through Open77.http.request (server side).
+  if (caps.has("http") || caps.has("licensing") || caps.has("perks")) permissions.add("http.request");
   if (permissions.size > 0) lines.push(`permissions ${list([...permissions].sort())}`);
   for (const dep of m.dependencies) {
     const { constraint, warning } = toOpen77Constraint(dep.range);
@@ -123,11 +144,14 @@ export function open77Manifest(m: ParsedManifest, warnings: string[], source = "
   if (!m.environments.includes("open77") && m.environments.length > 0) {
     warnings.push("the manifest does not list open77 in environments; the package is untested there");
   }
-  if (caps.has("http") || caps.has("licensing")) {
+  if (caps.has("http") || caps.has("licensing") || caps.has("perks")) {
     warnings.push(
       "outbound HTTP is off on an OPEN//77 server until the operator sets server.jsonc http.enabled and lists every host the resource calls in http.allowedHosts" +
-        (caps.has("licensing") ? " (licensing calls the SCRIPT//GO API at the scriptgo_api convar, default http://localhost:4100)" : ""),
+        (caps.has("licensing") || caps.has("perks") ? " (licensing and perks call the SCRIPT//GO API at the scriptgo_api convar, default http://localhost:4100)" : ""),
     );
+  }
+  if (caps.has("perks")) {
+    warnings.push("perks needs the server linked to the operator's SCRIPT//GO account: set the scriptgo_server_token convar to the sg_srv_ token of a server link");
   }
   return lines.join("\n") + "\n";
 }
@@ -136,7 +160,7 @@ export function open77Manifest(m: ParsedManifest, warnings: string[], source = "
 export function open77ShimFiles(m: ParsedManifest, shimDir: string = OPEN77_SHIM_DIR): Map<string, Buffer> {
   const caps = new Set<string>([...m.capabilities, ...m.optionalCapabilities]);
   const out = new Map<string, Buffer>();
-  for (const s of OPEN77_SHIM) out.set(s.to, Buffer.from(stripCapabilitySections(readFileSync(join(shimDir, s.from), "utf8"), caps), "utf8"));
+  for (const s of OPEN77_SHIM) out.set(s.to, Buffer.from(expandIncludes(stripCapabilitySections(readFileSync(join(shimDir, s.from), "utf8"), caps), shimDir), "utf8"));
   return out;
 }
 

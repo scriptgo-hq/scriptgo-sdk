@@ -22,7 +22,8 @@
 --   findPlayer(id)       optional: the connected player with that identifier, or nil
 --   now()                wall clock, Unix seconds
 --   json                 { encode, decode }
---   config(key)          a host setting: "scriptgo_api", "scriptgo_server_token"
+--   config(key)          a host setting: "scriptgo_api", "scriptgo_server_token" and, optionally,
+--                        "scriptgo_perks_poll_seconds" (how often the event queue is pulled; 30)
 --   dispatch(fn, ...)    runs a handler (in its own thread where the host has threads)
 --   log(level, message)  optional
 --   storage              optional: { load() -> table or nil, save(table) }; the cache survives a restart
@@ -44,7 +45,8 @@ M.DEFAULT_OFFLINE_GRACE = 72 * 3600
 local floor = math.floor
 local HUGE = math.huge
 
--- "2026-11-13T10:00:00.000Z" -> Unix seconds (UTC). Hosts differ on os.date, and some have no `os`.
+-- "2026-11-13T10:00:00.000Z" -> Unix seconds (UTC), by arithmetic: hosts differ on date formatting,
+-- and some have no date library at all.
 local function parseIsoTime(text)
     if type(text) ~= "string" then return nil end
     local y, mo, d, h, mi, s = text:match("^(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)")
@@ -100,6 +102,13 @@ function M.new(s)
         local v = s.config(key)
         if type(v) == "string" and v ~= "" then return v end
         return nil
+    end
+
+    -- Seconds between two pulls of the event queue: the operator's setting, else the host's default.
+    local function pollEvery()
+        local v = tonumber(s.config("scriptgo_perks_poll_seconds"))
+        if v and v >= 1 then return v end
+        return pollSeconds
     end
 
     local function apiBase()
@@ -398,7 +407,7 @@ function M.new(s)
             if not answer then
                 state.lastError = reason
                 state.failures = state.failures + 1
-                local wait = pollSeconds * (2 ^ math.min(state.failures - 1, 4))
+                local wait = pollEvery() * (2 ^ math.min(state.failures - 1, 4))
                 state.nextPoll = s.now() + math.min(wait, 300)
                 return
             end
@@ -422,7 +431,7 @@ function M.new(s)
             if advanced and top > 0 then
                 call("POST", "/v1/perks/events/ack", { upTo = top }, function() end)
             end
-            state.nextPoll = answer.more == true and s.now() or (s.now() + pollSeconds)
+            state.nextPoll = answer.more == true and s.now() or (s.now() + pollEvery())
         end)
     end
 

@@ -131,3 +131,104 @@ do
     }
 end
 -- @end
+
+-- @capability perks
+-- Player perks (ADR-0038): what the operator sold to a player from their own store, asked from the
+-- SCRIPT//GO API. Nothing here talks to a payment provider, and nothing of this is in OPEN//77
+-- itself: it is this Lua file calling SCRIPT//GO over the server's allowed HTTP.
+--
+-- The logic is the portable core's module (sdk/lua/scriptgo/perks.lua), included below by
+-- `scriptgo pack` word for word: one implementation for every host. This section only hands it what
+-- OPEN//77 has: Open77.http.request (permission `http.request`, which `scriptgo pack` adds, and an
+-- operator who allows the API host in server.jsonc), Open77.players.identifier (the player's durable
+-- authenticated identifier), the wall clock and the resource's kvp for the cache.
+--
+-- Convars: `scriptgo_api` (default http://localhost:4100) and `scriptgo_server_token` (the sg_srv_
+-- token of the server link made in the SCRIPT//GO dashboard). The shim is packed per resource, so each
+-- resource that uses perks pulls the event queue on its own.
+do
+    local Core = (function(...)
+-- @include ../../lua/scriptgo/perks.lua
+    end)()
+    local CACHE_KEY = "scriptgo.perks"
+    local client
+
+    local function perks()
+        if client then return client end
+        client = Core.new({
+            request = function(req, done)
+                local ok, reason = Open77.http.request(req.url, function(status, body, headers, err)
+                    done({ status = status or 0, body = body or "", error = err })
+                end, req.method or "GET", req.body, req.headers)
+                if ok == false then done({ status = 0, body = "", error = reason }) end
+            end,
+            await = function(register)
+                local p = promise.new()
+                register(function(...) p:resolve(...) end)
+                return Citizen.Await(p)
+            end,
+            identifier = function(id)
+                if validPlayer(id) then return Open77.players.identifier(id) end
+                return nil
+            end,
+            findPlayer = function(identifier)
+                for _, id in ipairs(GetPlayers()) do
+                    if validPlayer(id) and Open77.players.identifier(id) == identifier then return id end
+                end
+                return nil
+            end,
+            now = function() return Open77.time.unix() end,
+            json = { encode = J.encode, decode = J.decode },
+            config = function(key)
+                local v = GetConvar(key, "")
+                if v == nil or v == "" then return nil end
+                return v
+            end,
+            -- A handler runs in its own thread of this resource, so it may Wait and call natives.
+            dispatch = function(fn, player, key, info)
+                CreateThread(function() fn(player, key, info) end)
+            end,
+            log = function(level, message)
+                local write = Open77.log[level] or Open77.log.info
+                write("ScriptGo.perks: " .. tostring(message))
+            end,
+            storage = {
+                load = function()
+                    local text = Open77.kvp.get(CACHE_KEY)
+                    if type(text) ~= "string" then return nil end
+                    local ok, data = pcall(J.decode, text)
+                    if ok then return data end
+                    return nil
+                end,
+                -- A kvp value holds 64 KiB: a cache larger than that stays in memory only.
+                save = function(data)
+                    local ok, text = pcall(J.encode, data)
+                    if ok and type(text) == "string" and #text < 60000 then Open77.kvp.set(CACHE_KEY, text) end
+                end,
+            },
+            environment = "open77",
+            adapterVersion = SG.runtime.adapterVersion(),
+        })
+        -- The event queue is pulled from a thread of this resource; the first use starts it.
+        CreateThread(function()
+            while true do
+                client.tick()
+                Wait(1000)
+            end
+        end)
+        return client
+    end
+
+    O.caps.perks = true
+    SG.perks = {
+        has = function(player, key) return perks().has(player, key) end,
+        list = function(player) return perks().list(player) end,
+        refresh = function(player) return perks().refresh(player) end,
+        purchaseLink = function(player, key) return perks().purchaseLink(player, key) end,
+        catalog = function() return perks().catalog() end,
+        on = function(kind, fn) return perks().on(kind, fn) end,
+        off = function(id) return perks().off(id) end,
+        status = function() return perks().status() end,
+    }
+end
+-- @end

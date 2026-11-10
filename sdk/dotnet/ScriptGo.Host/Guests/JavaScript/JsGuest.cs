@@ -116,7 +116,7 @@ internal sealed class JsGuest(SideRuntime side) : Guest(side, "js")
             .Add("adapterVersion", SgValue.Of(Host.Options.AdapterVersion))
             .Add("threads", SgValue.Of(q.Threads))
             .Add("now", SgValue.Of(Host.Now))
-            .Add("capabilities", SgValue.Of(SgTable.FromList(Host.Capabilities.Select(SgValue.Of))))
+            .Add("capabilities", SgValue.Of(SgTable.FromList(Host.CapabilitiesFor("js").Select(SgValue.Of))))
             .Add("permissions", SgValue.Of(SgTable.FromList(res.Manifest.Permissions.Select(SgValue.Of))))
             .Add("natives", SgValue.Of(Host.NativeDescriptor()));
         _budget.Begin(q);

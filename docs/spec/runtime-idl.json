@@ -41,7 +41,8 @@
     "config": "Per-resource configuration and GetConvar.",
     "ui": "ScriptGo.ui.notify: on-screen notifications or chat fallback.",
     "http": "Outbound HTTP requests from the server side.",
-    "licensing": "License activation and verification against the SCRIPT//GO API."
+    "licensing": "License activation and verification against the SCRIPT//GO API.",
+    "perks": "Player perks: what the operator sold to a player from their own store, asked from the SCRIPT//GO API."
   },
   "types": {
     "value": { "kind": "primitive", "doc": "Any value the codec copies: nil, boolean, integer, number (finite), string, or an acyclic table with string or integer keys (see codec)." },
@@ -727,6 +728,70 @@
           "lua": { "failure": "nil_code_body", "doc": "Waits for the answer: result, or nil, code, body." },
           "js": { "returns": ["promise<value>"], "failure": "reject", "doc": "Rejects with ScriptGoError(code) whose detail is the decoded body." }
         }
+      ]
+    },
+    {
+      "name": "ScriptGo.perks",
+      "capability": "perks",
+      "sides": ["server"],
+      "languages": ["lua"],
+      "doc": "Player perks (docs/spec/perks.md): what the server's operator sold to a player from their own store. One implementation, the portable core's module sdk/lua/scriptgo/perks.lua, which Lua guests run; JavaScript guests do not have it yet. Needs the http capability and the server linked to the operator's account (the host setting scriptgo_server_token). A player is a PlayerId, or the identifier string ScriptGo.players.identifier gives.",
+      "members": [
+        {
+          "name": "has",
+          "kind": "function",
+          "doc": "Whether the player has the perk now. Asked from the API when the player is not known yet or the answer is old; otherwise answered from the cache, which never trusts a perk past its period end nor past the offline grace of the last answer.",
+          "params": [{ "name": "player", "type": "value" }, { "name": "key", "type": "string" }],
+          "returns": ["boolean", "table"],
+          "errors": ["perks is server-side only", "not_linked", "not_held", "unreachable", "unknown_player", "invalid_player", "invalid_perk"],
+          "lua": { "failure": "false_reason", "doc": "Waits for the answer: call it from a thread. true, { expiresAt, status, source } or false, reason." }
+        },
+        {
+          "name": "list",
+          "kind": "function",
+          "doc": "Every perk of the operator the player has now: { key, expiresAt, status }, sorted by key.",
+          "params": [{ "name": "player", "type": "value" }],
+          "returns": ["table"],
+          "errors": ["perks is server-side only", "not_linked", "unreachable", "unknown_player", "invalid_player"],
+          "lua": { "failure": "nil_reason", "doc": "Waits for the answer: call it from a thread." }
+        },
+        {
+          "name": "refresh",
+          "kind": "function",
+          "doc": "Asks the API again about one player, whatever is cached.",
+          "params": [{ "name": "player", "type": "value" }],
+          "returns": ["boolean"],
+          "errors": ["perks is server-side only", "not_linked", "unreachable", "unknown_player", "invalid_player"],
+          "lua": { "failure": "false_reason", "doc": "Waits for the answer: call it from a thread." }
+        },
+        {
+          "name": "purchaseLink",
+          "kind": "function",
+          "doc": "A signed, short-lived link to buy one perk for one player, tied to that player's identifier. Answers the URL and when it expires (Unix seconds).",
+          "params": [{ "name": "player", "type": "value" }, { "name": "key", "type": "string" }],
+          "returns": ["string", "integer"],
+          "errors": ["perks is server-side only", "not_linked", "unreachable", "unknown_perk", "not_purchasable", "already_held", "unknown_player", "invalid_player", "invalid_perk"],
+          "lua": { "failure": "nil_reason", "doc": "Waits for the answer: call it from a thread. nil, code, message on a refusal." }
+        },
+        {
+          "name": "catalog",
+          "kind": "function",
+          "doc": "What the operator sells: { key, name, description, interval, price, purchasable } for each perk.",
+          "params": [],
+          "returns": ["table"],
+          "errors": ["perks is server-side only", "not_linked", "unreachable"],
+          "lua": { "failure": "nil_reason", "doc": "Waits for the answer: call it from a thread." }
+        },
+        {
+          "name": "on",
+          "kind": "function",
+          "doc": "Calls handler(player, key, info) when a perk is granted or removed: a purchase, a refund, a chargeback, the end of a period. kind is \"granted\" or \"removed\"; player is the connected player with that identifier, or nil; info is { identifier, perk, reason, expiresAt }. Answers a handler id.",
+          "params": [{ "name": "kind", "type": "string" }, { "name": "handler", "type": "any" }],
+          "returns": ["integer"],
+          "lua": { "failure": "raise" }
+        },
+        { "name": "off", "kind": "function", "doc": "Removes a handler by its id.", "params": [{ "name": "id", "type": "integer" }], "returns": ["boolean"] },
+        { "name": "status", "kind": "function", "doc": "{ linked, configured, cursor, lastPollAt, lastError } of the perks client.", "params": [], "returns": ["table"] }
       ]
     },
     {

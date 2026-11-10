@@ -25,6 +25,7 @@
     <EmbeddedResource Include="Guests/Lua/prelude.lua" LogicalName="ScriptGo.Host.prelude.lua" />
     <EmbeddedResource Include="../../lua/scriptgo/json.lua" LogicalName="ScriptGo.Host.json.lua" />
     <EmbeddedResource Include="../../lua/scriptgo/compat.lua" LogicalName="ScriptGo.Host.compat.lua" />
+    <EmbeddedResource Include="../../lua/scriptgo/perks.lua" LogicalName="ScriptGo.Host.perks.lua" />
     <EmbeddedResource Include="Guests/JavaScript/prelude.js" LogicalName="ScriptGo.Host.prelude.js" />
   </ItemGroup>
   <ItemGroup>

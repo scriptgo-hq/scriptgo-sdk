@@ -655,6 +655,102 @@ SG.licensing = capTable("licensing", {
     activate = function(opts) return licensingCall("activate", opts) end,
     verify = function(opts) return licensingCall("verify", opts) end,
 })
+-- Player perks (ADR-0038): the portable core's module, the one implementation every host shares,
+-- over what this guest already has: HTTP through the host, the host's player identifiers, the wall
+-- clock and the convars (scriptgo_api, scriptgo_server_token). One client per Lua guest, created on
+-- first use; its cache lives in this state's memory and is bounded as the module says.
+local perksClient
+local perksAnswers = {} -- promise id -> callback of a request the perks module made
+local perksNextTick = 0
+local function perksOf()
+    if perksClient then return perksClient end
+    perksClient = R("perks").new({
+        request = function(req, done)
+            local p = newPromise()
+            pending[p.id] = p
+            perksAnswers[p.id] = done
+            local ok, why = sg_call("http", p.id, req)
+            if not ok then
+                pending[p.id], perksAnswers[p.id] = nil, nil
+                done({ status = 0, body = "", error = tostring(why) })
+            end
+        end,
+        await = function(register)
+            local p = newPromise()
+            register(function(...) p:resolve(...) end)
+            return p:await()
+        end,
+        identifier = function(id)
+            local _, v = sg_call("playerIdentifier", id)
+            return v
+        end,
+        findPlayer = function(identifier)
+            local ok, list = sg_call("playersList")
+            if not ok or type(list) ~= "table" then return nil end
+            for _, id in ipairs(list) do
+                local _, v = sg_call("playerIdentifier", id)
+                if v == identifier then return id end
+            end
+            return nil
+        end,
+        now = function() return SG.time.now() end,
+        json = json,
+        config = function(key)
+            local ok, v = sg_call("convar", key)
+            if ok then return v end
+            return nil
+        end,
+        dispatch = function(fn, ...) spawn(fn, {}, nil, ...) end,
+        log = function(level, message) log(level, "perks: " .. tostring(message)) end,
+        environment = ENVIRONMENT,
+        adapterVersion = ctx.adapterVersion,
+    })
+    return perksClient
+end
+local function perksCall(name)
+    inThread("ScriptGo.perks." .. name)
+    if SIDE ~= "server" then return nil end
+    return perksOf()
+end
+SG.perks = capTable("perks", {
+    has = function(player, key)
+        local client = perksCall("has")
+        if not client then return false, "perks is server-side only" end
+        return client.has(player, key)
+    end,
+    list = function(player)
+        local client = perksCall("list")
+        if not client then return nil, "perks is server-side only" end
+        return client.list(player)
+    end,
+    refresh = function(player)
+        local client = perksCall("refresh")
+        if not client then return false, "perks is server-side only" end
+        return client.refresh(player)
+    end,
+    purchaseLink = function(player, key)
+        local client = perksCall("purchaseLink")
+        if not client then return nil, "perks is server-side only" end
+        return client.purchaseLink(player, key)
+    end,
+    catalog = function()
+        local client = perksCall("catalog")
+        if not client then return nil, "perks is server-side only" end
+        return client.catalog()
+    end,
+    on = function(kind, fn)
+        if SIDE ~= "server" then return nil, "perks is server-side only" end
+        return perksOf().on(kind, fn)
+    end,
+    off = function(id)
+        if SIDE ~= "server" then return false end
+        return perksOf().off(id)
+    end,
+    status = function()
+        if SIDE ~= "server" then return nil, "perks is server-side only" end
+        return perksOf().status()
+    end,
+})
 -- OPEN//77-compatible names for the portable subset.
 SG.notifications = {
     send = function(target, payload) return SG.ui.notify(target, payload) end,
@@ -749,6 +845,11 @@ end)
 
 entry.tick = enter(function(n, tc)
     now, tickCount = n, tc
+    -- The perks client pulls its event queue about once a second; it never blocks.
+    if perksClient and now >= perksNextTick then
+        perksNextTick = now + 1
+        perksClient.tick()
+    end
     local ready = {}
     for thread in next, threads do
         if not thread.waiting and thread.wake <= now and thread.tickSeen ~= tickCount then ready[#ready + 1] = thread end
@@ -772,6 +873,13 @@ entry.settle = enter(function(id, ok, ...)
     local p = pending[id]
     if not p then return true end
     pending[id] = nil
+    -- An answer to a request of the perks module goes to its callback, not to a waiting thread.
+    local answer = perksAnswers[id]
+    if answer then
+        perksAnswers[id] = nil
+        if ok then answer((...)) else answer({ status = 0, body = "", error = (...) }) end
+        return true
+    end
     if ok then p:resolve(...) else p:reject((...)) end
     return true
 end)
