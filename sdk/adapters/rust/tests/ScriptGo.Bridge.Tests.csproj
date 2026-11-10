@@ -15,5 +15,11 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../bridge/ScriptGo.Bridge.csproj" />
+    <!--
+      Test-only crypto, to build escrow releases and to play the key service: X25519 and ed25519
+      through NSec (libsodium), the version the .NET kit pins. The bridge itself has no such
+      dependency: its key operations happen inside the native library (sdk/native).
+    -->
+    <PackageReference Include="NSec.Cryptography" Version="24.4.0" />
   </ItemGroup>
 </Project>
