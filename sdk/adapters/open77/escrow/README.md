@@ -65,12 +65,12 @@ refuses each encrypted folder with `adapter_missing`.
    resource folder.
 5. Have the adapter next to the server executable (`Open77.Server.Escrow.ScriptGo.dll`,
    `ScriptGo.Escrow.dll` and `runtimes/<rid>/native/scriptgo.dll` or `libscriptgo.so`), then start
-   the server. Until `ScriptGo.Escrow` is published on a feed, a server built from source gets it
-   with OPEN//77's staging script, from the package this repository packs:
+   the server. `ScriptGo.Escrow` is not on nuget.org yet: download `ScriptGo.Escrow.<version>.nupkg`
+   from this repository's releases (it carries the win-x64 and linux-x64 loaders; `sdk/dotnet/pack.ps1`
+   rebuilds it from source), put it in a folder, and stage it with OPEN//77's script:
 
    ```text
-   pwsh -File sdk/dotnet/pack.ps1                                   (here: writes sdk/dotnet/artifacts)
-   pwsh -File server/scripts/stage-scriptgo-escrow.ps1 -Feed <this repository>/sdk/dotnet/artifacts   (in OPEN//77)
+   pwsh -File server/scripts/stage-scriptgo-escrow.ps1 -Feed <folder with the .nupkg>   (in OPEN//77)
    dotnet build server/Open77.Server.slnx -c Release
    ```
 
@@ -82,7 +82,8 @@ runs as; the licence is bound to it on first use. Back it up with the rest of `.
 
 ### Where the code is
 
-In the OPEN//77 repository (branch `feat/scriptgo-escrow` at the time of writing):
+In the OPEN//77 repository, on `main` since 2026-11-10 (server tests 4110 run, 0 failed; the
+adapter's own 42 tests pass through the real native loader):
 
 - `Open77.Server.Scripting`: the seam (`IResourceEscrowProvider` with its `Ready` signal,
   `IEscrowedResource`, `IResourceEscrowProviderFactory`), one appended optional constructor

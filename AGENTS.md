@@ -10,7 +10,7 @@ this file, read it too.
 |---|---|
 | `scriptgo-hq/scriptgo-sdk` (this one, public, MIT) | The SDK: Lua core, adapters, `libscriptgo`, the .NET kit, the CLI, the npm packages, the specs and the website's documentation pages |
 | `scriptgo-hq/scriptgo-api` (private) | The platform: API, worker, database, licensing, commerce. It uses this SDK by tag |
-| `scriptgo-hq/scriptgo-web` (private) | The website, scriptgo.dev. It renders `docs/` from this SDK by tag |
+| `scriptgo-hq/scriptgo-web` (public, proprietary licence) | The website, scriptgo.dev. It renders `docs/` from this SDK by tag |
 | `scriptgo-hq/.github` (public) | The organisation's profile page |
 
 This repository is the source of the SDK. The platform pins a tag (`v<version>`): a change here

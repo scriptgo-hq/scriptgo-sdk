@@ -18,3 +18,8 @@ sdk/examples/tools/.demo/
 # Machine-specific notes for agents
 CLAUDE.local.md
 NUL
+
+# Build inputs and outputs of the native library and the .NET kit
+sdk/native/.deps/
+sdk/dotnet/artifacts/
+sdk/dotnet/TestResults/
