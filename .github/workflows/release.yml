@@ -1,0 +1,43 @@
+name: Release to npm
+
+# Push a tag `v<version>` whose version matches every published package.json, for example v0.1.0.
+# Needs the repository secret NPM_TOKEN (an npm automation token with publish rights on @scriptgo).
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write # npm provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    env:
+      HAS_NPM_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: Tag matches the package versions
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          for p in shared manifest escrow types; do
+            v=$(node -p "require('./packages/$p/package.json').version")
+            [ "$v" = "$tag" ] || { echo "packages/$p is $v, tag is $tag"; exit 1; }
+          done
+      - run: pnpm run typecheck
+      - run: pnpm run test
+      - name: Publish
+        if: env.HAS_NPM_TOKEN == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
+        run: pnpm -r --filter "./packages/{shared,manifest,escrow,types}" publish --access public --no-git-checks
+      - name: No token
+        if: env.HAS_NPM_TOKEN != 'true'
+        run: echo "::warning::NPM_TOKEN is not set; nothing was published."

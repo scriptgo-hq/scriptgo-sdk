@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  node:
+    name: Packages and CLI
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm run test
+      - run: pnpm run build
+
+  lua:
+    name: Lua core (5.1, 5.4, LuaJIT)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: sudo apt-get update && sudo apt-get install -y lua5.1 lua5.4 luajit
+      - name: Interpreters where tools/lua-test.mjs looks for them
+        run: |
+          mkdir -p tools/runtimes/bin
+          ln -s "$(command -v lua5.4)" tools/runtimes/bin/lua54
+          ln -s "$(command -v lua5.1)" tools/runtimes/bin/lua51
+          ln -s "$(command -v luajit)" tools/runtimes/bin/luajit
+      - run: node tools/lua-test.mjs
+
+  dotnet:
+    name: .NET host kit and libscriptgo
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: sudo apt-get update && sudo apt-get install -y cmake pkg-config liblua5.4-0
+      - name: libscriptgo (libsodium pinned by SHA-256)
+        working-directory: sdk/native
+        run: ./build-linux.sh
+      - name: Tests
+        working-directory: sdk/dotnet
+        run: dotnet test --project ScriptGo.Host.Tests
