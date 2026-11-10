@@ -256,7 +256,9 @@ What a buyer's server gets depends on the host. Each environment has a tier, sho
 - **Licence and signing.** The host runs plain script, so its operator can read what it loads. An
   encrypted release is still delivered encrypted and bound to the server, then written to disk
   there. We make no code-secrecy claim on these hosts.
-- **Nothing sold.** The rights holder allows free packages only. Releases are still signed.
+- **No licence check.** The adapter there has no licence check, so a package runs without one.
+  Releases are still signed. This is a technical fact about the adapter, not a selling rule: no
+  environment decides what can be sold.
 
 ## What we claim
 

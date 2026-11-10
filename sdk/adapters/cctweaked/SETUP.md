@@ -3,12 +3,16 @@ Needs a Minecraft: Java Edition server you own or run, with [Fabric](https://fab
 0.92.12 and CC: Tweaked 1.121.0). Not an official Minecraft product. Not approved by or associated
 with Mojang or Microsoft. Not affiliated with the CC: Tweaked developers.
 
-**Free packages only.** The [Minecraft EULA](https://www.minecraft.net/en-us/eula) lets you do what
-you want with mods you create "as long as you don't sell them for money / try to make money from
-them", so packages for this environment cannot have paid offers. Licence checks are not offered
-either: the [Minecraft Usage Guidelines](https://www.minecraft.net/en-us/usage-guidelines) allow a mod
+**The platform's own rules.** The [Minecraft EULA](https://www.minecraft.net/en-us/eula) lets you do
+what you want with mods you create "as long as you don't sell them for money / try to make money from
+them". SCRIPT//GO does not enforce a platform's rules: you answer to the platform's rights holder for
+what you run on your server.
+
+**No licence check.** This adapter has none. It was built without one after the
+[Minecraft Usage Guidelines](https://www.minecraft.net/en-us/usage-guidelines), which allow a mod
 only if it "cannot be used to directly or indirectly verify whether a player owns or has access to
-out-of-game content, products, or services that affect in-game features and functions".
+out-of-game content, products, or services that affect in-game features and functions". A package
+runs here without a licence check.
 
 1. Build the computer's files, with your resources:
 

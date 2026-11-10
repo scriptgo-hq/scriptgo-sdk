@@ -34,11 +34,18 @@ end
 --   tier "escrow": the host runs compiled code outside the guest VM and can hold a key, so an
 --     encrypted release is decrypted in memory. tier "license": licence check and signed releases
 --     only; the host is plain script and its operator can read what it loads, so no code-secrecy
---     claim. tier "none": the environment is free-only (sales = "free_only"), nothing is sold.
+--     claim. tier "none": the adapter has no licence check, so a package runs there without one.
 --   state "available" | "planned": whether that tier works there today. note: one honest sentence.
 --   optIn = true: the tier is a feature the server operator switches on (default off), not something
 --     every server of that platform has; the site then says "as an opt-in server feature".
---   A tier never weakens `sales`; gen-environments refuses "none" on a sellable environment.
+--   The tier follows what the adapter can do (ADR-0037): gen-environments refuses a tier above
+--     "none" that is "available" without the licensing capability, and "none" on an adapter that has it.
+-- platformRules, platformRulesNote: what the platform's own rights holder says about paid scripts,
+--   as information for the operator who runs a script there and answers for it (ADR-0037). It is
+--   never a SCRIPT//GO rule and gates nothing: no environment blocks or conditions a sale.
+--   "no_restriction" (the default): none known, or the terms allow it. "restricts_paid": the terms
+--   restrict or forbid paid scripts. "unsettled": no published rule, or it depends on the script.
+--   The note is one factual, neutral sentence with its source.
 M.ENVIRONMENTS = {
     standalone = {
         protection = { tier = "license", state = "available", note = "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim." },
@@ -167,8 +174,8 @@ M.ENVIRONMENTS = {
         -- or runtime that hosts Lua itself.
         kind = "mod_platform",
         status = "experimental",
-        sales = "review",
-        salesNote = "Paid packages are reviewed first: the game's rights holder restricts commercial use of its IP.",
+        platformRules = "unsettled",
+        platformRulesNote = "The game's rights holder restricts commercial use of its IP.",
         dialects = { "5.4" },
         summary = "Packages run on OPEN//77 servers and clients through a small shim that maps ScriptGo.* onto Open77.* (`scriptgo pack --target open77`).",
         sides = { "server", "client" },
@@ -234,14 +241,14 @@ M.ENVIRONMENTS = {
         },
     },
     cctweaked = {
-        protection = { tier = "none", state = "available", note = "Free packages only here, so nothing is sold or licensed. Releases are still signed." },
+        protection = { tier = "none", state = "available", note = "No licence check in this adapter, so a package runs there without one. Releases are still signed." },
         -- "Minecraft" only as the secondary part of the name, as the Minecraft Usage Guidelines ask.
         name = "CC: Tweaked (Minecraft)",
         -- A layer on top of a game players must own (Minecraft: Java Edition), like OPEN//77.
         kind = "mod_platform",
         status = "experimental",
-        sales = "free_only",
-        salesNote = "Free packages only: the Minecraft EULA lets you do what you want with your mods \"as long as you don't sell them for money\" (minecraft.net/en-us/eula).",
+        platformRules = "restricts_paid",
+        platformRulesNote = "The Minecraft EULA lets you do what you want with your mods \"as long as you don't sell them for money\" (minecraft.net/en-us/eula).",
         dialects = { "5.2" },
         summary = "Packages run on a ComputerCraft computer in a Minecraft: Java Edition world, through the CC: Tweaked mod. Not an official Minecraft product; not approved by or associated with Mojang or Microsoft.",
         sides = { "server", "client" },
@@ -259,11 +266,11 @@ M.ENVIRONMENTS = {
             config = "Per-resource values from /scriptgo/config.json; convars from config.json, then the computer's settings.",
             ui = "Notifications are lines on the computer's terminal.",
             http = "CC: Tweaked's asynchronous http API. The server owner decides in computercraft-server.toml whether it is on and which hosts answer ([[http.rules]]; private and local addresses are denied by default). Redirects are not followed.",
-            licensing = "Not offered: the Minecraft Usage Guidelines allow a mod only if it \"cannot be used to directly or indirectly verify whether a player owns or has access to out-of-game content, products, or services that affect in-game features and functions\" (minecraft.net/en-us/usage-guidelines).",
+            licensing = "Not implemented: this adapter was built without a licence check, after the Minecraft Usage Guidelines, which allow a mod only if it \"cannot be used to directly or indirectly verify whether a player owns or has access to out-of-game content, products, or services that affect in-game features and functions\" (minecraft.net/en-us/usage-guidelines).",
         },
         limitations = {
             "Experimental: one real server run so far, the conformance probe (35 of 35 checks). The official kits fail there only because they do not declare cctweaked yet. Each run needs the operator's own acceptance of the Minecraft EULA.",
-            "Free packages only, and no licence checks (see the sales rule and the licensing note).",
+            "No licence check in this adapter (see the licensing note). What the Minecraft EULA says about paid mods is the platform's own rule, shown as the platform note.",
             "Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft. Not affiliated with the CC: Tweaked developers.",
             "Lua 5.2 (Cobalt VM): no // or bitwise operators (use bit32), no collectgarbage.",
             "Everything runs on one computer: code that runs for about 7 seconds without yielding is stopped by CC: Tweaked (\"Too long without yielding\").",
@@ -310,14 +317,14 @@ M.ENVIRONMENTS = {
         },
     },
     -- Planned mod platforms (docs/research/game-modding-landscape.md). No adapter yet: no
-    -- capabilities, no install steps. `sales` says whether paid packages are possible there.
+    -- capabilities, no install steps. `platformRules` reports the platform's own terms on paid scripts.
     hytale = {
         protection = { tier = "escrow", state = "planned", note = "Code escrow is planned: a JVM plugin with a native library would hold the key. Until it exists, licence check and signed releases only." },
         -- The plugin is built (sdk/adapters/hytale, ADR-0017) but has not run on a real Hytale server:
         -- the server files need the owner's Hytale account. Planned until a real run passes.
         name = "Hytale", kind = "mod_platform", status = "planned", dialects = { "5.2" }, sides = { "server" },
         summary = "A server plugin that runs SCRIPT//GO packages on Hytale servers; players install nothing.",
-        sales = "allowed", salesNote = "The game's terms allow paid mods and plugins.",
+        platformRules = "no_restriction", platformRulesNote = "The game's terms allow paid mods and plugins.",
         capabilities = {
             events = "partial", logging = "supported", storage = "supported", players = "supported",
             permissions = "supported", commands = "partial", config = "supported", ui = "fallback",
@@ -353,7 +360,7 @@ M.ENVIRONMENTS = {
         protection = { tier = "license", state = "available", note = "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim." },
         name = "Garry's Mod", kind = "mod_platform", status = "beta", dialects = { "luajit" }, sides = { "server" },
         summary = "Packages on Garry's Mod dedicated servers (roleplay, sandbox, game modes): one server addon runs them in GLua (`scriptgo pack --target garrysmod`).",
-        sales = "allowed", salesNote = "The developer allows selling mods you own, outside the Steam Workshop.",
+        platformRules = "no_restriction", platformRulesNote = "The developer allows selling mods you own, outside the Steam Workshop.",
         capabilities = {
             events = "partial", logging = "supported", storage = "supported", players = "supported",
             permissions = "supported", commands = "supported", config = "supported", ui = "fallback",
@@ -387,7 +394,7 @@ M.ENVIRONMENTS = {
         protection = { tier = "escrow", state = "available", note = "Code escrow: the compiled bridge next to the plugin has the native loader decrypt in memory, with a key released to this server only. It is off until the operator turns it on in the plugin config. Measured on Windows servers with Oxide and with Carbon, and on a Linux server with Oxide in a container. The operator of the machine can still inspect their own process; that takes real effort and the copy is traceable." },
         name = "Rust (Oxide/Carbon)", kind = "mod_platform", status = "experimental", dialects = { "5.4" }, sides = { "server" },
         summary = "An Oxide/Carbon plugin that runs SCRIPT//GO packages on Rust servers through an embedded Lua VM.",
-        sales = "allowed", salesNote = "The developer allows selling mods you own.",
+        platformRules = "no_restriction", platformRulesNote = "The developer allows selling mods you own.",
         capabilities = {
             events = "partial", logging = "supported", storage = "supported", players = "supported",
             permissions = "supported", commands = "supported", config = "supported", ui = "fallback",
@@ -419,10 +426,10 @@ M.ENVIRONMENTS = {
     -- BeamMP has an adapter (sdk/adapters/beammp, ADR-0019) but no run on a real server yet:
     -- BeamMP-Server refuses to start without the owner's Keymaster AuthKey, so it stays planned.
     beammp = {
-        protection = { tier = "license", state = "planned", note = "Licence check and signed releases, once paid packages are confirmed there. The server plugin is plain Lua, so the operator can read what it loads: no code-secrecy claim." },
+        protection = { tier = "license", state = "planned", note = "Licence check and signed releases, once the adapter has passed a run on a real server. The server plugin is plain Lua, so the operator can read what it loads: no code-secrecy claim." },
         name = "BeamMP", kind = "mod_platform", status = "planned", dialects = { "5.3" }, sides = { "server" },
         summary = "One BeamMP server plugin runs SCRIPT//GO packages on BeamMP servers (BeamNG.drive multiplayer), for driving and roleplay servers.",
-        sales = "review", salesNote = "No published rule on selling mods: free packages only until the rights holder confirms in writing.",
+        platformRules = "unsettled", platformRulesNote = "Neither BeamNG nor BeamMP publishes a rule on selling mods.",
         capabilities = {
             events = "partial", logging = "supported", storage = "supported", players = "supported",
             permissions = "supported", commands = "supported", config = "supported", ui = "partial",
@@ -437,7 +444,7 @@ M.ENVIRONMENTS = {
             config = "scriptgo.json resources and convars.",
             ui = "MP.SendNotification (a toast in the BeamMP client); its display is not verified, as no game client runs here.",
             http = "curl started in the background through os.execute and polled each tick, so a request never blocks the plugin; needs curl on the server's PATH. BeamMP's own Http.CreateConnection has no POST and drops the response.",
-            licensing = "Works over the same curl path, but paid listings stay off: no published BeamNG or BeamMP rule on selling mods, so packages stay free until the rights holder confirms in writing.",
+            licensing = "Over the same curl path, to the scriptgo_api convar.",
         },
         limitations = {
             "Not verified on a real server yet: BeamMP-Server (3.9.3) refuses to start without an AuthKey from keymaster.beammp.com, which only the server owner can get. Until then the adapter has passed unit tests on a mock of BeamMP's Lua API only.",
@@ -452,20 +459,20 @@ M.ENVIRONMENTS = {
         blockedOn = "Waiting for a server key: BeamMP-Server does not start without an AuthKey from the BeamMP Keymaster, which the server owner requests.",
     },
     roblox = {
-        protection = { tier = "license", state = "planned", note = "Licence check and signed releases at most, and only after the legal review. No code-secrecy claim." },
+        protection = { tier = "license", state = "planned", note = "Licence check and signed releases at most, once an adapter exists. No code-secrecy claim." },
         name = "Roblox", kind = "mod_platform", status = "planned", dialects = { "luau" }, sides = { "server", "client" },
         summary = "A Luau compatibility layer for Roblox experiences.",
-        sales = "review", salesNote = "Roblox sells creations through its own store: free packages only until a legal review.",
+        platformRules = "unsettled", platformRulesNote = "Roblox sells creations through its own store.",
         capabilities = {}, notes = {}, limitations = {},
     },
     fivem = {
-        protection = { tier = "none", state = "available", note = "Free packages only here, so nothing is sold or licensed. Releases are still signed." },
+        protection = { tier = "none", state = "available", note = "No licence check in the shim, so a package runs there without one. Releases are still signed." },
         -- ADR-0020. Adapter and `scriptgo pack --target fivem` written and unit-tested against a
         -- stub of the natives; planned until a real FXServer run passes (it needs the owner's
         -- Cfx.re registration key).
         name = "FiveM", kind = "mod_platform", status = "planned", dialects = { "5.4" }, sides = { "server", "client" },
         summary = "A shim that runs SCRIPT//GO packages on FiveM servers, with the same threads, events and exports model.",
-        sales = "free_only", salesNote = "The platform's creator terms keep paid content on its own marketplace: free packages only.",
+        platformRules = "restricts_paid", platformRulesNote = "The platform's creator terms keep paid server content on its own marketplace (Rockstar Games Creator Platform License Agreement, 2026-09-10, §3.1(6)).",
         capabilities = {
             events = "supported", logging = "supported", storage = "supported", players = "supported",
             permissions = "supported", commands = "supported", config = "supported", ui = "fallback",
@@ -481,11 +488,11 @@ M.ENVIRONMENTS = {
             config = "Server side: the convar <resource>:<key> (set in server.cfg).",
             ui = "Chat messages (chat:addMessage, handled by FXServer's chat system resource).",
             http = "Server side, through PerformHttpRequest; redirects are not followed. No host allow-list: the server owner decides what a resource may call.",
-            licensing = "Unavailable by design: Rockstar's Creator Platform License Agreement (2026-09-10, §3.1(6)) forbids a third-party marketplace that sells or licenses server content, so FiveM packages are free only.",
+            licensing = "Not implemented: the shim has no licence check. It was written without one after Rockstar's Creator Platform License Agreement (2026-09-10, §3.1(6)), which forbids a third-party marketplace that sells or licenses server content.",
         },
         limitations = {
             "Planned: no run on a real FXServer has passed yet. FXServer does not start without a Cfx.re registration key (sv_licenseKey).",
-            "Free packages only: `scriptgo pack --target fivem` refuses licensed packages.",
+            "No licence check: `scriptgo pack --target fivem` refuses a package that needs one (`licensed true`, or the licensing capability), because the shim could not enforce it.",
             "Only the server half can be verified; the client half needs the game.",
             "`require` finds no resource module on FiveM: list every module as a script.",
             "The client has no `os`: ScriptGo.time.now() is nil there.",
@@ -499,31 +506,31 @@ M.ENVIRONMENTS = {
         blockedOn = "Waiting for a server key: FXServer does not start without a Cfx.re registration key (sv_licenseKey).",
     },
     redm = {
-        protection = { tier = "none", state = "available", note = "Free packages only here, so nothing is sold or licensed. Releases are still signed." },
+        protection = { tier = "none", state = "available", note = "It would run the FiveM shim, which has no licence check, so a package runs there without one. Releases are still signed." },
         name = "RedM", kind = "mod_platform", status = "planned", dialects = { "5.4" }, sides = { "server", "client" },
         summary = "The same shim on RedM roleplay servers.",
-        sales = "free_only", salesNote = "The platform's creator terms keep paid content on its own marketplace: free packages only.",
+        platformRules = "restricts_paid", platformRulesNote = "The platform's creator terms keep paid server content on its own marketplace (Rockstar Games Creator Platform License Agreement, 2026-09-10, §3.1(6)).",
         capabilities = {}, notes = {}, limitations = {},
     },
     kcdmp = {
-        protection = { tier = "none", state = "available", note = "Free packages only here, so nothing is sold or licensed. Releases are still signed." },
+        protection = { tier = "license", state = "planned", note = "No adapter yet. Licence check and signed releases are planned with it; the host would run plain script, so its operator could read what it loads: no code-secrecy claim." },
         name = "KCD:MP", kind = "mod_platform", status = "planned", dialects = { "5.4" }, sides = { "server", "client" },
         summary = "Game modes and client scripts for KCD:MP medieval roleplay servers (Kingdom Come: Deliverance II).",
-        sales = "free_only", salesNote = "The game's developer does not allow selling mods: free packages only.",
+        platformRules = "restricts_paid", platformRulesNote = "The game's developer does not allow selling mods.",
         capabilities = {}, notes = {}, limitations = {},
     },
     zomboid = {
-        protection = { tier = "none", state = "available", note = "Free packages only here, so nothing is sold or licensed. Releases are still signed." },
+        protection = { tier = "license", state = "planned", note = "No adapter yet. Licence check and signed releases are planned with it; the host would run plain script, so its operator could read what it loads: no code-secrecy claim." },
         name = "Project Zomboid", kind = "mod_platform", status = "planned", dialects = { "5.1" }, sides = { "server", "client" },
         summary = "Project Zomboid server and client mods, for survival and roleplay servers.",
-        sales = "free_only", salesNote = "The game's terms do not allow selling mods without approval: free packages only.",
+        platformRules = "restricts_paid", platformRulesNote = "The game's terms do not allow selling mods without approval.",
         capabilities = {}, notes = {}, limitations = {},
     },
     dst = {
-        protection = { tier = "none", state = "available", note = "Free packages only here, so nothing is sold or licensed. Releases are still signed." },
+        protection = { tier = "license", state = "planned", note = "No adapter yet. Licence check and signed releases are planned with it; the host would run plain script, so its operator could read what it loads: no code-secrecy claim." },
         name = "Don't Starve Together", kind = "mod_platform", status = "planned", dialects = { "5.1" }, sides = { "server", "client" },
         summary = "Don't Starve Together server and client mods.",
-        sales = "free_only", salesNote = "The game's developer does not allow paid or paywalled mods: free packages only.",
+        platformRules = "restricts_paid", platformRulesNote = "The game's developer does not allow paid or paywalled mods.",
         capabilities = {}, notes = {}, limitations = {},
     },
 }

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Timestamp } from "./common.ts";
-import { AppealStatus, CaseStatus, Classification, ModerationActionKind, Provider } from "./enums.ts";
+import { AppealStatus, CaseStatus, ModerationActionKind, Provider, ReportActionKind } from "./enums.ts";
 import { Offer, Release, RightsDeclaration } from "./registry.ts";
 
 // ---------------------------------------------------------------- public report intake
@@ -110,7 +110,7 @@ export const CaseDetail = CaseSummary.extend({
 export type CaseDetail = z.infer<typeof CaseDetail>;
 
 export const ReportDecisionBody = z.object({
-  action: ModerationActionKind,
+  action: ReportActionKind,
   reasons: z.string().trim().min(10).max(10_000),
   escalate: z.boolean().default(false),
 });
@@ -132,9 +132,16 @@ export const ReviewOffer = Offer.extend({
 });
 export type ReviewOffer = z.infer<typeof ReviewOffer>;
 
+/**
+ * A staff decision on one offer, after a report (ADR-0037). on_hold and rejected remove the purchase
+ * path and send the creator a notice they can appeal; the other values lift a hold or reclassify.
+ * `undeclared` is never decided: it follows from the seller's own declaration.
+ */
 export const OfferDecisionBody = z.object({
-  classification: Classification,
+  classification: z.enum(["on_hold", "rejected", "software_license", "seller_declared", "authorized_app_feature", "free"]),
   reason: z.string().trim().min(3).max(5000),
+  /** The report this decision follows (RPT-YYYY-NNNNNN), when there is one. */
+  caseId: z.string().trim().max(32).optional(),
 });
 export type OfferDecisionBody = z.infer<typeof OfferDecisionBody>;
 
@@ -231,4 +238,3 @@ export const MarkerLookupResult = z.object({
 });
 export type MarkerLookupResult = z.infer<typeof MarkerLookupResult>;
 
-export const StoreApprovalBody = z.object({ approved: z.boolean(), reason: z.string().trim().min(3).max(5000) });

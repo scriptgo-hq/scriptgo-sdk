@@ -300,7 +300,9 @@ export const Store = z.object({
   id: z.string(),
   provider: Provider,
   status: StoreStatus,
-  approved: z.boolean(),
+  /** Staff suspended this store after a report (ADR-0037): no purchase path until it is lifted. */
+  suspended: z.boolean(),
+  suspendedReason: z.string().nullable(),
   checkoutEnabled: z.boolean(),
   checkoutDisabledReason: z.string().nullable(),
   /** URL to configure as the provider's webhook endpoint. */

@@ -7,9 +7,14 @@ export type EnvironmentStatus = z.infer<typeof EnvironmentStatus>;
 /** runtime: an engine or runtime that hosts Lua itself. mod_platform: a layer on top of an existing game. */
 export const EnvironmentKind = z.enum(["runtime", "mod_platform"]);
 export type EnvironmentKind = z.infer<typeof EnvironmentKind>;
-/** Whether paid packages are possible there: allowed, free_only (the rights holder forbids selling), review. */
-export const EnvironmentSales = z.enum(["allowed", "free_only", "review"]);
-export type EnvironmentSales = z.infer<typeof EnvironmentSales>;
+/**
+ * What the platform's own rights holder says about paid scripts (ADR-0037). Information for the
+ * operator who runs a script there and answers for it; never a SCRIPT//GO rule, and it gates nothing.
+ * no_restriction: none known, or the terms allow it. restricts_paid: the terms restrict or forbid
+ * paid scripts. unsettled: no published rule, or it depends on the script.
+ */
+export const PlatformRules = z.enum(["no_restriction", "restricts_paid", "unsettled"]);
+export type PlatformRules = z.infer<typeof PlatformRules>;
 /** verified: a real run passed; written: adapter code exists, no real run yet; none: no adapter code yet. */
 export const AdapterState = z.enum(["verified", "written", "none"]);
 export type AdapterState = z.infer<typeof AdapterState>;
@@ -20,7 +25,8 @@ export type IntegrationType = z.infer<typeof IntegrationType>;
 /**
  * What a buyer's server gets in an environment (ADR-0027). escrow: the host runs compiled code and
  * can hold a key, so an encrypted release is decrypted in memory. license: licence check and signed
- * releases only (a pure-script host; no code-secrecy claim). none: free-only environment.
+ * releases only (a pure-script host; no code-secrecy claim). none: the adapter has no licence check,
+ * so a package runs there without one (ADR-0037: a technical fact, never a selling rule).
  */
 export const ProtectionTier = z.enum(["escrow", "license", "none"]);
 export type ProtectionTier = z.infer<typeof ProtectionTier>;
@@ -54,11 +60,26 @@ export type ListingStatus = z.infer<typeof ListingStatus>;
 export const OfferInterval = z.enum(["free", "month", "year", "perpetual"]);
 export type OfferInterval = z.infer<typeof OfferInterval>;
 
+/**
+ * How an offer stands (ADR-0037). The seller decides and answers for what they sell: nothing waits
+ * for a reviewer.
+ *   free                    no payment
+ *   software_license        declared by the seller as their own, independent software
+ *   seller_declared         sold on the seller's declaration that they own the code, which targets a
+ *                           third-party game platform; not reviewed by SCRIPT//GO before sale
+ *   authorized_app_feature  set by staff: a feature of an application its rights holder authorized
+ *   undeclared              no rights declaration on a published release yet: no purchase path until
+ *                           the seller declares (the seller's action, no reviewer)
+ *   on_hold                 put on hold by staff after a report: no purchase path; notified, appealable
+ *   rejected                withdrawn by staff after a report: no purchase path; notified, appealable
+ */
 export const Classification = z.enum([
   "free",
   "software_license",
+  "seller_declared",
   "authorized_app_feature",
-  "pending_review",
+  "undeclared",
+  "on_hold",
   "rejected",
 ]);
 export type Classification = z.infer<typeof Classification>;
@@ -69,7 +90,8 @@ export type LicenseStatus = z.infer<typeof LicenseStatus>;
 export const ActivationStatus = z.enum(["pending", "active", "offline_grace", "deactivated", "blocked"]);
 export type ActivationStatus = z.infer<typeof ActivationStatus>;
 
-export const StoreStatus = z.enum(["not_connected", "sandbox", "checkout_off", "live", "needs_attention"]);
+/** suspended: staff suspended the store after a report; nothing can be bought through it. */
+export const StoreStatus = z.enum(["not_connected", "sandbox", "checkout_off", "live", "needs_attention", "suspended"]);
 export type StoreStatus = z.infer<typeof StoreStatus>;
 
 export const CaseStatus = z.enum([
@@ -130,8 +152,16 @@ export type CheckStage = z.infer<typeof CheckStage>;
 export const CheckStatus = z.enum(["pending", "running", "passed", "failed", "skipped"]);
 export type CheckStatus = z.infer<typeof CheckStatus>;
 
-export const ModerationActionKind = z.enum(["no_action", "restrict_release", "restrict_sales", "suspend_listing"]);
+/**
+ * What a moderation decision does. The first five are decisions on a report; hold_offer and
+ * reject_offer act on one offer (POST /v1/admin/review/offers/:id/decision). Every one except
+ * no_action sends the creator a notice they can appeal.
+ */
+export const ModerationActionKind = z.enum(["no_action", "restrict_release", "restrict_sales", "suspend_listing", "suspend_store", "hold_offer", "reject_offer"]);
 export type ModerationActionKind = z.infer<typeof ModerationActionKind>;
+/** The decisions a moderator can take on a report. */
+export const ReportActionKind = z.enum(["no_action", "restrict_release", "restrict_sales", "suspend_listing", "suspend_store"]);
+export type ReportActionKind = z.infer<typeof ReportActionKind>;
 
 export const AppealStatus = z.enum(["open", "upheld", "reversed"]);
 export type AppealStatus = z.infer<typeof AppealStatus>;

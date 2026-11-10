@@ -6,8 +6,8 @@
       "name": "Lua Standalone",
       "kind": "runtime",
       "status": "available",
-      "sales": "allowed",
-      "salesNote": "",
+      "platformRules": "no_restriction",
+      "platformRulesNote": "",
       "luaDialects": [
         "5.1",
         "5.4",
@@ -259,8 +259,8 @@
       "name": "LÖVE",
       "kind": "runtime",
       "status": "beta",
-      "sales": "allowed",
-      "salesNote": "",
+      "platformRules": "no_restriction",
+      "platformRulesNote": "",
       "luaDialects": [
         "LuaJIT"
       ],
@@ -383,8 +383,8 @@
       "name": "Godot 4",
       "kind": "runtime",
       "status": "beta",
-      "sales": "allowed",
-      "salesNote": "",
+      "platformRules": "no_restriction",
+      "platformRulesNote": "",
       "luaDialects": [
         "5.4",
         "LuaJIT"
@@ -499,8 +499,8 @@
       "name": "Luanti",
       "kind": "runtime",
       "status": "beta",
-      "sales": "allowed",
-      "salesNote": "",
+      "platformRules": "no_restriction",
+      "platformRulesNote": "",
       "luaDialects": [
         "5.1",
         "LuaJIT"
@@ -612,8 +612,8 @@
       "name": "OPEN//77",
       "kind": "mod_platform",
       "status": "experimental",
-      "sales": "review",
-      "salesNote": "Paid packages are reviewed first: the game's rights holder restricts commercial use of its IP.",
+      "platformRules": "unsettled",
+      "platformRulesNote": "The game's rights holder restricts commercial use of its IP.",
       "luaDialects": [
         "5.4"
       ],
@@ -747,8 +747,8 @@
       "name": "OpenResty",
       "kind": "runtime",
       "status": "planned",
-      "sales": "allowed",
-      "salesNote": "",
+      "platformRules": "no_restriction",
+      "platformRulesNote": "",
       "luaDialects": [
         "LuaJIT"
       ],
@@ -784,8 +784,8 @@
       "name": "Defold",
       "kind": "runtime",
       "status": "planned",
-      "sales": "allowed",
-      "salesNote": "",
+      "platformRules": "no_restriction",
+      "platformRulesNote": "",
       "luaDialects": [
         "LuaJIT"
       ],
@@ -822,8 +822,8 @@
       "name": "Neovim",
       "kind": "runtime",
       "status": "beta",
-      "sales": "allowed",
-      "salesNote": "",
+      "platformRules": "no_restriction",
+      "platformRulesNote": "",
       "luaDialects": [
         "LuaJIT"
       ],
@@ -957,8 +957,8 @@
       "name": "CC: Tweaked (Minecraft)",
       "kind": "mod_platform",
       "status": "experimental",
-      "sales": "free_only",
-      "salesNote": "Free packages only: the Minecraft EULA lets you do what you want with your mods \"as long as you don't sell them for money\" (minecraft.net/en-us/eula).",
+      "platformRules": "restricts_paid",
+      "platformRulesNote": "The Minecraft EULA lets you do what you want with your mods \"as long as you don't sell them for money\" (minecraft.net/en-us/eula).",
       "luaDialects": [
         "5.2"
       ],
@@ -980,7 +980,7 @@
         "tier": "none",
         "state": "available",
         "optIn": false,
-        "note": "Free packages only here, so nothing is sold or licensed. Releases are still signed."
+        "note": "No licence check in this adapter, so a package runs there without one. Releases are still signed."
       },
       "proof": [
         {
@@ -1016,16 +1016,16 @@
         "config": "Per-resource values from /scriptgo/config.json; convars from config.json, then the computer's settings.",
         "events": "Server and client run on the same computer; network events between them are looped back through the value codec.",
         "http": "CC: Tweaked's asynchronous http API. The server owner decides in computercraft-server.toml whether it is on and which hosts answer ([[http.rules]]; private and local addresses are denied by default). Redirects are not followed.",
-        "licensing": "Not offered: the Minecraft Usage Guidelines allow a mod only if it \"cannot be used to directly or indirectly verify whether a player owns or has access to out-of-game content, products, or services that affect in-game features and functions\" (minecraft.net/en-us/usage-guidelines).",
+        "licensing": "Not implemented: this adapter was built without a licence check, after the Minecraft Usage Guidelines, which allow a mod only if it \"cannot be used to directly or indirectly verify whether a player owns or has access to out-of-game content, products, or services that affect in-game features and functions\" (minecraft.net/en-us/usage-guidelines).",
         "permissions": "Privileges per player id from /scriptgo/config.json.",
         "players": "One player: the person at the computer's terminal (id 1). The world's other players are not visible.",
         "storage": "JSON files on the computer's own disk (/scriptgo/data/<key>.json), within the server's computer_space_limit (1 MB by default).",
         "ui": "Notifications are lines on the computer's terminal."
       },
-      "setupMarkdown": "Needs a Minecraft: Java Edition server you own or run, with [Fabric](https://fabricmc.net) and the\n[CC: Tweaked](https://tweaked.cc) mod (measured with Minecraft 1.20.1, Fabric loader 0.20.1, Fabric API\n0.92.12 and CC: Tweaked 1.121.0). Not an official Minecraft product. Not approved by or associated\nwith Mojang or Microsoft. Not affiliated with the CC: Tweaked developers.\n\n**Free packages only.** The [Minecraft EULA](https://www.minecraft.net/en-us/eula) lets you do what\nyou want with mods you create \"as long as you don't sell them for money / try to make money from\nthem\", so packages for this environment cannot have paid offers. Licence checks are not offered\neither: the [Minecraft Usage Guidelines](https://www.minecraft.net/en-us/usage-guidelines) allow a mod\nonly if it \"cannot be used to directly or indirectly verify whether a player owns or has access to\nout-of-game content, products, or services that affect in-game features and functions\".\n\n1. Build the computer's files, with your resources:\n\n   ```sh\n   node sdk/adapters/cctweaked/build.mjs --with path/to/my_resource --startup\n   ```\n\n   This writes `dist/cctweaked/computer/`: the SCRIPT//GO core, the adapter, the `sg` program and\n   your resources. Optional: `scriptgo/config.json` there sets permissions, config and convars:\n\n   ```json\n   { \"permissions\": { \"1\": [\"*\"] }, \"resources\": { \"my_resource\": { \"greeting\": \"hi\" } } }\n   ```\n\n2. Place a computer in the world, note its id (`id` in its shell), stop the server and copy the\n   folder's contents into `<world>/computercraft/computer/<id>/`. The default disk of a computer is\n   1 MB (`computer_space_limit` in `<world>/serverconfig/computercraft-server.toml`).\n\n3. Start the server and use the computer: with `--startup` it runs SCRIPT//GO at boot; otherwise\n   type `scriptgo/sg`. At the `sg>` prompt, resource commands run as the person at the terminal\n   (player `1`); `status`, `log`, `restart <name>` and `exit` drive the host.\n\nRunning a Minecraft server, including the headless one `scriptgo verify --env cctweaked` starts,\nmeans accepting the [Minecraft EULA](https://www.minecraft.net/en-us/eula): the operator must accept\nit themselves (`eula=true` in the server's `eula.txt`, or `--accept-minecraft-eula` on a verify run).\nSCRIPT//GO never accepts it for anyone.\n\nHTTP, when a resource uses it, goes through CC: Tweaked's `http` API, so the server's\n`computercraft-server.toml` decides whether it is on and which hosts answer (`[[http.rules]]`; local\nand private addresses are denied by default).\n",
+      "setupMarkdown": "Needs a Minecraft: Java Edition server you own or run, with [Fabric](https://fabricmc.net) and the\n[CC: Tweaked](https://tweaked.cc) mod (measured with Minecraft 1.20.1, Fabric loader 0.20.1, Fabric API\n0.92.12 and CC: Tweaked 1.121.0). Not an official Minecraft product. Not approved by or associated\nwith Mojang or Microsoft. Not affiliated with the CC: Tweaked developers.\n\n**The platform's own rules.** The [Minecraft EULA](https://www.minecraft.net/en-us/eula) lets you do\nwhat you want with mods you create \"as long as you don't sell them for money / try to make money from\nthem\". SCRIPT//GO does not enforce a platform's rules: you answer to the platform's rights holder for\nwhat you run on your server.\n\n**No licence check.** This adapter has none. It was built without one after the\n[Minecraft Usage Guidelines](https://www.minecraft.net/en-us/usage-guidelines), which allow a mod\nonly if it \"cannot be used to directly or indirectly verify whether a player owns or has access to\nout-of-game content, products, or services that affect in-game features and functions\". A package\nruns here without a licence check.\n\n1. Build the computer's files, with your resources:\n\n   ```sh\n   node sdk/adapters/cctweaked/build.mjs --with path/to/my_resource --startup\n   ```\n\n   This writes `dist/cctweaked/computer/`: the SCRIPT//GO core, the adapter, the `sg` program and\n   your resources. Optional: `scriptgo/config.json` there sets permissions, config and convars:\n\n   ```json\n   { \"permissions\": { \"1\": [\"*\"] }, \"resources\": { \"my_resource\": { \"greeting\": \"hi\" } } }\n   ```\n\n2. Place a computer in the world, note its id (`id` in its shell), stop the server and copy the\n   folder's contents into `<world>/computercraft/computer/<id>/`. The default disk of a computer is\n   1 MB (`computer_space_limit` in `<world>/serverconfig/computercraft-server.toml`).\n\n3. Start the server and use the computer: with `--startup` it runs SCRIPT//GO at boot; otherwise\n   type `scriptgo/sg`. At the `sg>` prompt, resource commands run as the person at the terminal\n   (player `1`); `status`, `log`, `restart <name>` and `exit` drive the host.\n\nRunning a Minecraft server, including the headless one `scriptgo verify --env cctweaked` starts,\nmeans accepting the [Minecraft EULA](https://www.minecraft.net/en-us/eula): the operator must accept\nit themselves (`eula=true` in the server's `eula.txt`, or `--accept-minecraft-eula` on a verify run).\nSCRIPT//GO never accepts it for anyone.\n\nHTTP, when a resource uses it, goes through CC: Tweaked's `http` API, so the server's\n`computercraft-server.toml` decides whether it is on and which hosts answer (`[[http.rules]]`; local\nand private addresses are denied by default).\n",
       "limitations": [
         "Experimental: one real server run so far, the conformance probe (35 of 35 checks). The official kits fail there only because they do not declare cctweaked yet. Each run needs the operator's own acceptance of the Minecraft EULA.",
-        "Free packages only, and no licence checks (see the sales rule and the licensing note).",
+        "No licence check in this adapter (see the licensing note). What the Minecraft EULA says about paid mods is the platform's own rule, shown as the platform note.",
         "Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft. Not affiliated with the CC: Tweaked developers.",
         "Lua 5.2 (Cobalt VM): no // or bitwise operators (use bit32), no collectgarbage.",
         "Everything runs on one computer: code that runs for about 7 seconds without yielding is stopped by CC: Tweaked (\"Too long without yielding\").",
@@ -1047,8 +1047,8 @@
       "name": ".NET kit",
       "kind": "runtime",
       "status": "experimental",
-      "sales": "allowed",
-      "salesNote": "",
+      "platformRules": "no_restriction",
+      "platformRulesNote": "",
       "luaDialects": [
         "5.4"
       ],
@@ -1163,8 +1163,8 @@
       "name": "Hytale",
       "kind": "mod_platform",
       "status": "planned",
-      "sales": "allowed",
-      "salesNote": "The game's terms allow paid mods and plugins.",
+      "platformRules": "no_restriction",
+      "platformRulesNote": "The game's terms allow paid mods and plugins.",
       "luaDialects": [
         "5.2"
       ],
@@ -1232,8 +1232,8 @@
       "name": "Garry's Mod",
       "kind": "mod_platform",
       "status": "beta",
-      "sales": "allowed",
-      "salesNote": "The developer allows selling mods you own, outside the Steam Workshop.",
+      "platformRules": "no_restriction",
+      "platformRulesNote": "The developer allows selling mods you own, outside the Steam Workshop.",
       "luaDialects": [
         "LuaJIT"
       ],
@@ -1329,8 +1329,8 @@
       "name": "Rust (Oxide/Carbon)",
       "kind": "mod_platform",
       "status": "experimental",
-      "sales": "allowed",
-      "salesNote": "The developer allows selling mods you own.",
+      "platformRules": "no_restriction",
+      "platformRulesNote": "The developer allows selling mods you own.",
       "luaDialects": [
         "5.4"
       ],
@@ -1415,8 +1415,8 @@
       "name": "BeamMP",
       "kind": "mod_platform",
       "status": "planned",
-      "sales": "review",
-      "salesNote": "No published rule on selling mods: free packages only until the rights holder confirms in writing.",
+      "platformRules": "unsettled",
+      "platformRulesNote": "Neither BeamNG nor BeamMP publishes a rule on selling mods.",
       "luaDialects": [
         "5.3"
       ],
@@ -1437,7 +1437,7 @@
         "tier": "license",
         "state": "planned",
         "optIn": false,
-        "note": "Licence check and signed releases, once paid packages are confirmed there. The server plugin is plain Lua, so the operator can read what it loads: no code-secrecy claim."
+        "note": "Licence check and signed releases, once the adapter has passed a run on a real server. The server plugin is plain Lua, so the operator can read what it loads: no code-secrecy claim."
       },
       "proof": [],
       "runtimeVersions": [],
@@ -1460,7 +1460,7 @@
         "config": "scriptgo.json resources and convars.",
         "events": "Server side only: the plugin runs no client scripts, and TriggerClientEvent answers network_unavailable.",
         "http": "curl started in the background through os.execute and polled each tick, so a request never blocks the plugin; needs curl on the server's PATH. BeamMP's own Http.CreateConnection has no POST and drops the response.",
-        "licensing": "Works over the same curl path, but paid listings stay off: no published BeamNG or BeamMP rule on selling mods, so packages stay free until the rights holder confirms in writing.",
+        "licensing": "Over the same curl path, to the scriptgo_api convar.",
         "permissions": "Grants in scriptgo.json, by beammp:<account id>, or by name for players logged in to BeamMP: BeamMP has no server-side roles.",
         "players": "MP.GetPlayers and the join and disconnect events. BeamMP id n is SCRIPT//GO player n + 1 (0 is the console); identifier is beammp:<account id>, beammp-guest:<name> for guests.",
         "storage": "JSON files in the plugin's data/storage folder (scriptgo.json dataDir), replaced atomically.",
@@ -1481,8 +1481,8 @@
       "name": "Roblox",
       "kind": "mod_platform",
       "status": "planned",
-      "sales": "review",
-      "salesNote": "Roblox sells creations through its own store: free packages only until a legal review.",
+      "platformRules": "unsettled",
+      "platformRulesNote": "Roblox sells creations through its own store.",
       "luaDialects": [
         "Luau"
       ],
@@ -1500,7 +1500,7 @@
         "tier": "license",
         "state": "planned",
         "optIn": false,
-        "note": "Licence check and signed releases at most, and only after the legal review. No code-secrecy claim."
+        "note": "Licence check and signed releases at most, once an adapter exists. No code-secrecy claim."
       },
       "proof": [],
       "runtimeVersions": [],
@@ -1519,8 +1519,8 @@
       "name": "FiveM",
       "kind": "mod_platform",
       "status": "planned",
-      "sales": "free_only",
-      "salesNote": "The platform's creator terms keep paid content on its own marketplace: free packages only.",
+      "platformRules": "restricts_paid",
+      "platformRulesNote": "The platform's creator terms keep paid server content on its own marketplace (Rockstar Games Creator Platform License Agreement, 2026-09-10, §3.1(6)).",
       "luaDialects": [
         "5.4"
       ],
@@ -1542,7 +1542,7 @@
         "tier": "none",
         "state": "available",
         "optIn": false,
-        "note": "Free packages only here, so nothing is sold or licensed. Releases are still signed."
+        "note": "No licence check in the shim, so a package runs there without one. Releases are still signed."
       },
       "proof": [],
       "runtimeVersions": [],
@@ -1565,7 +1565,7 @@
         "config": "Server side: the convar <resource>:<key> (set in server.cfg).",
         "events": "FiveM's own events and exports; TriggerEvent runs its handlers at once instead of on the next tick.",
         "http": "Server side, through PerformHttpRequest; redirects are not followed. No host allow-list: the server owner decides what a resource may call.",
-        "licensing": "Unavailable by design: Rockstar's Creator Platform License Agreement (2026-09-10, §3.1(6)) forbids a third-party marketplace that sells or licenses server content, so FiveM packages are free only.",
+        "licensing": "Not implemented: the shim has no licence check. It was written without one after Rockstar's Creator Platform License Agreement (2026-09-10, §3.1(6)), which forbids a third-party marketplace that sells or licenses server content.",
         "logging": "print to the server console (channel script:<resource>) or the client console, with the level in front.",
         "permissions": "Server side: ACE (IsPlayerAceAllowed), granted with add_ace in server.cfg.",
         "players": "Server side: GetPlayers, GetPlayerName, and the license: identifier.",
@@ -1575,7 +1575,7 @@
       "setupMarkdown": "",
       "limitations": [
         "Planned: no run on a real FXServer has passed yet. FXServer does not start without a Cfx.re registration key (sv_licenseKey).",
-        "Free packages only: `scriptgo pack --target fivem` refuses licensed packages.",
+        "No licence check: `scriptgo pack --target fivem` refuses a package that needs one (`licensed true`, or the licensing capability), because the shim could not enforce it.",
         "Only the server half can be verified; the client half needs the game.",
         "`require` finds no resource module on FiveM: list every module as a script.",
         "The client has no `os`: ScriptGo.time.now() is nil there.",
@@ -1590,8 +1590,8 @@
       "name": "RedM",
       "kind": "mod_platform",
       "status": "planned",
-      "sales": "free_only",
-      "salesNote": "The platform's creator terms keep paid content on its own marketplace: free packages only.",
+      "platformRules": "restricts_paid",
+      "platformRulesNote": "The platform's creator terms keep paid server content on its own marketplace (Rockstar Games Creator Platform License Agreement, 2026-09-10, §3.1(6)).",
       "luaDialects": [
         "5.4"
       ],
@@ -1609,7 +1609,7 @@
         "tier": "none",
         "state": "available",
         "optIn": false,
-        "note": "Free packages only here, so nothing is sold or licensed. Releases are still signed."
+        "note": "It would run the FiveM shim, which has no licence check, so a package runs there without one. Releases are still signed."
       },
       "proof": [],
       "runtimeVersions": [],
@@ -1628,8 +1628,8 @@
       "name": "KCD:MP",
       "kind": "mod_platform",
       "status": "planned",
-      "sales": "free_only",
-      "salesNote": "The game's developer does not allow selling mods: free packages only.",
+      "platformRules": "restricts_paid",
+      "platformRulesNote": "The game's developer does not allow selling mods.",
       "luaDialects": [
         "5.4"
       ],
@@ -1644,10 +1644,10 @@
       "blockedOn": "",
       "integration": null,
       "protection": {
-        "tier": "none",
-        "state": "available",
+        "tier": "license",
+        "state": "planned",
         "optIn": false,
-        "note": "Free packages only here, so nothing is sold or licensed. Releases are still signed."
+        "note": "No adapter yet. Licence check and signed releases are planned with it; the host would run plain script, so its operator could read what it loads: no code-secrecy claim."
       },
       "proof": [],
       "runtimeVersions": [],
@@ -1666,8 +1666,8 @@
       "name": "Project Zomboid",
       "kind": "mod_platform",
       "status": "planned",
-      "sales": "free_only",
-      "salesNote": "The game's terms do not allow selling mods without approval: free packages only.",
+      "platformRules": "restricts_paid",
+      "platformRulesNote": "The game's terms do not allow selling mods without approval.",
       "luaDialects": [
         "5.1"
       ],
@@ -1682,10 +1682,10 @@
       "blockedOn": "",
       "integration": null,
       "protection": {
-        "tier": "none",
-        "state": "available",
+        "tier": "license",
+        "state": "planned",
         "optIn": false,
-        "note": "Free packages only here, so nothing is sold or licensed. Releases are still signed."
+        "note": "No adapter yet. Licence check and signed releases are planned with it; the host would run plain script, so its operator could read what it loads: no code-secrecy claim."
       },
       "proof": [],
       "runtimeVersions": [],
@@ -1704,8 +1704,8 @@
       "name": "Don't Starve Together",
       "kind": "mod_platform",
       "status": "planned",
-      "sales": "free_only",
-      "salesNote": "The game's developer does not allow paid or paywalled mods: free packages only.",
+      "platformRules": "restricts_paid",
+      "platformRulesNote": "The game's developer does not allow paid or paywalled mods.",
       "luaDialects": [
         "5.1"
       ],
@@ -1720,10 +1720,10 @@
       "blockedOn": "",
       "integration": null,
       "protection": {
-        "tier": "none",
-        "state": "available",
+        "tier": "license",
+        "state": "planned",
         "optIn": false,
-        "note": "Free packages only here, so nothing is sold or licensed. Releases are still signed."
+        "note": "No adapter yet. Licence check and signed releases are planned with it; the host would run plain script, so its operator could read what it loads: no code-secrecy claim."
       },
       "proof": [],
       "runtimeVersions": [],
