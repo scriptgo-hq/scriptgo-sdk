@@ -5,8 +5,15 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MANIFEST_FILES, parseManifest, type ParseResult } from "@scriptgo/manifest";
 
-/** Repository root (the CLI runs from the monorepo; a published CLI would bundle `sdk/`). */
-export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
+const here = dirname(fileURLToPath(import.meta.url));
+/**
+ * Where `sdk/` is. The installed CLI is one bundle, `dist/scriptgo.mjs`, with a copy of the SDK's
+ * Lua core, adapters and packages next to it in `dist/sdk/` (packages/cli/build.mjs). Run from the
+ * sources, it is the repository root, four levels up from this file.
+ */
+export const repoRoot = existsSync(join(here, "sdk", "lua", "scriptgo")) ? here : resolve(here, "..", "..", "..", "..");
+/** True when the CLI runs from a checkout of the SDK repository, false when installed from a package. */
+export const fromCheckout = repoRoot !== here;
 export const sdkRoot = join(repoRoot, "sdk");
 export const standaloneMain = join(sdkRoot, "adapters", "standalone", "main.lua");
 

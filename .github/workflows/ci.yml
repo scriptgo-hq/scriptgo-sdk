@@ -22,6 +22,14 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm run test
       - run: pnpm run build
+      - name: The packed CLI installs and runs
+        run: |
+          (cd packages/cli && pnpm pack --pack-destination "$RUNNER_TEMP")
+          npm install -g "$RUNNER_TEMP"/scriptgo-cli-*.tgz
+          scriptgo --version
+          scriptgo init demo_pkg --dir "$RUNNER_TEMP"
+          scriptgo validate "$RUNNER_TEMP/demo_pkg"
+          scriptgo pack "$RUNNER_TEMP/demo_pkg" --target open77 --out "$RUNNER_TEMP/out"
 
   lua:
     name: Lua core (5.1, 5.4, LuaJIT)

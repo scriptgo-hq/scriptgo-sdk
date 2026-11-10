@@ -13,12 +13,21 @@ The CLI is called `scriptgo`. It talks to the same HTTP API as the website (see
 
 ## Install
 
-The CLI ships as the `@scriptgo/cli` package and runs on Node.js 22 or later. Installation
-instructions for a published build will appear here once the package is released. Inside the
-SCRIPT//GO repository, run it as `node packages/cli/bin/scriptgo.mjs <command>`.
+The CLI is the `@scriptgo/cli` package. It runs on Node.js 22 or later, on Windows, Linux and
+macOS. Install it from the SDK's GitHub release:
 
-`test`, `run` and `verify` also need Lua interpreters: the ones `tools/build-lua.ps1` builds into
-`tools/runtimes/bin`, or `lua`/`luajit` on the `PATH`.
+```bash
+npm install -g https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.3/scriptgo-cli-0.1.3.tgz
+scriptgo --version
+```
+
+It is not on the npm registry yet. To update, run the same command with a newer release's URL. In
+a checkout of the SDK, `node packages/cli/bin/scriptgo.mjs <command>` runs it from its sources.
+
+`test`, `run` and `verify` also need a Lua interpreter: `lua`, `lua5.4`, `lua54` or `luajit` on the
+`PATH`, or, in a checkout, the ones `tools/build-lua.ps1` builds into `tools/runtimes/bin`. The
+`godot`, `love2d`, `dotnet`, `hytale` and `rust` runs of `verify` use the SDK's demo projects or
+build its plugins: run those from a checkout.
 
 ## Sign in with an access token
 
@@ -95,8 +104,9 @@ Test scripts are never shipped to clients.
 scriptgo verify inventory_pro --env all
 ```
 
-Runs the resource and writes one `CompatibilityRun` JSON report per run into the repository's
-`verification/reports/` (`--out` to change it). `--env` is `standalone` (the default, one run
+Runs the resource and writes one `CompatibilityRun` JSON report per run into
+`verification/reports/`: the repository's in a checkout, the current folder's otherwise (`--out`
+to change it). `--env` is `standalone` (the default, one run
 per Lua interpreter), `open77`, `luanti`, `love2d`, `godot`, `neovim`, `dotnet` or `all`:
 
 - `open77` packs the resource and starts a real OPEN//77 dedicated server given with

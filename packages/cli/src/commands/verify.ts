@@ -68,7 +68,7 @@ import { join, resolve } from "node:path";
 import type { ParsedManifest } from "@scriptgo/manifest";
 import { CompatibilityRunSchema, type CompatibilityRun } from "@scriptgo/shared";
 import { parseArgs } from "../lib/args.ts";
-import { defaultSearchPaths, findManifestFile, listFiles, pickInterpreters, readResource, repoRoot, standaloneMain, type LoadedResource } from "../lib/sdk.ts";
+import { defaultSearchPaths, findManifestFile, fromCheckout, listFiles, pickInterpreters, readResource, repoRoot, standaloneMain, type LoadedResource } from "../lib/sdk.ts";
 import { writeReadmeExample, type ReadmeExample } from "../lib/readme-example.ts";
 import { startStubApi, type StubRequest } from "../lib/stub-api.ts";
 import { acceptMinecraftEula, verifyCcTweaked } from "../lib/cctweaked.ts";
@@ -773,7 +773,8 @@ export async function run(args: string[]): Promise<number> {
   const m = res.result.manifest;
   const search = [...a.multi.search!.map((s) => resolve(s)), ...defaultSearchPaths()];
   const env = a.flags.env ?? "standalone";
-  const out = resolve(a.flags.out ?? join(repoRoot, "verification", "reports"));
+  // In a checkout, the repository's verification/reports; installed, the current folder's.
+  const out = resolve(a.flags.out ?? join(fromCheckout ? repoRoot : ".", "verification", "reports"));
   const reports: Report[] = [];
   const stubServer = a.bools.has("stub-api") ? await startStubApi({ packages: stubPackages(m) }) : undefined;
   let stub: ApiTarget | undefined;

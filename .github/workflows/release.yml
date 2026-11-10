@@ -27,7 +27,7 @@ jobs:
       - name: Tag matches the package versions
         run: |
           tag="${GITHUB_REF_NAME#v}"
-          for p in shared manifest escrow types; do
+          for p in shared manifest escrow types cli; do
             v=$(node -p "require('./packages/$p/package.json').version")
             [ "$v" = "$tag" ] || { echo "packages/$p is $v, tag is $tag"; exit 1; }
           done
@@ -38,15 +38,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p release
-          for p in shared manifest escrow types; do (cd "packages/$p" && pnpm pack --pack-destination ../../release); done
-          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "SCRIPT//GO SDK ${GITHUB_REF_NAME#v}" --notes "npm packages as tarballs."
+          for p in shared manifest escrow types cli; do (cd "packages/$p" && pnpm pack --pack-destination ../../release); done
+          # The CLI tarball installs on its own (one bundle, esbuild its only dependency): prove it.
+          npm install -g ./release/scriptgo-cli-*.tgz && scriptgo --version && scriptgo init demo_pkg --dir "$RUNNER_TEMP" && scriptgo validate "$RUNNER_TEMP/demo_pkg"
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "SCRIPT//GO SDK ${GITHUB_REF_NAME#v}" --notes "npm packages as tarballs. The CLI: npm install -g https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/${GITHUB_REF_NAME}/scriptgo-cli-${GITHUB_REF_NAME#v}.tgz"
           gh release upload "$GITHUB_REF_NAME" release/*.tgz --clobber
       - name: Publish to npm
         if: env.HAS_NPM_TOKEN == 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
-        run: pnpm -r --filter "./packages/{shared,manifest,escrow,types}" publish --access public --no-git-checks
+        run: pnpm -r --filter "./packages/{shared,manifest,escrow,types,cli}" publish --access public --no-git-checks
       - name: No token
         if: env.HAS_NPM_TOKEN != 'true'
         run: echo "::warning::NPM_TOKEN is not set; nothing was published."

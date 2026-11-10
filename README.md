@@ -37,16 +37,29 @@ MIT-licensed: use it, change it, and sell what you build with it.
 
 Each adapter's README says exactly what was run and what was not.
 
-## Quick start
+## Install the CLI
+
+Node.js 22 or later, on Windows, Linux or macOS:
+
+```bash
+npm install -g https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.3/scriptgo-cli-0.1.3.tgz
+scriptgo init my_script
+scriptgo test my_script        # needs lua, lua5.4 or luajit on the PATH
+```
+
+The CLI talks to the production API, `https://api.scriptgo.dev`. `--api <url>` or `SCRIPTGO_API`
+points it at another one (a local API in development).
+
+## Work on the SDK
 
 Requirements: Node 22+, Corepack (pnpm). Lua interpreters for the Lua tests; the .NET 10 SDK for
 the .NET kit.
 
 ```bash
 corepack pnpm install
-node packages/cli/bin/scriptgo.mjs init my-script
-node packages/cli/bin/scriptgo.mjs test my-script
-node packages/cli/bin/scriptgo.mjs verify my-script --env standalone
+node packages/cli/bin/scriptgo.mjs init my_script
+node packages/cli/bin/scriptgo.mjs test my_script
+node packages/cli/bin/scriptgo.mjs verify my_script --env standalone
 ```
 
 Run the tests:
@@ -67,11 +80,13 @@ dotnet test --project sdk/dotnet/ScriptGo.Host.Tests
 | `@scriptgo/manifest` | The manifest parser and validator |
 | `@scriptgo/escrow` | Protected releases: format, signing, sealing, watermarking |
 | `@scriptgo/types` | TypeScript declarations of the runtime API, for scripts in TypeScript |
+| `@scriptgo/cli` | The `scriptgo` command line, bundled into one file with the SDK's Lua core and adapters |
 
 In this repository they run from their TypeScript sources; `pnpm run build` emits `dist/`, which is
 what npm receives. A tag `v<version>` publishes them (`.github/workflows/release.yml`): its GitHub
-release carries the tarballs, installable by URL, and npm gets them once the scope is live. The CLI
-is not on npm yet: run it from a checkout as above. `ScriptGo.Escrow` for NuGet is packed by
+release carries the tarballs, installable by URL
+(`https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v<version>/scriptgo-<package>-<version>.tgz`),
+and npm gets them once the scope is live. `ScriptGo.Escrow` for NuGet is packed by
 [`sdk/dotnet/pack.ps1`](sdk/dotnet/pack.ps1).
 
 ## Bring SCRIPT//GO to your platform

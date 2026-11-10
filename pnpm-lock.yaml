@@ -168,6 +168,10 @@ importers:
 
   packages/cli:
     dependencies:
+      esbuild:
+        specifier: 0.25.12
+        version: 0.25.12
+    devDependencies:
       '@scriptgo/escrow':
         specifier: workspace:*
         version: link:../escrow
@@ -177,19 +181,15 @@ importers:
       '@scriptgo/shared':
         specifier: workspace:*
         version: link:../shared
-      esbuild:
-        specifier: 0.25.12
-        version: 0.25.12
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.20.5
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
       tsx:
         specifier: ^4.19.0
         version: 4.23.15
-    devDependencies:
-      '@types/node':
-        specifier: ^22.15.0
-        version: 22.20.5
       typescript:
         specifier: ^5.8.0
         version: 5.9.3
