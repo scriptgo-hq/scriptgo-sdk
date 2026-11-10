@@ -41,4 +41,8 @@
           CopyToOutputDirectory="PreserveNewest" Visible="false" />
     <None Include="$(MSBuildThisFileDirectory)../../native/THIRD-PARTY-NOTICES.txt" Pack="true" PackagePath="/" Visible="false" />
   </ItemGroup>
+  <Target Name="ScriptGoNativeHint" BeforeTargets="Build"
+          Condition="'$(OS)' == 'Windows_NT' And !Exists('$(ScriptGoNativeDist)win-x64/scriptgo.dll')">
+    <Message Importance="high" Text="ScriptGo.Escrow: sdk/native/dist/win-x64/scriptgo.dll is missing, so the native escrow backend will be unavailable at run time. Build it once with: pwsh -ExecutionPolicy Bypass -File sdk/native/build.ps1" />
+  </Target>
 </Project>

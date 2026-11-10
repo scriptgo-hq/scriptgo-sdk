@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- "Acme Engine": a fictional third-party game server with ITS OWN small Lua sandbox, running an
+       escrowed SCRIPT//GO resource. It uses ScriptGo.Escrow and nothing else from SCRIPT//GO: no
+       ScriptGo.Host, no SCRIPT//GO sandbox. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>acme-engine</AssemblyName>
+    <RootNamespace>Acme.Engine</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Acme's own Lua: the same NuGet package any .NET game server might already use. -->
+    <PackageReference Include="KeraLua" Version="1.4.9" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Inside this repository: a project reference. In your own repository, replace it with
+           <PackageReference Include="ScriptGo.Escrow" Version="0.1.0" />
+         from a feed that holds the package (see README.md, "From another repository"). -->
+    <ProjectReference Include="../../dotnet/ScriptGo.Escrow/ScriptGo.Escrow.csproj" />
+  </ItemGroup>
+</Project>

@@ -75,7 +75,7 @@ public sealed class EscrowLeaseTests
     [TestMethod]
     public async Task ARevokedLicenseRunsUntilTheEndOfGraceThenStopsAndIsWiped()
     {
-        foreach (var backend in new[] { EscrowBackend.Native, EscrowBackend.Managed })
+        foreach (var backend in EscrowKit.AvailableBackends())
         {
             var (content, keys, time, identity) = await Open(backend);
             using (identity) using (content)

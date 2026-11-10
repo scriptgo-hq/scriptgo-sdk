@@ -40,7 +40,7 @@ public sealed record EscrowRenewal(EscrowLeaseState State, string? Reason, DateT
 public sealed class EscrowRenewalOptions
 {
     /// <summary>How long before <see cref="EscrowContent.ExpiresAt"/> to ask again. Default: a third of
-    /// the lease, never less than 5 seconds nor more than 5 minutes.</summary>
+    /// the lease, never less than 1 second nor more than 5 minutes.</summary>
     public TimeSpan? RenewBefore { get; init; }
 
     /// <summary>How often to retry while on grace. Default 30 seconds.</summary>
@@ -317,7 +317,7 @@ public sealed class EscrowContent : IDisposable
                     if (_pendingReason is null)
                     {
                         var lease = _expiresAt - _leaseStart;
-                        var margin = options.RenewBefore ?? Clamp(lease / 3, TimeSpan.FromSeconds(5), TimeSpan.FromMinutes(5));
+                        var margin = options.RenewBefore ?? Clamp(lease / 3, TimeSpan.FromSeconds(1), TimeSpan.FromMinutes(5));
                         due = _expiresAt - margin;
                         if (due <= _leaseStart) due = _leaseStart + lease / 2; // a lease shorter than the margin
                     }

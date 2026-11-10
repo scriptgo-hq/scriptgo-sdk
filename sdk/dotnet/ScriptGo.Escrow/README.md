@@ -122,7 +122,7 @@ The native library ships in this package under `runtimes/<rid>/native/`. **Today
 - The wire format, for any language: `docs/spec/escrow.md`.
 - The native library and its C ABI, for C/C++ and FFI hosts: `sdk/native/`.
 - The full guide, with the call sequence and a checklist: `docs/guides/bring-escrow-to-your-platform.md`.
-- A complete third-party host in about 300 lines: `sdk/examples/custom-adapter-dotnet/`.
+- A complete third-party host in under 400 lines, its own sandbox included: `sdk/examples/custom-adapter-dotnet/`.
 
 Third-party notices for the native library (libsodium, ISC; miniz, MIT) are in
 `THIRD-PARTY-NOTICES.txt` in this package.

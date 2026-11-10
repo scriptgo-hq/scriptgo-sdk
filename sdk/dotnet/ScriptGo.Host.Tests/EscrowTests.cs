@@ -198,20 +198,13 @@ public sealed class EscrowTests
 
     // ------------------------------------------------------------------ refusals, on both backends
 
-    private static IEnumerable<EscrowBackend> AvailableBackends()
-    {
-        if (EscrowNativeLibrary.IsAvailable) yield return EscrowBackend.Native;
-        yield return EscrowBackend.Managed;
-    }
-
     [TestMethod]
     public async Task RefusesATamperedPayload()
     {
-        EscrowKit.RequireNative();
         var v = EscrowVector.Load();
         // One flipped bit in payload.enc: it no longer matches the hash in the signed manifest.
         var tampered = EscrowKit.Tamper(v, files => files["payload.enc"][5] ^= 0x01);
-        foreach (var backend in AvailableBackends())
+        foreach (var backend in EscrowKit.AvailableBackends())
         {
             using var identity = v.ServerIdentity(backend);
             var e = await Refused(tampered, identity, EscrowKit.VectorKeys(v), v.signerPublicKeyB64Url);
@@ -224,7 +217,7 @@ public sealed class EscrowTests
         var payload = EscrowKit.Unzip(v.Bundle)["payload.enc"];
         payload[^1] ^= 0x01;
         var resigned = EscrowKit.Signed(v, payload, Base64Url.Decode(EscrowBundle.Read(v.Bundle).Manifest.Payload.Nonce));
-        foreach (var backend in AvailableBackends())
+        foreach (var backend in EscrowKit.AvailableBackends())
         {
             using var identity = v.ServerIdentity(backend);
             var e = await Refused(resigned, identity, EscrowKit.VectorKeys(v), v.signerPublicKeyB64Url);
@@ -235,9 +228,8 @@ public sealed class EscrowTests
     [TestMethod]
     public async Task RefusesAnUnboundServer()
     {
-        EscrowKit.RequireNative();
         var v = EscrowVector.Load();
-        foreach (var backend in AvailableBackends())
+        foreach (var backend in EscrowKit.AvailableBackends())
         {
             // This server holds the bundle and even the wrapped key, but not the bound private key.
             using var stranger = EscrowIdentity.Generate(backend);
@@ -250,7 +242,6 @@ public sealed class EscrowTests
     [TestMethod]
     public async Task RefusesABadSignatureBeforeAskingForAKey()
     {
-        EscrowKit.RequireNative();
         var v = EscrowVector.Load();
         // The manifest claims another version: the signature no longer covers it.
         var forged = EscrowKit.Tamper(v, files =>
@@ -258,7 +249,7 @@ public sealed class EscrowTests
         // A README changed after signing.
         var readme = EscrowKit.Tamper(v, files => files["README.md"] = "# demo\nedited after signing\n"u8.ToArray());
 
-        foreach (var backend in AvailableBackends())
+        foreach (var backend in EscrowKit.AvailableBackends())
         {
             using var identity = v.ServerIdentity(backend);
             var keys = EscrowKit.VectorKeys(v);
@@ -284,14 +275,13 @@ public sealed class EscrowTests
     [TestMethod]
     public async Task RefusesHostileArchivesBehindAValidSignatureAndKey()
     {
-        EscrowKit.RequireNative();
         var v = EscrowVector.Load();
         // Each payload authenticates under the real content key and sits behind a valid signature:
         // only the archive checks stand between it and the host.
         foreach (var (name, hostile) in v.hostile)
         {
             var bundle = EscrowKit.Signed(v, Convert.FromHexString(hostile.payloadHex), Convert.FromHexString(hostile.nonceHex));
-            foreach (var backend in AvailableBackends())
+            foreach (var backend in EscrowKit.AvailableBackends())
             {
                 using var identity = v.ServerIdentity(backend);
                 var e = await Refused(bundle, identity, EscrowKit.VectorKeys(v), v.signerPublicKeyB64Url);
@@ -313,9 +303,8 @@ public sealed class EscrowTests
     [TestMethod]
     public async Task ReportsALicenseRefusalAndAnUnreachableServiceDifferently()
     {
-        EscrowKit.RequireNative();
         var v = EscrowVector.Load();
-        foreach (var backend in AvailableBackends())
+        foreach (var backend in EscrowKit.AvailableBackends())
         {
             using var identity = v.ServerIdentity(backend);
             foreach (var reason in new[] { "revoked", "expired", "refunded", "unbound", "not_escrowed", "unknown_key" })
@@ -429,8 +418,7 @@ public sealed class EscrowTests
     [TestMethod]
     public void ADamagedIdentityFileIsAnErrorNeverANewIdentity()
     {
-        EscrowKit.RequireNative();
-        foreach (var backend in AvailableBackends())
+        foreach (var backend in EscrowKit.AvailableBackends())
         {
             var path = TempFile("damaged.identity");
             try

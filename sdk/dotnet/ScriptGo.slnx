@@ -4,4 +4,6 @@
   <Project Path="ScriptGo.Host.Tests/ScriptGo.Host.Tests.csproj" />
   <Project Path="ScriptGo.Host/ScriptGo.Host.csproj" />
   <Project Path="../adapters/open77/escrow/runner/ScriptGo.Open77.Escrow.Runner.csproj" />
+  <Project Path="../examples/custom-adapter-dotnet/AcmeEngine.csproj" />
+  <Project Path="../examples/host-escrow-dotnet/HostEscrow.csproj" />
 </Solution>

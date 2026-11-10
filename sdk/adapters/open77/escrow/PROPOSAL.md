@@ -28,12 +28,15 @@ A SCRIPT//GO component the operator installs and runs next to their server. It:
 1. verifies the escrow release signature (ed25519, provenance),
 2. asks the master for the content key **wrapped to this server's X25519 key** (the key endpoint,
    gated on the existing license verify),
-3. unwraps and **decrypts the resource in C#** (`ScriptGo.Host.Escrow.EscrowLoader`), never in the
+3. unwraps and **decrypts the resource in the loader** (the `ScriptGo.Escrow` package, whose native
+   library libscriptgo holds the keys; before 2026-11-10 this was `ScriptGo.Host.Escrow`), never in the
    KeraLua VM,
 4. writes the decrypted resource into the server's **resources root as a normal `open77.lua` folder**
-   (`ScriptGo.Host.Escrow.EscrowMaterializer`), which OPEN//77 then discovers unchanged.
+   (`ScriptGo.Host.EscrowMaterializer`, over `ScriptGo.Escrow.EscrowDiskFallback`), which OPEN//77
+   then discovers unchanged.
 
-This is `ScriptGo.Host.dll` plus the thin runner in `runner/` (`scriptgo-open77-escrow`). **OPEN//77
+This is `ScriptGo.Escrow.dll` (with its native library) and `ScriptGo.Host.dll` (only to read the
+resource name from the manifest) plus the thin runner in `runner/` (`scriptgo-open77-escrow`). **OPEN//77
 needs no change and never references SCRIPT//GO.**
 
 **The one honest caveat for OPEN//77 specifically:** because OPEN//77 reads scripts from disk, Option A
@@ -46,7 +49,7 @@ content key is only ever released, wrapped, to a licensed bound server. To keep 
 memory and off disk, use Option B.
 
 Proven here end-to-end against the real host code path in `ScriptGo.Host.Tests`
-(`EscrowTests.MaterializesAndRunsFromDiskLikeOpen77`): a bundle is materialized to a resources root
+(`EscrowHostTests.MaterializesAndRunsFromDiskLikeOpen77`): a bundle is materialized to a resources root
 and then loaded **from disk** by a `ScriptGoHost` with the default `FolderFiles` provider — exactly
 how `ServerResourceHost.Discover`/`ReadFromDisk` load a local resource — and the decrypted script
 runs. An unbound or revoked server is refused before anything is written.
@@ -63,7 +66,7 @@ default-off hook. The exact minimal change is in `option-b.patch` (NOT applied t
 4. in `Start(...)`, one line: `input ??= _escrow?.Prepare(slot.Source) ?? PreparedResourceScripts.ReadFromDisk(slot.Source);`
    so an escrow resource's **in-memory** decrypted scripts are used instead of a disk read.
 
-The provider is implemented in a **separate SCRIPT//GO assembly** that references `ScriptGo.Host`
+The provider is implemented in a **separate SCRIPT//GO assembly** that references `ScriptGo.Escrow`
 (the decryptor), constructed by the server's composition root only when a per-server config flag
 (`scripting.scriptgo.enabled` plus a deployment token) is set. Flag off → `null` provider → OPEN//77
 behaves exactly as today. Only the clear `open77.lua` manifest ever needs a path (a temp dir the

@@ -54,6 +54,16 @@ internal static class EscrowKit
         Assert.Inconclusive(message);
     }
 
+    /// <summary>For a test that covers every backend this machine has: the native one must be there on
+    /// Windows x64 (a failure otherwise), and elsewhere the test still runs on the managed backend.</summary>
+    public static IEnumerable<EscrowBackend> AvailableBackends()
+    {
+        if (EscrowNativeLibrary.IsAvailable) yield return EscrowBackend.Native;
+        else if (OperatingSystem.IsWindows() && System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.X64)
+            Assert.Fail("libscriptgo is not available: " + EscrowNativeLibrary.UnavailableReason + " Build it with sdk/native/build.ps1, then rebuild.");
+        yield return EscrowBackend.Managed;
+    }
+
     // ------------------------------------------------------------------ key services for tests
 
     /// <summary>Answers every request with the same result and counts the requests.</summary>

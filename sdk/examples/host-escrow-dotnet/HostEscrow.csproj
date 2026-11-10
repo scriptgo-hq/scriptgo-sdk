@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The same escrowed resource as ../custom-adapter-dotnet, in the full SCRIPT//GO sandbox. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>scriptgo-host-escrow</AssemblyName>
+    <RootNamespace>ScriptGo.Examples.HostEscrow</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- ScriptGo.Host brings ScriptGo.Escrow with it. In your own repository:
+           <PackageReference Include="ScriptGo.Host" Version="0.1.0" /> -->
+    <ProjectReference Include="../../dotnet/ScriptGo.Host/ScriptGo.Host.csproj" />
+  </ItemGroup>
+</Project>
