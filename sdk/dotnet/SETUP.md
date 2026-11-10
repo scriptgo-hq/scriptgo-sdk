@@ -33,3 +33,15 @@ experimental and has been measured on Windows x64 only.
    ```
 
 To embed the kit in an engine, see `sdk/dotnet/README.md`.
+
+## Player perks
+
+Player perks (`ScriptGo.perks`, `docs/spec/perks.md`): the server asks SCRIPT//GO which of the operator's perks a player has. It needs the server linked to the operator's account (Dashboard, Perks, Servers) and the link's token, a secret, in the host's settings.
+
+```json
+{ "convars": { "scriptgo_api": "https://api.example", "scriptgo_server_token": "sg_srv_..." } }
+```
+
+Lua guests have `ScriptGo.perks`: the kit runs the portable perks module in the guest, over
+`IHostHttp` and `IHostPlayers.Identifier` (the engine's own account id). JavaScript and TypeScript
+guests do not have it yet: `capability_unavailable:perks@dotnet`. The cache is kept in memory.

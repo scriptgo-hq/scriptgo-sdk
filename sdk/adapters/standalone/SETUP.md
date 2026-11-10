@@ -46,3 +46,16 @@ later and a Lua interpreter (`lua`/`luajit` on the `PATH`).
 
 Storage goes to `.scriptgo-data/storage/` (`--data` to change it). HTTP and licensing use the
 system `curl`.
+
+## Player perks
+
+Player perks (`ScriptGo.perks`, `docs/spec/perks.md`): the server asks SCRIPT//GO which of the operator's perks a player has. It needs the server linked to the operator's account (Dashboard, Perks, Servers) and the link's token, a secret, in the host's settings.
+
+```json
+{ "convars": { "scriptgo_api": "https://api.example", "scriptgo_server_token": "sg_srv_..." } }
+```
+
+Players here are the simulated ones, so their identifiers are `local:<name>`: this host is for
+tests and tooling (`node tools/perks-e2e.mjs`), not for real players. The cache is the file
+`storage/scriptgo.perks.json` of the data folder. `scriptgo_perks_poll_seconds` (30) sets how
+often the event queue is pulled.

@@ -55,6 +55,7 @@ shared script, and because its client sandbox has no `setmetatable`.
 | `ui.notify(target, payload)` | server: `Open77.notifications.send/broadcast` (permission `network.events`); client: the `open77_notifications` package's `show` export | both |
 | `http.request{ method, url, headers, body }` | `Open77.http.request` (permission `http.request`) awaited on a promise; answers `{ status, body, headers, error }`, `status = 0` when the exchange did not complete; a request the server refuses at once answers `nil, reason` (`host_not_allowed`, `http_unavailable`...) | server |
 | `licensing.activate/verify` | POST to the `scriptgo_api` convar (default `http://localhost:4100`) over `Open77.http.request`, same request and answer shapes as every SCRIPT//GO host (`/v1/licenses/*`) | server |
+| `perks.*` | The portable core's module `sdk/lua/scriptgo/perks.lua`, included word for word in the server shim by `scriptgo pack`, over `Open77.http.request`, `Open77.players.identifier`, `Open77.time.unix` and the resource's kvp (key `scriptgo.perks`). Convars `scriptgo_api`, `scriptgo_server_token`, optionally `scriptgo_perks_poll_seconds`. Nothing payment-related is in OPEN//77: see `docs/spec/perks.md` | server |
 | events, exports, commands, promises | native OPEN//77 globals, untouched | both |
 
 ### Least privilege

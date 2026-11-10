@@ -739,7 +739,7 @@
       "members": [
         {
           "name": "has",
-          "kind": "function",
+          "kind": "function", "languages": ["lua"],
           "doc": "Whether the player has the perk now. Asked from the API when the player is not known yet or the answer is old; otherwise answered from the cache, which never trusts a perk past its period end nor past the offline grace of the last answer.",
           "params": [{ "name": "player", "type": "value" }, { "name": "key", "type": "string" }],
           "returns": ["boolean", "table"],
@@ -748,7 +748,7 @@
         },
         {
           "name": "list",
-          "kind": "function",
+          "kind": "function", "languages": ["lua"],
           "doc": "Every perk of the operator the player has now: { key, expiresAt, status }, sorted by key.",
           "params": [{ "name": "player", "type": "value" }],
           "returns": ["table"],
@@ -757,7 +757,7 @@
         },
         {
           "name": "refresh",
-          "kind": "function",
+          "kind": "function", "languages": ["lua"],
           "doc": "Asks the API again about one player, whatever is cached.",
           "params": [{ "name": "player", "type": "value" }],
           "returns": ["boolean"],
@@ -766,7 +766,7 @@
         },
         {
           "name": "purchaseLink",
-          "kind": "function",
+          "kind": "function", "languages": ["lua"],
           "doc": "A signed, short-lived link to buy one perk for one player, tied to that player's identifier. Answers the URL and when it expires (Unix seconds).",
           "params": [{ "name": "player", "type": "value" }, { "name": "key", "type": "string" }],
           "returns": ["string", "integer"],
@@ -775,7 +775,7 @@
         },
         {
           "name": "catalog",
-          "kind": "function",
+          "kind": "function", "languages": ["lua"],
           "doc": "What the operator sells: { key, name, description, interval, price, purchasable } for each perk.",
           "params": [],
           "returns": ["table"],
@@ -784,14 +784,14 @@
         },
         {
           "name": "on",
-          "kind": "function",
+          "kind": "function", "languages": ["lua"],
           "doc": "Calls handler(player, key, info) when a perk is granted or removed: a purchase, a refund, a chargeback, the end of a period. kind is \"granted\" or \"removed\"; player is the connected player with that identifier, or nil; info is { identifier, perk, reason, expiresAt }. Answers a handler id.",
           "params": [{ "name": "kind", "type": "string" }, { "name": "handler", "type": "any" }],
           "returns": ["integer"],
           "lua": { "failure": "raise" }
         },
-        { "name": "off", "kind": "function", "doc": "Removes a handler by its id.", "params": [{ "name": "id", "type": "integer" }], "returns": ["boolean"] },
-        { "name": "status", "kind": "function", "doc": "{ linked, configured, cursor, lastPollAt, lastError } of the perks client.", "params": [], "returns": ["table"] }
+        { "name": "off", "kind": "function", "languages": ["lua"], "doc": "Removes a handler by its id.", "params": [{ "name": "id", "type": "integer" }], "returns": ["boolean"] },
+        { "name": "status", "kind": "function", "languages": ["lua"], "doc": "{ linked, configured, cursor, lastPollAt, lastError } of the perks client.", "params": [], "returns": ["table"] }
       ]
     },
     {

@@ -74,6 +74,7 @@ environment that only use that subset run unchanged on every host.
 | `config.get(key, default)` | `config` | Per-resource config from the host |
 | `http.request({ method, url, headers, body })` → `{ status, headers, body }` or `nil, reason` | `http` | Server side, inside a thread (it waits for the answer); only where the host allows outbound HTTP |
 | `licensing.activate(opts)`, `licensing.verify(opts)` → result or `nil, code, body` | `licensing` | Server side; `POST {scriptgo_api}/v1/licenses/activate|verify` |
+| `perks.has(player, key)`, `perks.list(player)`, `perks.purchaseLink(player, key)`, `perks.on(kind, fn)` | `perks` | Server side. What the server's operator sold to a player from their own store, asked from the SCRIPT//GO API with the server link token (`scriptgo_server_token`). One implementation, `sdk/lua/scriptgo/perks.lua`; see `docs/spec/perks.md` |
 
 ## Capabilities
 

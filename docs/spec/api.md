@@ -36,6 +36,8 @@ Classification      = "free" | "software_license" | "seller_declared" | "authori
 LicenseStatus       = "active" | "grace" | "cancelled_active" | "expired" | "revoked" | "refunded"
 LicenseSource       = "provider" | "admin" | "creator"   // a payment event | a staff grant | a free grant by the package's creator
 GrantRecipientKind  = "account" | "server_key"
+PerkInterval        = "month" | "perpetual"            // player perks (ADR-0038, docs/spec/perks.md)
+PerkEventKind       = "granted" | "updated" | "removed"
 ActivationStatus    = "pending" | "active" | "offline_grace" | "deactivated" | "blocked"
 StoreStatus         = "not_connected" | "sandbox" | "checkout_off" | "live" | "needs_attention" | "suspended"
 CaseStatus          = "received" | "under_review" | "action_taken" | "no_action" | "escalated" | "appeal_open" | "closed"
@@ -447,6 +449,78 @@ Accepted events answer `200 { received: true, duplicate, status }`, `status` one
 `deferred` (about something not issued yet; replayed when it is), `ignored`, `failed` (a permanent
 mismatch, acknowledged so the provider stops retrying). Events are idempotent on
 (provider, event id): a duplicate is a no-op.
+
+Since ADR-0038 a provider event is about a license **or about a player's perk**: a checkout is for
+an offer (an account buys a license) or for a perk (a player buys it, with no account), and the same
+verification, deduplication, money check and state rules apply to both. A payment event row names
+the one it touched (`licenseId` or `playerPerkId`).
+
+## Player perks (ADR-0038)
+
+An operator sells a perk to the players of their own servers, from their own store; a linked game
+server asks SCRIPT//GO who has it. The protocol, with every request and answer, the purchase link
+and the script API are in `docs/spec/perks.md`. The routes:
+
+```
+# The operator (session or PAT; requires a creator profile)
+GET    /v1/creator/perks                       → Perk[]
+POST   /v1/creator/perks                       CreatePerkBody → 201 Perk
+POST   /v1/creator/perks/:id/declare           PerkRights → Perk
+DELETE /v1/creator/perks/:id                   → 204 (no longer sold; holders keep it)
+GET    /v1/creator/perk-holders[?perk=key]     → PerkHolder[]
+GET    /v1/creator/server-links                → ServerLink[]
+POST   /v1/creator/server-links                { name } → 201 { link: ServerLink, token }   (token shown once)
+POST   /v1/creator/server-links/:id/revoke     → ServerLink
+
+# The game server (Authorization: Bearer sg_srv_…; 401 unknown_server_link without a valid link)
+POST   /v1/perks/check                         { player, environment?, adapterVersion? } → { player, perks: HeldPerk[], serverTime }
+GET    /v1/perks/events[?after=seq][&limit=n]  → { events: PerkEvent[], cursor, more, serverTime }
+POST   /v1/perks/events/ack                    { upTo } → { acked }
+GET    /v1/perks/catalog                       → PerkCatalogEntry[]
+POST   /v1/perks/purchase-link                 { player, perk } → 201 { url, expiresAt }
+
+# The player who follows a purchase link (no account; the signed link is the authorisation)
+GET    /v1/perks/purchase?token=…              → PerkPurchaseInfo        404 invalid_link, 410 link_expired
+POST   /v1/perks/purchase/checkout             { token } → 201 { checkoutId, redirectUrl }   409 checkout_disabled
+GET    /v1/perks/checkouts/:id                 → { checkoutId, status, perk, operator, player }
+
+# Staff, after a report
+GET    /v1/admin/perks[?operator=username]     → StaffPerk[]   (on hold or withdrawn; with operator: all of theirs)
+POST   /v1/admin/perks/:id/decision            { decision: "on_hold" | "rejected" | "lift", reason, caseId? } → StaffPerk
+```
+
+```ts
+Perk        = { id, key, name, description, interval: PerkInterval, price: Money, provider, providerProductId,
+                classification: Classification, classificationReason, declared, active,
+                purchasable, notPurchasableReason, holders, createdAt }
+CreatePerkBody = { key, name, description?, interval, price: Money, provider?, providerProductId?,
+                   rights?: { ownsCode, targetsProprietaryGame } }
+ServerLink  = { id, name, tokenPreview, environment, adapterVersion, lastSeenAt, pendingEvents, revoked, createdAt }
+PerkHolder  = { id, perkKey, perkName, player, status: LicenseStatus, has, currentPeriodEnd, cancelledAt, refundedAt,
+                revokedReason, disputed, provider, paymentRef, subscriptionRef, serverLinkName, createdAt }
+HeldPerk    = { key, status: LicenseStatus, expiresAt: Timestamp | null, offlineGraceUntil: Timestamp }
+PerkEvent   = { seq, kind: PerkEventKind, perk, player, reason, status: LicenseStatus,
+                expiresAt: Timestamp | null, offlineGraceUntil: Timestamp | null, at: Timestamp }
+```
+
+- **Keys and identifiers.** A perk key is `^[a-z0-9][a-z0-9_.-]{0,63}$`, unique per operator. A
+  player is the identifier string of the host's `ScriptGo.players.identifier`: 1 to 128 printable
+  ASCII characters, no spaces, opaque to SCRIPT//GO.
+- **Selling rules.** A perk is purchasable when `offerCheckoutState` says so, exactly as an offer:
+  the seller's declaration (`rights`, or `/declare`), no reviewer, no environment, no store
+  approval; a hold by staff (`on_hold`, `rejected`) or a suspended store closes the purchase path
+  (`409 not_purchasable` for a server asking for a link, `409 checkout_disabled` at checkout), with
+  a notice and an appeal. Holders keep what they hold.
+- **The server link token** is a secret like a deployment token: `sg_srv_…`, stored as a SHA-256
+  hash, returned once at creation, revocable (not reversible). Limits: 600 requests a minute per
+  token (60 for purchase links) on top of the per-address limits; `PERK_SERVER_LINKS_PER_OPERATOR`
+  (50) live links per account.
+- **Isolation.** Every server-facing answer is selected by the operator of the link the token
+  designates; no route takes an operator as a parameter.
+- **The purchase link** is a compact JWS (header `{ alg: "EdDSA", typ: "sg-perk-purchase-link+jws", kid }`)
+  whose payload is `{ iss, typ: "perk-purchase", v: 1, op, perk, player, link, iat, exp }`. Its key is
+  an ed25519 key of its own, derived from the server secret with HKDF-SHA256 for this purpose; the
+  license-token key and the release key sign nothing else. `PERK_PURCHASE_LINK_TTL_SECONDS` (900).
 
 ## Selling rules (ADR-0037)
 

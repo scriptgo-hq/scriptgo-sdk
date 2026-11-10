@@ -87,3 +87,15 @@ guarantee, and the operator of the machine can ultimately recover what their own
 5. `scriptgo status` shows each escrowed resource: `pending_key` while the key is on its way, then
    `started  [escrow licensed, ...]`, or `failed  [escrow <reason>: ...]`. The reasons are listed in
    README.md, "Refusals". After fixing the cause, `scriptgo start <name>` asks the key service again.
+
+## Player perks
+
+Player perks (`ScriptGo.perks`, `docs/spec/perks.md`): the server asks SCRIPT//GO which of the operator's perks a player has. It needs the server linked to the operator's account (Dashboard, Perks, Servers) and the link's token, a secret, in the host's settings. In the plugin's configuration, next to `scriptgo_api`:
+
+```json
+"convars": { "scriptgo_api": "https://api.example.com", "scriptgo_server_token": "sg_srv_..." }
+```
+
+A player is `steam:<steamid64>`. The cache goes to the plugin's data files (`scriptgo.perks`). This
+is unit-tested in the bridge with fake services; it has not been run on a Rust server with a
+connected player.
