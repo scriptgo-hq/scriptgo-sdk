@@ -27,7 +27,13 @@ import { ParsedManifestSchema } from "./manifest.ts";
 export const LastRun = z.object({ status: CompatibilityStatus, ranAt: Timestamp, runId: z.string() });
 
 /** What a buyer's server gets in one environment: the tier, whether it works today, one honest sentence. */
-export const EnvironmentProtection = z.object({ tier: ProtectionTier, state: ProtectionState, note: z.string() });
+export const EnvironmentProtection = z.object({
+  tier: ProtectionTier,
+  state: ProtectionState,
+  /** The tier is a feature the server operator switches on (default off), not a property of every server. */
+  optIn: z.boolean().default(false),
+  note: z.string(),
+});
 export type EnvironmentProtection = z.infer<typeof EnvironmentProtection>;
 
 export const Environment = z.object({
@@ -39,7 +45,7 @@ export const Environment = z.object({
   sales: EnvironmentSales,
   salesNote: z.string(),
   /** Protection tier (ADR-0027). Never weaker or stronger than what the adapter really does. */
-  protection: EnvironmentProtection.default({ tier: "none", state: "available", note: "" }),
+  protection: EnvironmentProtection.default({ tier: "none", state: "available", optIn: false, note: "" }),
   luaDialects: z.array(z.string()),
   /** Guest languages the environment's host runs ("lua", "ts", "js"). */
   languages: z.array(z.string()).default(["lua"]),

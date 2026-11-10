@@ -36,6 +36,8 @@ end
 --     only; the host is plain script and its operator can read what it loads, so no code-secrecy
 --     claim. tier "none": the environment is free-only (sales = "free_only"), nothing is sold.
 --   state "available" | "planned": whether that tier works there today. note: one honest sentence.
+--   optIn = true: the tier is a feature the server operator switches on (default off), not something
+--     every server of that platform has; the site then says "as an opt-in server feature".
 --   A tier never weakens `sales`; gen-environments refuses "none" on a sellable environment.
 M.ENVIRONMENTS = {
     standalone = {
@@ -159,7 +161,7 @@ M.ENVIRONMENTS = {
         },
     },
     open77 = {
-        protection = { tier = "escrow", state = "planned", note = "Code escrow as an opt-in, default-off server feature: the compiled server decrypts in memory, the key is handled natively and plaintext never reaches the disk. The fallback loader that writes the decrypted copy to disk is licence-only protection." },
+        protection = { tier = "escrow", state = "planned", optIn = true, note = "Code escrow as an opt-in, default-off server feature: the compiled server decrypts in memory, the key is handled natively and plaintext never reaches the disk. The fallback loader that writes the decrypted copy to disk is licence-only protection." },
         name = "OPEN//77",
         -- A layer on top of an existing game (players need the game); every other entry is an engine
         -- or runtime that hosts Lua itself.

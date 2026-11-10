@@ -30,6 +30,7 @@
       "protection": {
         "tier": "license",
         "state": "available",
+        "optIn": false,
         "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
       },
       "proof": [
@@ -280,6 +281,7 @@
       "protection": {
         "tier": "license",
         "state": "available",
+        "optIn": false,
         "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
       },
       "proof": [
@@ -404,6 +406,7 @@
       "protection": {
         "tier": "license",
         "state": "planned",
+        "optIn": false,
         "note": "Licence check and signed releases, once the adapter has HTTP. The adapter is script-level, so the operator can read what it loads; a native GDExtension loader would be a later upgrade."
       },
       "proof": [
@@ -518,6 +521,7 @@
       "protection": {
         "tier": "license",
         "state": "available",
+        "optIn": false,
         "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
       },
       "proof": [
@@ -630,6 +634,7 @@
       "protection": {
         "tier": "escrow",
         "state": "planned",
+        "optIn": true,
         "note": "Code escrow as an opt-in, default-off server feature: the compiled server decrypts in memory, the key is handled natively and plaintext never reaches the disk. The fallback loader that writes the decrypted copy to disk is licence-only protection."
       },
       "proof": [
@@ -759,6 +764,7 @@
       "protection": {
         "tier": "license",
         "state": "planned",
+        "optIn": false,
         "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
       },
       "proof": [],
@@ -796,6 +802,7 @@
       "protection": {
         "tier": "license",
         "state": "planned",
+        "optIn": false,
         "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
       },
       "proof": [],
@@ -837,6 +844,7 @@
       "protection": {
         "tier": "license",
         "state": "available",
+        "optIn": false,
         "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
       },
       "proof": [
@@ -971,6 +979,7 @@
       "protection": {
         "tier": "none",
         "state": "available",
+        "optIn": false,
         "note": "Free packages only here, so nothing is sold or licensed. Releases are still signed."
       },
       "proof": [
@@ -1062,6 +1071,7 @@
       "protection": {
         "tier": "escrow",
         "state": "available",
+        "optIn": false,
         "note": "Code escrow: the kit's compiled loader decrypts in memory with a key released to this server only. The operator of the machine can still inspect their own process; that takes real effort and the copy is traceable."
       },
       "proof": [
@@ -1174,6 +1184,7 @@
       "protection": {
         "tier": "escrow",
         "state": "planned",
+        "optIn": false,
         "note": "Code escrow is planned: a JVM plugin with a native library would hold the key. Until it exists, licence check and signed releases only."
       },
       "proof": [],
@@ -1242,6 +1253,7 @@
       "protection": {
         "tier": "license",
         "state": "available",
+        "optIn": false,
         "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
       },
       "proof": [
@@ -1338,6 +1350,7 @@
       "protection": {
         "tier": "escrow",
         "state": "planned",
+        "optIn": false,
         "note": "Code escrow is planned: the decryptor would live in the compiled bridge next to the Oxide/Carbon plugin. Until it exists, licence check and signed releases only."
       },
       "proof": [],
@@ -1404,6 +1417,7 @@
       "protection": {
         "tier": "license",
         "state": "planned",
+        "optIn": false,
         "note": "Licence check and signed releases, once paid packages are confirmed there. The server plugin is plain Lua, so the operator can read what it loads: no code-secrecy claim."
       },
       "proof": [],
@@ -1466,6 +1480,7 @@
       "protection": {
         "tier": "license",
         "state": "planned",
+        "optIn": false,
         "note": "Licence check and signed releases at most, and only after the legal review. No code-secrecy claim."
       },
       "proof": [],
@@ -1507,6 +1522,7 @@
       "protection": {
         "tier": "none",
         "state": "available",
+        "optIn": false,
         "note": "Free packages only here, so nothing is sold or licensed. Releases are still signed."
       },
       "proof": [],
@@ -1573,6 +1589,7 @@
       "protection": {
         "tier": "none",
         "state": "available",
+        "optIn": false,
         "note": "Free packages only here, so nothing is sold or licensed. Releases are still signed."
       },
       "proof": [],
@@ -1610,6 +1627,7 @@
       "protection": {
         "tier": "none",
         "state": "available",
+        "optIn": false,
         "note": "Free packages only here, so nothing is sold or licensed. Releases are still signed."
       },
       "proof": [],
@@ -1647,6 +1665,7 @@
       "protection": {
         "tier": "none",
         "state": "available",
+        "optIn": false,
         "note": "Free packages only here, so nothing is sold or licensed. Releases are still signed."
       },
       "proof": [],
@@ -1684,6 +1703,7 @@
       "protection": {
         "tier": "none",
         "state": "available",
+        "optIn": false,
         "note": "Free packages only here, so nothing is sold or licensed. Releases are still signed."
       },
       "proof": [],
