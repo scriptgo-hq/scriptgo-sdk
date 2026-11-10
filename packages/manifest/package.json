@@ -1,6 +1,6 @@
 {
   "name": "@scriptgo/manifest",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "SCRIPT//GO manifest parser and validator (scriptgo.toml), with the package file rules.",
   "license": "MIT",
   "type": "module",
@@ -43,8 +43,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "build": "tsc -p tsconfig.build.json && node ../../tools/dts-extensions.mjs dist",
-    "prepack": "tsc -p tsconfig.build.json && node ../../tools/dts-extensions.mjs dist"
+    "build": "tsc -p tsconfig.build.json && node ../../tools/dts-extensions.mjs dist && node ../../tools/bundle-open77-shim.mjs dist",
+    "prepack": "tsc -p tsconfig.build.json && node ../../tools/dts-extensions.mjs dist && node ../../tools/bundle-open77-shim.mjs dist"
   },
   "dependencies": {},
   "devDependencies": {

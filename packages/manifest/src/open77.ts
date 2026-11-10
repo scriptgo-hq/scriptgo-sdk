@@ -5,7 +5,7 @@
 // escrowed resource unless its `open77.lua` is a SIGNED clear file of the release and every script
 // that manifest lists belongs to the signed release. So the generated OPEN//77 files are part of the
 // bundle, as clear files, and never produced unsigned at install time.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expandGlob } from "./files.ts";
@@ -22,8 +22,14 @@ export const OPEN77_SHIM = [
 /** The files generated for OPEN//77 next to a SCRIPT//GO resource: its manifest and the shim. */
 export const OPEN77_GENERATED_FILES: readonly string[] = ["open77.lua", ...OPEN77_SHIM.map((s) => s.to)];
 
-/** sdk/adapters/open77 in this repository (a published CLI bundles `sdk/`). */
-export const OPEN77_SHIM_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "sdk", "adapters", "open77");
+const HERE = dirname(fileURLToPath(import.meta.url));
+/**
+ * sdk/adapters/open77: in a published package, the copy the build puts next to the compiled code
+ * (dist/sdk, tools/bundle-open77-shim.mjs); in this repository, the SDK's own folder.
+ */
+export const OPEN77_SHIM_DIR =
+  [resolve(HERE, "sdk", "adapters", "open77"), resolve(HERE, "..", "..", "..", "sdk", "adapters", "open77")].find((d) => existsSync(d)) ??
+  resolve(HERE, "..", "..", "..", "sdk", "adapters", "open77");
 
 /**
  * Keeps a shim's `-- @capability <name>` ... `-- @end` sections only for the capabilities the
