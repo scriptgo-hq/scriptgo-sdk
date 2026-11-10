@@ -318,3 +318,49 @@ CompatibilityRun = { runId, package: "scriptgo//event-bus" | "sg_eventbus", vers
 writes it. A resource name must designate one package; when several creators use it, the single
 first-party package wins, otherwise the run is refused with `409 ambiguous_package`. Unknown
 packages are `404 unknown_package`. Ingestion is idempotent on `runId`.
+
+## Commerce readiness (Tebex)
+
+What is configured and what is missing before a Tebex store can sell. Both routes compute their
+answer from real state on each call: the server's settings, whether a sealed credential exists (never
+its value), the offers, and the webhook deliveries the server recorded. Nothing is stored as "ready",
+no secret is returned, and a `GET` changes nothing: checkout still opens only with
+`COMMERCE_CHECKOUT_ENABLED=true` and an approved store (ADR-0007). The owner's checklist is
+`docs/ops/TEBEX-GO-LIVE.md`. Schemas: `packages/shared/src/readiness.ts`.
+
+```
+GET /v1/creator/stores/:id/readiness   (creator, own store) → StoreReadiness
+                                       404 not_found (not your store), 409 sandbox_store (a mock store)
+GET /v1/admin/commerce/readiness       (admin) → CommerceReadiness
+```
+
+```ts
+ReadinessCheck    = { id: string, label: string, status: "ok" | "missing" | "warning" | "blocked",
+                      detail: string, fix: string | null }
+ReadinessSummary  = { ready: boolean, remaining: string[] }
+StoreReadiness    = { storeId, provider: "tebex", creator: string, webhookUrl: string, approved: boolean,
+                      checks: ReadinessCheck[], summary: ReadinessSummary, generatedAt: Timestamp }
+CommerceReadiness = { platform: { checks: ReadinessCheck[], summary: ReadinessSummary },
+                      stores: StoreReadiness[], generatedAt: Timestamp }
+```
+
+`status`: `ok` configured or proven by a recorded event; `missing` the operator or the creator still
+has to supply something; `warning` worth a look, does not block; `blocked` waits for a decision
+outside configuration (the written approval, a review). `summary.ready` is true when no check is
+`missing` or `blocked`; `summary.remaining` has one line per such check, in order. With every Tebex
+value in place it is exactly `["Approval of this store by SCRIPT//GO staff", "Written approval from
+Tebex, then COMMERCE_CHECKOUT_ENABLED=true"]`, then only the second line, then empty.
+
+Store checks, in order (`id`): `store_connected`, `webhook_secret` (saved yes/no), `public_token`
+(saved yes/no; needed to open a checkout basket), `webhook_url` (the URL to paste in Tebex; `missing`
+when `PUBLIC_API_URL` is not a public https address), `webhook_delivery` (the last delivery recorded
+for this store: accepted → `ok`, refused → `missing` with the reason; none recorded → `warning`,
+because the validation webhook is answered but not recorded), `webhook_failures` (last 24 hours),
+`product_mapping` (every active paid Tebex offer carries a provider product id; unmapped offers are
+named), `offer_review` and `published_release` (only when the store has paid offers),
+`store_approval`, `checkout_flag`.
+
+Platform checks, in order: `public_api_url`, `ip_allowlist` (`TEBEX_ENFORCE_IP_ALLOWLIST`),
+`trust_proxy` (a warning when the sender check is on and `TRUST_PROXY` is false), `mock_provider`,
+`platform_webhook_secret` (`TEBEX_WEBHOOK_SECRET`, optional), `checkout_flag`
+(`COMMERCE_CHECKOUT_ENABLED`; `blocked` until the written approval).
