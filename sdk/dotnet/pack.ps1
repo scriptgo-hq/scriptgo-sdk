@@ -7,7 +7,8 @@
   ScriptGo.Escrow carries the native escrow loader under runtimes/<rid>/native/. This script
   refuses to pack when sdk/native/dist/win-x64/scriptgo.dll is missing (run sdk/native/build.ps1
   first), because a package without it would fail closed on every host. It then checks that the
-  library really is inside the package and prints its SHA-256.
+  library really is inside the package and prints its SHA-256. The linux-x64 library is packed when
+  sdk/native/build-linux.ps1 has built it; without it the script warns and packs Windows only.
 
 .EXAMPLE
   pwsh -ExecutionPolicy Bypass -File sdk/dotnet/pack.ps1
@@ -53,6 +54,19 @@ foreach ($package in Get-ChildItem -LiteralPath $Artifacts -Filter '*.nupkg') {
             finally { $stream.Dispose() }
             if ($actual -ne $expected) { throw "the packed scriptgo.dll ($actual) is not the built one ($expected)." }
             Write-Host "  native library SHA-256 $actual (matches sdk/native/dist/win-x64)"
+            # The Linux library is optional (sdk/native/build-linux.ps1): say which it is, never guess.
+            $linuxBuilt = Join-Path $Root '..\native\dist\linux-x64\libscriptgo.so'
+            $linuxEntry = $zip.GetEntry('runtimes/linux-x64/native/libscriptgo.so')
+            if ($linuxEntry) {
+                $stream = $linuxEntry.Open()
+                try { $linuxActual = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($stream)).ToLowerInvariant() }
+                finally { $stream.Dispose() }
+                $linuxExpected = (Get-FileHash -LiteralPath $linuxBuilt -Algorithm SHA256).Hash.ToLowerInvariant()
+                if ($linuxActual -ne $linuxExpected) { throw "the packed libscriptgo.so ($linuxActual) is not the built one ($linuxExpected)." }
+                Write-Host "  linux-x64 library SHA-256 $linuxActual (matches sdk/native/dist/linux-x64)"
+            } else {
+                Write-Warning 'no linux-x64 native library in this package: .NET hosts on Linux would fail closed. Build it with sdk/native/build-linux.ps1, then pack again.'
+            }
         }
     } finally { $zip.Dispose() }
 }
