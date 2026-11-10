@@ -6,6 +6,7 @@
 // Install (see sdk/adapters/rust/SETUP.md):
 //   RustDedicated_Data/Managed/ScriptGo.Bridge.dll, KeraLua.dll   (the "// Reference:" above loads them)
 //   RustDedicated_Data/Plugins/x86_64/lua54.dll (Windows) or liblua54.so (Linux)
+//   RustDedicated_Data/Plugins/x86_64/scriptgo.dll or libscriptgo.so   (only for escrowed packages)
 //   oxide/plugins/ScriptGo.cs  or  carbon/plugins/ScriptGo.cs
 //   packages in <data>/ScriptGo/resources/<name>/   (oxide/data or carbon/data)
 //
@@ -13,6 +14,10 @@
 // list, Oxide permissions answer privileges (scriptgo.<privilege>), the plugin config holds resource
 // config and convars, web requests carry HTTP and licensing, chat shows notifications, and the console
 // command `scriptgo` administers resources. Written for C# 7.3 so that both frameworks' compilers take it.
+//
+// Escrow (encrypted packages) is off unless the config says "escrow": { "enabled": true, ... }. It is
+// deterrence, licence binding, revocation and traceability, not a guarantee: the operator of this
+// machine can ultimately recover what their own server process runs. See README.md, "Escrow".
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -32,6 +37,7 @@ using SgLogLevel = ScriptGo.Bridge.LogLevel;
 using SgHttpRequest = ScriptGo.Bridge.HttpRequestData;
 using SgHttpResponse = ScriptGo.Bridge.HttpResponseData;
 using SgNativeLua = ScriptGo.Bridge.NativeLua;
+using SgEscrowOptions = ScriptGo.Bridge.EscrowOptions;
 
 namespace Oxide.Plugins
 {
@@ -61,6 +67,21 @@ namespace Oxide.Plugins
             [JsonProperty("quit")] public bool Quit = true;
         }
 
+        // Encrypted packages (README.md, "Escrow"). No secret belongs in this section: a deployment token
+        // is a file in tokensDirectory, and the server's private key stays sealed in identityFile.
+        private sealed class EscrowConfig
+        {
+            [JsonProperty("enabled")] public bool Enabled;
+            [JsonProperty("master")] public string Master = "";
+            [JsonProperty("environment")] public string Environment = "rust";
+            [JsonProperty("identityFile")] public string IdentityFile = "escrow/identity.key";
+            [JsonProperty("tokensDirectory")] public string TokensDirectory = "escrow/tokens";
+            [JsonProperty("trustedSigners")] public List<string> TrustedSigners = new List<string>();
+            [JsonProperty("strictClearFiles")] public bool StrictClearFiles;
+            [JsonProperty("nativeLibrary")] public string NativeLibrary;
+            [JsonProperty("renewRetrySeconds")] public int RenewRetrySeconds = 60;
+        }
+
         private sealed class PluginConfig
         {
             [JsonProperty("tickIntervalSeconds")] public float TickIntervalSeconds = 0.02f;
@@ -74,6 +95,7 @@ namespace Oxide.Plugins
             [JsonProperty("convars")] public Dictionary<string, JToken> Convars = new Dictionary<string, JToken>();
             [JsonProperty("resources")] public Dictionary<string, JObject> Resources = new Dictionary<string, JObject>();
             [JsonProperty("verify")] public VerifyConfig Verify;
+            [JsonProperty("escrow")] public EscrowConfig Escrow = new EscrowConfig();
         }
 
         protected override void LoadDefaultConfig()
@@ -161,6 +183,7 @@ namespace Oxide.Plugins
                 options.VerifyResource = verify.Resource;
                 options.VerifyWith = verify.With;
             }
+            options.Escrow = EscrowOptions(dataRoot);
 
             try
             {
@@ -178,6 +201,7 @@ namespace Oxide.Plugins
 
             Puts(string.Format("SCRIPT//GO {0} on {1} {2}: {3} from {4}", AdapterVersion, FrameworkName(), FrameworkVersion(),
                 _runtime.LuaVersion, _runtime.NativeLibrary ?? "the runtime's default search"));
+            if (options.Escrow != null) Puts("escrow: " + _runtime.EscrowSummary);
             foreach (var player in BasePlayer.activePlayerList.ToList())
             {
                 if (player != null && player.IsConnected) _runtime.PlayerJoin(PlayerId(player), player.displayName);
@@ -212,7 +236,53 @@ namespace Oxide.Plugins
             catch (Exception e) { PrintError("tick: " + e); }
         }
 
+        // The identity and the tokens live under <data>/ScriptGo/escrow unless the config names other
+        // places; a relative path is relative to <data>/ScriptGo. Null while escrow is off: the bridge
+        // then refuses an escrowed folder with escrow_disabled and loads nothing for it.
+        private SgEscrowOptions EscrowOptions(string dataRoot)
+        {
+            var c = _config.Escrow;
+            if (c == null || !c.Enabled) return null;
+            var o = new SgEscrowOptions
+            {
+                Enabled = true,
+                Master = c.Master,
+                Environment = string.IsNullOrEmpty(c.Environment) ? "rust" : c.Environment,
+                IdentityFile = UnderData(dataRoot, c.IdentityFile, "escrow/identity.key"),
+                TokensDirectory = UnderData(dataRoot, c.TokensDirectory, "escrow/tokens"),
+                StrictClearFiles = c.StrictClearFiles,
+                NativeLibrary = string.IsNullOrEmpty(c.NativeLibrary) ? null : c.NativeLibrary,
+                RenewRetrySeconds = c.RenewRetrySeconds,
+            };
+            foreach (var signer in c.TrustedSigners ?? new List<string>())
+            {
+                if (!string.IsNullOrEmpty(signer)) o.TrustedSigners.Add(signer);
+            }
+            try { Directory.CreateDirectory(o.TokensDirectory); }
+            catch (Exception e) { PrintWarning("escrow: cannot create " + o.TokensDirectory + ": " + e.Message); }
+            return o;
+        }
+
+        private static string UnderData(string dataRoot, string configured, string fallback)
+        {
+            var path = string.IsNullOrEmpty(configured) ? fallback : configured;
+            return Path.IsPathRooted(path) ? path : Path.Combine(dataRoot, path);
+        }
+
+        // The key service of escrow is always an allowed host: its URL is the operator's own setting.
+        private bool HostAllowed(string host)
+        {
+            var allowed = _config.HttpAllowedHosts;
+            if (allowed == null || allowed.Count == 0) return true;
+            if (allowed.Any(h => string.Equals(h, host, StringComparison.OrdinalIgnoreCase))) return true;
+            Uri master;
+            return _config.Escrow != null && _config.Escrow.Enabled
+                && Uri.TryCreate(_config.Escrow.Master, UriKind.Absolute, out master)
+                && string.Equals(master.Host, host, StringComparison.OrdinalIgnoreCase);
+        }
+
         // lua54 is resolved by full path before KeraLua's first call (see sdk/adapters/rust/README.md).
+        // The escrow library (scriptgo.dll / libscriptgo.so) is searched in the same folders.
         private List<string> NativeFolders()
         {
             var root = Directory.GetCurrentDirectory();
@@ -623,13 +693,8 @@ namespace Oxide.Plugins
                 RequestMethod method;
                 if (!Enum.TryParse(request.Method, true, out method))
                     throw new NotSupportedException("method " + request.Method + " is not available through web requests");
-                var allowed = _p._config.HttpAllowedHosts;
-                if (allowed != null && allowed.Count > 0)
-                {
-                    var host = new Uri(request.Url).Host;
-                    if (!allowed.Any(h => string.Equals(h, host, StringComparison.OrdinalIgnoreCase)))
-                        throw new InvalidOperationException("host " + host + " is not in httpAllowedHosts");
-                }
+                var host = new Uri(request.Url).Host;
+                if (!_p.HostAllowed(host)) throw new InvalidOperationException("host " + host + " is not in httpAllowedHosts");
                 var headers = new Dictionary<string, string>();
                 foreach (var h in request.Headers) headers[h.Key] = h.Value;
                 var done = new TaskCompletionSource<SgHttpResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
