@@ -8,22 +8,68 @@
   "serverPublicHex": "871079c9a59101a425ef8c96c98f2a957ec0b955ba84234982c75eee3c17df1f",
   "serverPrivateHex": "98b93e3fe2143b0f50813fa33a3607be2558dee987f78c25b60a0b82a42f3b77",
   "wrappedKey": {
-    "epk": "iIrwufkgboWu3HJip3BjJ19AmOwydYwjEgIPQS0t224",
-    "nonce": "3QlgV_8814WoNENk",
-    "wrapped": "1wIVyrp-7Hco9zon0cE1DXQFOCRcGG0dytGBF3OZAc06t66IWlmGSn17XbQPkEAt"
+    "epk": "5hBhm_l7sHhFDQUcMn0z31r5EBcCYgzaaASvAauOBk0",
+    "nonce": "kk0qLUZiGR9rr0i1",
+    "wrapped": "v2UZxoEk8nnaqow4Og_QgFUSIdKFVujGMcjTudLXMnFniGKbdeP1Syw_eSEee45E"
   },
-  "bundleB64": "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",
+  "bundleB64": "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",
   "watermark": "zhxPw5QnnVNrzqfs7bSI8RPOln_ybBXskxZcVbEbG0Y",
   "expectedFiles": {
     "scriptgo.lua": "resource \"demo\"\nversion \"1.0.0\"\nserver_script \"server/main.lua\"\n",
     "README.md": "# demo\nA SCRIPT//GO escrow vector.\n",
     "config.lua": "return { rate = 5 }\n",
-    "server/main.lua": "AddEventHandler('onResourceStart', function() print('escrow secret ok') end)\n",
-    "server/secret.lua": "return { answer = 42 }\n"
+    "server/main.lua": "local secret = require('server.secret')\nprint('escrow secret ok ' .. tostring(secret.answer))\nif AddEventHandler then AddEventHandler('onResourceStart', function() print('escrow handler ok') end) end\n",
+    "server/secret.lua": "return { answer = 42 }\n",
+    "data/notes.txt": "not lua {\n",
+    "data/precompiled.luac": "\u001bLuaT"
+  },
+  "encryptedFiles": [
+    "data/notes.txt",
+    "data/precompiled.luac",
+    "server/main.lua",
+    "server/secret.lua"
+  ],
+  "canonicalManifest": "{\"aad\":\"kestrel//demo@1.0.0\",\"allowlist\":[\"scriptgo.lua\",\"README.md\",\"CHANGELOG.md\",\"LICENSE\",\"LICENSE.md\",\"LICENSE.txt\",\"config.lua\"],\"cipher\":\"AES-256-GCM\",\"clearFiles\":[{\"bytes\":35,\"path\":\"README.md\",\"sha256\":\"988a44ae54f29143e010d9a8a74b41e8ff483c4d8c3cc38377f2181575c4b6ef\"},{\"bytes\":20,\"path\":\"config.lua\",\"sha256\":\"fee9ba8e50d328cb18e609303eb5e5b71ff6757c5f473191e215cdba7decf8e5\"},{\"bytes\":64,\"path\":\"scriptgo.lua\",\"sha256\":\"3b1470a743d63589e084d028a278933d58f14f62dbd8251309ea0718927b8416\"}],\"encryptedFiles\":[\"data/notes.txt\",\"data/precompiled.luac\",\"server/main.lua\",\"server/secret.lua\"],\"format\":\"scriptgo-escrow/1\",\"kdf\":\"HKDF-SHA256+X25519\",\"package\":\"kestrel//demo\",\"payload\":{\"bytes\":654,\"nonce\":\"lVAZ4DKkASt-YLBu\",\"sha256\":\"7ef8586e11afdcd718fd3bdd90830e218903d4455b083d023e686187be3faba1\"},\"signature\":\"\",\"signerPublicKey\":\"0EqyMnQrtKs6E2i9RhXk5tAiSrcaAWuvhSCjMsl3hzc\",\"version\":\"1.0.0\",\"watermark\":\"zhxPw5QnnVNrzqfs7bSI8RPOln_ybBXskxZcVbEbG0Y\"}",
+  "hostile": {
+    "notAZip": {
+      "nonceHex": "2a9c62adaafa53559acb9321",
+      "payloadHex": "e0245e59c7d6103321646aac66057ba7259b5ffaa474d4144ceb979f6cb4a56dcd33b84b1d20e32fa6f56fd347343a0bf4100fc0f5c6ab110e1897ad22d51a41d45515f6d70c5f1a73b139fc",
+      "sha256Hex": "3c88d1f03b6226b4c6ee36a9ae052895292fc7a9c6128786b96f308abe9ed202"
+    },
+    "badCrc": {
+      "nonceHex": "aeaa638c94fb6eb066b682f5",
+      "payloadHex": "8d5d7b7fb641958beacb1c65506af185905a437bb8991ade0541c7758813e8d368315d7730460e19ee5f5430f226e96b2548320c7e4a7d43938fe06e1c164712b08b6e1fe1283872dc492b3627baf6855682ba3a3f196ed33d309b034ff15829bf4aa320e2ac7d456a98347414c6082264ff4381f145d86f6042578e4fd0494db2281ea26bb11116797d43dabf3112779275972e61bf3aa8fc8445618d7f72164284456a88f2423d",
+      "sha256Hex": "d09ea2e3509d0f75a7781c6614cd37c78411fb4c7edc39b674fb5a13cfe9e243"
+    },
+    "traversal": {
+      "nonceHex": "30278e50afbe22ab1434f21b",
+      "payloadHex": "0d9debc39c973daee71bc52a0edc69cb8d60ec3d4c774b6698e9337f676a89c68ec4a9b46527c0b3543cb9c60f2c027e9d54e9e3e6a3174b8d1cd9be5d22b703c561e3aac7a7e184663f768525e917ad430356fe892194b23fa0ee8c0744f50fb91c5bc82f2f565c311945a1bfa44edb914bae7f0da4a3c030df01be6a13da4f7b4e9223831dbe5b07e2c9a6e9bc7ca43ec4791ccc9e67e2449ff1cd0ff617",
+      "sha256Hex": "29c439ed55a79cec5cf580cba7c0f9af050cada60433185962fa5e612ccab13e"
+    },
+    "nestedTraversal": {
+      "nonceHex": "a425ed7ee0522bba4848dd05",
+      "payloadHex": "c2751df8f5b4d097e587641f2fa0043bbbcbdbd7c7b4b73a408acabc25eabf6825e4ba53827e657b5aefd02cc0a3999794c41baee5d2ecb5f678b99e02b13f37fbef7d24a0f901d3c3fa5d04942a2823c73addf7e3abb616629f79b57c99c0f371e7007a3f5f4894a332cdeb240a1b3fb7270422242281a67f06dbf2d9ce5efa55f439f81bdfcc50ab79c4cf1d6c52319cb03a2a6915422c2bbc1319775d85bd373b11e7cedf40dbb0bf37b5385d8a9f980a28",
+      "sha256Hex": "d6db624a250dbe06f9a3cb05e6aa91fd02787c856c406935efe455a817596a1f"
+    },
+    "absolute": {
+      "nonceHex": "76c970466242db435f0a7edc",
+      "payloadHex": "93bfb216cb4639d2527879e15f2b94d9802aad493b31f12cd626252fb74fb6b486ae5b997006c46b65cf562f71a42e5d97eaa5da7b4ce0c56330dd8635387b9d9a1690bc7769bd84e8bf80004d7eb67113b5f4a1c4d552dce50eaf3bf3897ee90ea630371c4b14b8380f9235b6a7b192b1d3b3d6eaa30546b020c8afd7cb3b19af616ec7edd5776d13c7d1372950e459d84bae3ab0ce4f69f8a2296498165f0f6e2800",
+      "sha256Hex": "008516f6269447b4bf60843694e54b352a1d4c95ebfc0dda629634828fb923b0"
+    },
+    "backslash": {
+      "nonceHex": "7a10c91c2e60548d2cde5c30",
+      "payloadHex": "413ebe2ad7c14e6769c269c53fe3d36dac72f827d38e9a9a21b614182db4cd082984cf1b1c2c65ff623fb2a228fa2e86f93a2000f048ec9ca3a73d538439bd6b8cb7fb25bbe2dc9c315a96275a73e5789d75376a89a88c972da2e31c3b6b6c05a29bf8686dcadd685186865dde5813a8e92035f960be6ebdd737f9e19ce06911ad1a9b9df0cf1a190c27540a5c7ea696a8077548230404d2cccfc4515b191d",
+      "sha256Hex": "ff21d3c24b93ba3bed7c4f00b528e03b7153b56fed9c0648c4c365e246c5b6b7"
+    },
+    "drive": {
+      "nonceHex": "3e96fc02a6f8f8b877425fe3",
+      "payloadHex": "7d46c85927a619b458f723b8033459a36c1da2a7ad767770783a6ac3aec7a1af4ddf823b99c292cc3d3257476b1a71708f40d95becaa954ae668ce523c8687d8822e35df78c40c318617738497d2c028306e228c695b676904893eb84a05e21147db643b583b88954aaee8110e93b68c934764deba697e4565a2c1be4ed9017d6a66d3fca4a3e48c3fad1a341b02c498230109e9893ba22b77021150f61ec4",
+      "sha256Hex": "257dec5db7cf4f6108e15285ec7279a412d8bc96dd214f2e0c253420d55e716e"
+    }
   },
   "x25519Probe": {
-    "probePrivateHex": "803648fe2222e6bce39fa1fd1f6a4134e7d83d740481d260ca2135a4bc837560",
-    "probePublicHex": "ef7d6cb70d05df818e048b4f152b28aab39fa990472985462d8dfaa45132c47b",
-    "sharedHex": "b1e784ff5d7dec3e0041addc05a5f7409c9bfa931b2d5f86ac0cbd0a50917847"
+    "probePrivateHex": "f8daa9890cfaf9bd8f4e8f9bcc134ed5cb4e335361ff66e20deae3bfce39ea5e",
+    "probePublicHex": "322d8bb084b747e363eb30991b9e1aaa225eea945064e528a847fa6a8ec78d45",
+    "sharedHex": "9a6b745f8bb6a5d7d40cd4a66d785dbcc54e3581614222b8be038a615f60ff5d"
   }
 }
