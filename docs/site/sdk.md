@@ -93,6 +93,20 @@ A real run is `scriptgo verify` in the real runtime, which writes a report to
 `verification/reports/`. Unit tests against a mock, a stub of the natives, a plain JVM or .NET
 process, or an emulator are useful, but they never write a report and never count.
 
+More about each piece:
+
+- **Lua core.** It gives packages one API: threads and timers, events on a host-wide bus, exports
+  between packages, promises, storage, players, permissions, commands, config, HTTP, licensing,
+  notifications and logging. It knows nothing about engines.
+- **Adapters.** An adapter maps the API onto what the host already has: its clock and tick, files,
+  storage, players, privileges, config, notifications and HTTP. Depending on the host it ships as
+  an addon, a mod, a plugin, an in-game computer program or a shim.
+- **.NET host kit.** One VM per resource side and language. Natives are described once and reach
+  every language with generated typings; quotas apply to each call from the host. Measured on
+  Windows x64; its test suite also passes on Linux x64 in a container. Not on NuGet yet.
+- **CLI.** It also has `escrow load`. It compiles TypeScript at pack and verify time, so hosts
+  never do.
+
 ## Languages
 
 | Language | Where | State |
@@ -100,6 +114,9 @@ process, or an emulator are useful, but they never write a report and never coun
 | Lua | Every environment, on the host's own Lua (5.1, 5.2, 5.3, 5.4 or LuaJIT) | Runs everywhere |
 | TypeScript and JavaScript | The .NET kit. TypeScript is compiled by esbuild at `scriptgo pack` and `scriptgo verify` time; hosts never compile | Experimental |
 | C# | Planned as guest scripts compiled against an allowed API, with quotas | Next (phase 3), not started |
+
+Real runs on the .NET kit passed the conformance probe in TypeScript, and a Lua package and a
+TypeScript package calling each other's exports.
 
 The API is defined once in `docs/spec/runtime-idl.json` and bound in each language's idiom:
 `nil, reason` in Lua, `ScriptGoError` and promises in JavaScript. How values, events and exports
@@ -109,9 +126,10 @@ cross between languages is fixed in `docs/spec/multi-language.md`.
 
 - **Licensing and verification**: license keys, one activation per deployment, verification with
   an offline grace period, signed verification tokens. See [Licensing API](/docs/licensing-api).
-- **Shops**: paid packages sell through the creator's own Tebex store, and SCRIPT//GO issues the
-  license after a verified payment event. The Tebex connector has not run against a live store
-  yet, and checkout stays off until written approval.
+- **Shops**: anyone can open a shop on their own Tebex store; it works as soon as its Tebex
+  configuration is complete, and SCRIPT//GO issues the license after a verified payment event.
+  Real checkout is not live yet: it stays off, for every shop, until Tebex approves it in writing.
+  The Tebex connector has not run against a live store yet. See [Selling](/docs/selling).
 - **Compatibility proof**: statuses and package badges come from verification reports.
 - **Imports**: `scriptgo add creator//name` downloads a release and checks its SHA-256 and the
   registry's signature before it writes a file.
@@ -122,10 +140,31 @@ cross between languages is fixed in `docs/spec/multi-language.md`.
   check and the signature, and no code-secrecy claim. It deters copying and makes leaks
   traceable; it does not make copying impossible. See [Protect your work](/docs/protect-your-work).
 
+### What a host needs for encrypted delivery
+
+1. **A server key.** The loader creates an X25519 key pair on the server and registers the public
+   half with its deployment. The private half never leaves the machine. Binding follows that key,
+   not the hardware, so an honest move is a reset.
+2. **The key endpoint.** `POST /v1/licenses/key` answers a short-lived content key wrapped to that
+   server, or a refusal with a stable reason. A refund or a revocation makes the next answer a
+   refusal.
+3. **A loader in compiled code.** It checks the bundle's signature against a pinned key, unwraps
+   the content key, decrypts in memory and hands the files to the host. A loader written in the
+   guest script language cannot keep a key from the operator.
+
+The bundle format, the key wrapping and the signature are fixed in `docs/spec/escrow.md`.
+Integrating it is the platform's choice: nothing in the SDK turns it on by itself.
+
 ## Not built yet
+
+The plan, in the order it is meant to land. Nothing here is usable today; each item is listed as
+available only once it passes real runs.
 
 | Item | State | What it is |
 |---|---|---|
+| Perks for players | In development | An operator sells a perk to their players, tied to a feature of their own script. See [Selling](/docs/selling#an-operator-sells-a-perk) |
+| Protection without a sale | In development | A creator gives a server a free licence; the release is still bound to that server |
+| Minify at packaging | In development | An optional step that makes packaged script harder to read. A speed bump, never protection |
 | Native C ABI kit | Not started (phase 4) | `libscriptgo` with C headers, for C and C++ engines: Lua 5.4 or LuaJIT, and JavaScript on QuickJS |
 | Node kit | Not started (phase 4, after the C kit) | For Node, Bun and Deno servers: Lua and JavaScript in WebAssembly, isolated per resource |
 | JVM kit | Later | A general kit for Java servers. Only the Hytale plugin runs the core on a JVM today |

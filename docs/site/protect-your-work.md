@@ -12,6 +12,25 @@ page is for creators who publish a protected release and for operators who run o
 > Protection here means deterrence, traceability and revocation. It is not DRM and it does not
 > promise to stop all copying. The last section says exactly what it does not do.
 
+## What is yours
+
+What SCRIPT//GO protects is your work:
+
+- The scripts you wrote, in Lua or TypeScript. C# is next.
+- The configs, data and schemas you made for them.
+- The assets you created yourself: interface, images, sounds.
+
+You declare your rights on every release. Publishing, protecting or selling through SCRIPT//GO
+transfers none of them to us.
+
+**On someone else's game.** Take a multiplayer platform built on a AAA open-world game. The game
+belongs to its publisher. A server operator on that platform still owns every script they write
+for their server. They can license it, protect it and sell it from their own store, and the
+publisher's rights are untouched.
+
+Ownership only matters if it can be enforced. Per-server licences and encrypted releases are what
+enforce it: the script runs where a licence allows it, and stops where one ends.
+
 ## Three layers
 
 | Layer | Applies to | What it gives you |
@@ -20,8 +39,9 @@ page is for creators who publish a protected release and for operators who run o
 | Per-server licence | Paid packages, and packages you grant a free licence for | Only a licensed server runs the package, and a refund or a revocation ends that |
 | Encrypted release (escrow) | Releases you choose to protect | The files are delivered encrypted; the key goes to a licensed, bound server only |
 
-The first two work in every environment that allows paid packages. The third needs a loader on the
-server, and how strong it is depends on the host. See [the tiers](#tiers).
+Signing covers every release, in every environment. The licence check needs a host whose adapter
+can reach the licensing API. The third layer needs a loader on the server, and how strong it is
+depends on the host. See [the tiers](#tiers).
 
 ## Signed releases
 
@@ -88,7 +108,7 @@ a key, publish a new version.
 This is the chain for a buyer's server:
 
 1. **Pay** on the creator's own Tebex store. In development, a mock provider plays that part.
-   Checkout through Tebex stays off until Tebex approves it in writing.
+   Real checkout is not live yet: it stays off, for every shop, until Tebex approves it in writing.
 2. **A licence is issued**, only after a verified payment event.
 3. **Add a deployment** on the licence page, or let the server activate itself. You get a
    deployment token for that one server.
@@ -257,19 +277,24 @@ What a buyer's server gets depends on the host. Each environment has a tier, sho
   encrypted release is still delivered encrypted and bound to the server, then written to disk
   there. We make no code-secrecy claim on these hosts.
 - **No licence check.** The adapter there has no licence check, so a package runs without one.
-  Releases are still signed. This is a technical fact about the adapter, not a selling rule: no
-  environment decides what can be sold.
+  Releases are still signed, so an altered file is detected. This is a technical fact about the
+  adapter, not a selling rule: no environment decides what can be sold.
+
+"Planned" next to a tier means it does not work on that host yet. The table on the
+[Protect page](/protect#tiers-title) is read from the adapter registry, the same data as the
+environments page, and each package page says what applies to that package.
 
 ## What we claim
 
-- Encrypted at rest and in transit.
-- The key is never shipped with the file.
-- Per-server binding: a copied bundle does not open on an unbound server.
-- Revocation on refund, lost dispute, ended subscription, admin decision or, for a licence you
-  granted, your own decision, at the next key release.
-- Tamper-evident signing.
-- Traceable leaks.
-- Defeating it takes real effort and leaves traces.
+- An encrypted release is encrypted at rest and in transit.
+- The key is never shipped with the file. We hold it sealed and show it to no one.
+- Per-server binding: a copied release does not open on a server that is not bound to the licence.
+- Revocation at the next key release, on refund, lost dispute, ended subscription, admin decision
+  or, for a licence you granted, your own decision. A server that is already running stops when its
+  offline grace ends.
+- Signed releases: a modified file is detected before it is installed.
+- Traceable leaks: each delivery is marked with the licence and the deployment it went to.
+- Getting past it takes real effort and leaves traces.
 
 ## What it does not do
 
@@ -278,11 +303,33 @@ What a buyer's server gets depends on the host. Each environment has a tier, sho
   the cost and the watermark makes the copy traceable. Neither makes it impossible.
 - **It does not hide code on a pure-script host.** There the protection is the licence check and
   the signature.
-- **It is not obfuscation.** Obfuscation is at most a speed bump, and we do not build one.
+- **It protects server scripts only.** What a client receives can be read on that client.
+- **It is not obfuscation.** Obfuscation is at most a speed bump, never protection. An optional
+  minify step at packaging is in development; it is a speed bump too, and it is never counted as
+  protection.
+- **It is not DRM, and it does not promise to stop all copying.** It is deterrence, traceability
+  and revocation. A marker shows where a copy was delivered; it does not by itself prove who leaked
+  it.
 - **It does not protect a game's files.** Game assets and code belong to their publisher. They do
   not belong in a package, encrypted or not.
 - **It does not replace your terms.** The licence you sell under and the
   [rights declaration](/legal#creator-agreement) are what make a leak actionable.
+
+## The game's IP
+
+A game belongs to its publisher. A script written for it belongs to its author. SCRIPT//GO deals
+only in the second.
+
+- We do not sell a game, its content, or access to it.
+- We do not ship, host or redistribute a game's code, models, textures, audio or maps.
+- We do not decrypt, unpack or modify a game's files.
+- We do not let encryption cover for them: a package that carries a game's files is refused or
+  removed, encrypted or not.
+
+Sellers declare their rights when they publish and answer for what they sell; SCRIPT//GO acts on
+reports. See [the rules](/docs/selling#the-rules) and the [IP policy](/legal#ip-policy).
+
+## Keep secrets on the server
 
 The strongest protection is not shipping the secret at all. Keep prices, economy rules and
 anti-cheat logic in server scripts, and send clients only what they need to display.
