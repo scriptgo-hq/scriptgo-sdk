@@ -112,8 +112,14 @@ cross between languages is fixed in `docs/spec/multi-language.md`.
   license after a verified payment event. The Tebex connector has not run against a live store
   yet, and checkout stays off until written approval.
 - **Compatibility proof**: statuses and package badges come from verification reports.
-- **Imports**: `scriptgo add creator//name` downloads a release and checks its SHA-256 against
-  the registry.
+- **Imports**: `scriptgo add creator//name` downloads a release and checks its SHA-256 and the
+  registry's signature before it writes a file.
+- **Protection**: every published release is signed. A creator can also publish an encrypted
+  release (`scriptgo publish --escrow`, or the option on the new-release page): the key is
+  released only to a licensed server bound by its own key, and a refund or a revocation stops the
+  next release. The .NET kit decrypts in memory. A host that runs plain script gets the licence
+  check and the signature, and no code-secrecy claim. It deters copying and makes leaks
+  traceable; it does not make copying impossible. See [Protect your work](/docs/protect-your-work).
 
 ## Not built yet
 
@@ -123,6 +129,6 @@ cross between languages is fixed in `docs/spec/multi-language.md`.
 | Node kit | Not started (phase 4, after the C kit) | For Node, Bun and Deno servers: Lua and JavaScript in WebAssembly, isolated per resource |
 | JVM kit | Later | A general kit for Java servers. Only the Hytale plugin runs the core on a JVM today |
 | C# guests | Not started (phase 3) | A spike and a security review come first; until then a `.cs` script is refused |
-| Code protection beyond license keys | Not started (phase 2) | Encrypted releases only a licensed server can open, with a watermark per license. Deterrence and traceability, not unbreakable DRM |
+| In-memory escrow on more hosts | Planned | Today the in-memory loader is in the .NET kit. Other hosts that run compiled code are marked planned on the [environments page](/environments#protection); hosts that run plain script stay on licence and signing |
 | SDK packages on NuGet and npm | Not published | The .NET kit, the CLI and `@scriptgo/types` |
 | Linux and macOS | Not measured | The .NET kit and the desktop hosts (LÖVE, Godot, Neovim) were measured on Windows only |
