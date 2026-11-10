@@ -416,6 +416,12 @@ MarkerLookupResult = { kind: "delivery" | "release" | "unknown", marker,
 A delivery marker names one license and one deployment; a release watermark names the release only.
 The log and the lookup never hold or return a content key. Traceability, not prevention.
 
+`deliveries.count`, `firstAt` and `lastAt` are computed over every release of the marker still in the
+log; `recent` lists the 20 latest. The worker trims the log (ADR-0034): unmatched refusals after
+`ESCROW_KEY_LOG_UNMATCHED_RETENTION_DAYS` (30), other refusals and repeated releases after
+`ESCROW_KEY_LOG_RETENTION_DAYS` (400). The first and last release of a marker are never trimmed, so
+`firstAt` and `lastAt` stay true while `count` covers what remains.
+
 ## Commerce readiness (Tebex)
 
 What is configured and what is missing before a Tebex store can sell. Both routes compute their
