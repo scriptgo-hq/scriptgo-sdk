@@ -16,7 +16,7 @@
 //
 // Exit codes: 0 ran (or stopped by Ctrl+C); 1 refused or failed (the reason is on stderr);
 //             2 bad command line; 3 the key service could not be reached (retry later);
-//             4 the license was revoked while running.
+//             4 the license ended while running (revoked, or unverifiable past the offline grace).
 //
 // Escrow is deterrence, traceability and revocation. The operator of this server could still
 // recover a running resource from their own process; nothing here pretends otherwise.
@@ -130,7 +130,11 @@ if (reason is null)
     Console.WriteLine("acme: stopped.");
     return 0;
 }
-Console.Error.WriteLine($"acme: {resource.Name} stopped: license revoked ({reason}). The decrypted files were wiped.");
+// Two different endings: the license said no, or nobody could be asked for longer than the grace.
+var why = reason.StartsWith("offline_grace_exhausted", StringComparison.Ordinal)
+    ? "the license could not be re-verified before offline grace ran out"
+    : "the license was revoked";
+Console.Error.WriteLine($"acme: {resource.Name} stopped: {why} ({reason}). The decrypted files were wiped.");
 return 4;
 
 // ---------------------------------------------------------------------------------------------------

@@ -42,10 +42,13 @@ Things to try, each of which is what a real deployment meets:
 | A wrong `--trusted-signer` | `signature:signer is not the trusted release key`, exit 1, and no key request is made |
 | Stop the demo endpoint | `key_service_unreachable:...`, exit 3: retry later, it is not a refusal |
 | Drop `--once`, start the endpoint with `--ttl 6 --grace 14`, then `curl -X POST http://127.0.0.1:4180/demo/revoke` | The license check turns to `grace (refused:revoked)`; when grace runs out Acme stops the resource, the decrypted files are wiped, exit 4 |
-| `curl -X POST http://127.0.0.1:4180/demo/offline` | The endpoint answers 503: the resource keeps running on offline grace, then stops the same way |
+| `curl -X POST http://127.0.0.1:4180/demo/offline` | The endpoint answers 503: the license check turns to `grace (key_service_unreachable:http_503)`, the resource keeps running, and when grace runs out it stops with `offline_grace_exhausted:...`, exit 4 |
+
+`POST /demo/restore` undoes a revoke or an outage; a license check made after it is granted again
+(that recovery is covered by `EscrowLeaseTests`, not by a run of the demo).
 
 Use the same `--identity` file for both example hosts: the demo endpoint, like the real master,
 binds a deployment to the first server key it sees.
 
-Everything above was run on Windows x64. The demo material (signing key, content key, bundle) is the
+Every row of the table was run on Windows x64. The demo material (signing key, content key, bundle) is the
 fixed test vector of this repository and protects nothing.

@@ -13,7 +13,7 @@
 //                        [--identity <file>] [--once]
 //
 // Exit codes: 0 ran; 1 refused or failed (reason on stderr); 2 bad command line;
-//             3 key service unreachable; 4 revoked while running.
+//             3 key service unreachable; 4 the license ended while running.
 using System.Security.Cryptography;
 using ScriptGo.Escrow;
 using ScriptGo.Host;
@@ -84,7 +84,7 @@ while (!stop.IsCancellationRequested && host.ResourceState(name) == "started")
 }
 if (content.State == EscrowLeaseState.Revoked)
 {
-    Console.Error.WriteLine($"{name} stopped: license revoked ({content.RevocationReason}).");
+    Console.Error.WriteLine($"{name} stopped: the license ended ({content.RevocationReason}).");
     return 4;
 }
 host.StopAll();

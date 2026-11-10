@@ -349,6 +349,68 @@ static int archive_reads_outer_bundle(void)
     return 0;
 }
 
+static uint32_t next_random(uint32_t* state)
+{
+    uint32_t x = *state; /* xorshift32 */
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    *state = x;
+    return x;
+}
+
+/* The zip reader is the one parser in this library that meets bytes nobody has authenticated yet
+ * (the outer bundle). Feed it the vector bundle with random damage, many times: it may accept or
+ * refuse; it must not crash, hang or hand back an archive it then cannot read. The same code reads
+ * the inner archive, with guarded allocations. Deterministic: the seed is fixed. This is a smoke
+ * test of the bounds checks, not a proof: see README.md for the one run under AddressSanitizer. */
+static int archive_survives_mutations(void)
+{
+    unsigned char* copy = (unsigned char*)malloc(VEC_BUNDLE_len);
+    uint32_t state = 0x9E3779B9u;
+    unsigned accepted = 0, refused = 0, iteration;
+    volatile unsigned checksum = 0;
+    CHECK(copy != NULL);
+    for (iteration = 0; iteration < 40000; iteration++) {
+        sg_archive* archive = NULL;
+        size_t len = VEC_BUNDLE_len, count = 0, i;
+        unsigned edits, e;
+        int rc;
+        memcpy(copy, VEC_BUNDLE, VEC_BUNDLE_len);
+        edits = 1 + next_random(&state) % 4;
+        for (e = 0; e < edits; e++) {
+            /* Half of the damage goes to the last 300 bytes, where the directory and the end record are. */
+            size_t at = (next_random(&state) & 1) ? VEC_BUNDLE_len - 1 - next_random(&state) % 300 : next_random(&state) % VEC_BUNDLE_len;
+            copy[at] = (unsigned char)next_random(&state);
+        }
+        if (next_random(&state) % 8 == 0) len = 1 + next_random(&state) % VEC_BUNDLE_len; /* sometimes truncated */
+        rc = sg_archive_open(copy, len, &archive);
+        if (rc != SG_OK) {
+            CHECK(archive == NULL);
+            CHECK(rc == SG_ERR_BAD_ARCHIVE || rc == SG_ERR_UNSAFE_PATH || rc == SG_ERR_UNSUPPORTED || rc == SG_ERR_TOO_LARGE
+                  || rc == SG_ERR_NO_MEMORY);
+            refused++;
+            continue;
+        }
+        accepted++;
+        CHECK_RC(sg_archive_entry_count(archive, &count), SG_OK);
+        for (i = 0; i < count; i++) {
+            const char* path = NULL;
+            const uint8_t* data = NULL;
+            size_t size = 0, read_len = 0, k;
+            CHECK_RC(sg_archive_entry_at(archive, i, &path, &size), SG_OK);
+            CHECK_RC(sg_archive_read(archive, path, &data, &read_len), SG_OK);
+            CHECK(read_len == size);
+            for (k = 0; k < read_len; k++) checksum += data[k]; /* touch every byte it claims to hold */
+        }
+        sg_archive_free(archive);
+    }
+    free(copy);
+    printf("  40000 damaged bundles: %u refused, %u still valid archives\n", refused, accepted);
+    CHECK(refused > 1000);
+    return 0;
+}
+
 static int open_good_path(void)
 {
     sg_identity* identity = NULL;
@@ -694,6 +756,7 @@ static const test_case CASES[] = {
     { "verify_manifest_good", verify_manifest_good },
     { "verify_manifest_bad_signature", verify_manifest_bad_signature },
     { "archive_reads_outer_bundle", archive_reads_outer_bundle },
+    { "archive_survives_mutations", archive_survives_mutations },
     { "open_good_path", open_good_path },
     { "open_refuses_tampered_payload", open_refuses_tampered_payload },
     { "open_refuses_wrong_payload_hash", open_refuses_wrong_payload_hash },

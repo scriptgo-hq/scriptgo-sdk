@@ -56,7 +56,7 @@ acme-engine --bundle <release>.escrow.zip --master <url> --deployment-token sg_d
 | 1 | Refused or failed. stderr has the reason: `acme: escrow refused: refused:revoked` |
 | 2 | Bad command line |
 | 3 | The key service could not be reached. Not a refusal: retry |
-| 4 | The license was revoked while running and offline grace ran out |
+| 4 | The license ended while running: it was revoked, or it could not be re-verified for longer than the offline grace |
 
 `EscrowExampleTests` in `sdk/dotnet/ScriptGo.Host.Tests` runs this executable as a process against
 a key endpoint over HTTP: first run, second run with the persisted identity, a refusal, and an

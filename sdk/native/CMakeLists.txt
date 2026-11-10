@@ -17,6 +17,7 @@ option(SG_BUILD_TESTS "Build the CTest suite" ON)
 set(SG_SODIUM_ROOT "" CACHE PATH "Windows: the extracted libsodium MSVC package (holds include/ and x64/)")
 set(SG_TEST_LUA_LIBRARY "" CACHE FILEPATH "A Lua 5.4 shared library (lua54.dll / liblua54.so) for the Lua load test")
 option(SG_ALLOW_SHARED_SODIUM "Linux/macOS: link libsodium dynamically when no static archive exists (weaker)" OFF)
+option(SG_SANITIZE "Build the library and its tests with AddressSanitizer. A test configuration: never ship its output" OFF)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -86,9 +87,25 @@ target_compile_definitions(sg_miniz PUBLIC
   MINIZ_NO_STDIO MINIZ_NO_TIME MINIZ_NO_ARCHIVE_APIS
   MINIZ_NO_DEFLATE_APIS MINIZ_NO_ZLIB_APIS MINIZ_NO_ZLIB_COMPATIBLE_NAMES MINIZ_NO_MALLOC)
 if(MSVC)
-  target_compile_options(sg_miniz PRIVATE /W0 /guard:cf /GS)
+  target_compile_options(sg_miniz PRIVATE /W0 /guard:cf /GS /Brepro)
 else()
   target_compile_options(sg_miniz PRIVATE -w -fstack-protector-strong)
+endif()
+
+# AddressSanitizer, for running the test suite against the parser and the accessors. libsodium is
+# not instrumented (it is a prebuilt archive), and its guarded allocations are outside ASan's view.
+set(SG_SANITIZE_COMPILE "")
+set(SG_SANITIZE_LINK "")
+if(SG_SANITIZE)
+  if(MSVC)
+    set(SG_SANITIZE_COMPILE /fsanitize=address /Zi)
+    set(SG_SANITIZE_LINK /DEBUG /INCREMENTAL:NO)
+  else()
+    set(SG_SANITIZE_COMPILE -fsanitize=address,undefined -fno-omit-frame-pointer -g)
+    set(SG_SANITIZE_LINK -fsanitize=address,undefined)
+  endif()
+  target_compile_options(sg_miniz PRIVATE ${SG_SANITIZE_COMPILE})
+  message(WARNING "SG_SANITIZE is ON: this build is for testing only and must not be shipped.")
 endif()
 
 # ------------------------------------------------------------------------------------------- scriptgo
@@ -104,19 +121,32 @@ target_link_libraries(scriptgo PRIVATE sg_sodium)
 set_target_properties(scriptgo PROPERTIES OUTPUT_NAME scriptgo)
 
 if(MSVC)
-  # /sdl: extra security checks; /guard:cf: control-flow guard; /GS: stack cookies.
-  target_compile_options(scriptgo PRIVATE /W4 /WX /sdl /guard:cf /GS /utf-8)
+  # /sdl: extra security checks; /guard:cf: control-flow guard; /GS: stack cookies; /Brepro: no
+  # timestamps in the objects or the PE header, so the same sources and toolchain give the same DLL.
+  target_compile_options(scriptgo PRIVATE /W4 /WX /sdl /guard:cf /GS /utf-8 /Brepro)
   target_compile_definitions(scriptgo PRIVATE UNICODE _UNICODE)
   # No debug information is produced or shipped (/DEBUG:NONE). The only exports are the sg_* ABI:
   # they are the functions marked SG_API, and the C runtime and libsodium are linked statically.
-  target_link_options(scriptgo PRIVATE /guard:cf /DYNAMICBASE /NXCOMPAT /HIGHENTROPYVA /DEBUG:NONE /OPT:REF /OPT:ICF /WX)
+  target_link_options(scriptgo PRIVATE /guard:cf /DYNAMICBASE /NXCOMPAT /HIGHENTROPYVA)
+  if(SG_SANITIZE)
+    target_compile_options(scriptgo PRIVATE ${SG_SANITIZE_COMPILE})
+    target_link_options(scriptgo PRIVATE ${SG_SANITIZE_LINK})
+  else()
+    target_link_options(scriptgo PRIVATE /DEBUG:NONE /OPT:REF /OPT:ICF /Brepro /WX)
+  endif()
   if(CMAKE_SIZEOF_VOID_P EQUAL 8 AND NOT CMAKE_GENERATOR_PLATFORM MATCHES "ARM64")
     target_link_options(scriptgo PRIVATE /CETCOMPAT)
   endif()
   target_link_libraries(scriptgo PRIVATE crypt32)
 else()
   target_compile_options(scriptgo PRIVATE -Wall -Wextra -Wpedantic -Werror -fstack-protector-strong)
-  target_compile_definitions(scriptgo PRIVATE _POSIX_C_SOURCE=200809L $<$<NOT:$<CONFIG:Debug>>:_FORTIFY_SOURCE=2>)
+  target_compile_definitions(scriptgo PRIVATE _POSIX_C_SOURCE=200809L)
+  if(SG_SANITIZE)
+    target_compile_options(scriptgo PRIVATE ${SG_SANITIZE_COMPILE})
+    target_link_options(scriptgo PRIVATE ${SG_SANITIZE_LINK})
+  else()
+    target_compile_definitions(scriptgo PRIVATE $<$<NOT:$<CONFIG:Debug>>:_FORTIFY_SOURCE=2>)
+  endif()
   if(APPLE)
     # Hidden visibility covers our own code; the static libsodium must not be re-exported either.
     target_link_options(scriptgo PRIVATE -Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/src/exports.macos.txt -Wl,-dead_strip)
@@ -140,6 +170,10 @@ if(SG_BUILD_TESTS)
   enable_testing()
   add_executable(sg_tests tests/test_escrow.c)
   target_link_libraries(sg_tests PRIVATE scriptgo)
+  if(SG_SANITIZE)
+    target_compile_options(sg_tests PRIVATE ${SG_SANITIZE_COMPILE})
+    target_link_options(sg_tests PRIVATE ${SG_SANITIZE_LINK})
+  endif()
   if(MSVC)
     target_compile_options(sg_tests PRIVATE /W4 /WX /utf-8)
     target_compile_definitions(sg_tests PRIVATE _CRT_SECURE_NO_WARNINGS)
@@ -158,6 +192,7 @@ if(SG_BUILD_TESTS)
     verify_manifest_good
     verify_manifest_bad_signature
     archive_reads_outer_bundle
+    archive_survives_mutations
     open_good_path
     open_refuses_tampered_payload
     open_refuses_wrong_payload_hash
