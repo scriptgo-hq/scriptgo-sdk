@@ -3,14 +3,22 @@
     <RootNamespace>ScriptGo.Host</RootNamespace>
     <Description>The SCRIPT//GO host kit for .NET: resources, events, exports across languages, quotas, and Lua (KeraLua) and JavaScript (Jint) guests.</Description>
     <PackageId>ScriptGo.Host</PackageId>
+    <PackageTags>scriptgo;lua;javascript;typescript;sandbox;game-server;modding</PackageTags>
+    <!-- Placeholder until the owner states the SDK licence; see LEGAL_DEPENDENCIES.md. -->
+    <PackageLicenseExpression>LicenseRef-ScriptGo</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IsPackable>true</IsPackable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <NoWarn>$(NoWarn);CS1591;NU5124</NoWarn>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="KeraLua" />
     <PackageReference Include="Jint" />
-    <PackageReference Include="NSec.Cryptography" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Escrow (signed, encrypted releases) is its own package, usable without this sandbox. -->
+    <ProjectReference Include="../ScriptGo.Escrow/ScriptGo.Escrow.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- The guest preludes, and the portable core's JSON module (one implementation for every Lua host). -->
@@ -18,6 +26,9 @@
     <EmbeddedResource Include="../../lua/scriptgo/json.lua" LogicalName="ScriptGo.Host.json.lua" />
     <EmbeddedResource Include="../../lua/scriptgo/compat.lua" LogicalName="ScriptGo.Host.compat.lua" />
     <EmbeddedResource Include="Guests/JavaScript/prelude.js" LogicalName="ScriptGo.Host.prelude.js" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../README.md" Pack="true" PackagePath="/" Visible="false" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="ScriptGo.Host.Tests" />

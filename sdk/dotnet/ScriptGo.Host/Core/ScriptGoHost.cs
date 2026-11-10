@@ -253,13 +253,23 @@ public sealed partial class ScriptGoHost : IDisposable
                 var lang = ManifestParser.LanguageOf(rel)!;
                 // TypeScript runs as the JavaScript `scriptgo pack` compiled next to it (<entry>.js).
                 var file = rel.EndsWith(".ts", StringComparison.Ordinal) ? rel + ".js" : rel;
-                var bytes = Services.Files.Read(res.Root, file);
-                if (bytes is null)
+                // A provider that holds the source in native memory (an escrowed resource) compiles
+                // Lua itself: the plaintext then never becomes a managed array on its way to the VM.
+                var native = lang == "lua" && Services.Files is INativeLuaChunks chunks && chunks.HasNativeChunk(res.Root, file);
+                var bytes = native ? null : Services.Files.Read(res.Root, file);
+                if (!native && bytes is null)
                     return FailStart(file == rel ? $"cannot read {rel}" : $"typescript_not_compiled:{rel} (run scriptgo pack or scriptgo verify)");
                 Guest guest;
                 try { guest = GuestFor(side, lang); }
                 catch (Exception ex) { return FailStart($"{lang} guest failed to start: {ex.Message}"); }
-                try { guest.RunScript(rel, bytes); }
+                try
+                {
+                    if (native)
+                    {
+                        if (!guest.TryRunNativeScript(rel)) return FailStart($"cannot read {rel}");
+                    }
+                    else guest.RunScript(rel, bytes!);
+                }
                 catch (GuestScriptException ex) { return FailStart($"{rel}: {ex.Message}"); }
                 if (!side.Alive || !guest.Alive) return FailStart(res.Failure ?? $"{rel}: stopped while loading");
             }
@@ -319,6 +329,23 @@ public sealed partial class ScriptGoHost : IDisposable
         var stopped = StopInternal(name, reason ?? "stopped");
         FlushDeferred();
         return stopped;
+    }
+
+    /// <summary>
+    /// Stops a resource from any thread: the stop is queued and applied by the next <see cref="Tick"/>,
+    /// on the host's own thread. For callbacks that do not run there, such as an escrow revocation.
+    /// </summary>
+    public void StopOnNextTick(string name, string reason) => _completions.Enqueue(() => Stop(name, reason));
+
+    /// <summary>The root of the resource a guest may compile a chunk from: its own, or a declared
+    /// dependency's. Null when the dependency is not declared or not loaded.</summary>
+    internal string? ChunkRoot(Guest guest, string? library)
+    {
+        var res = guest.Side.Res;
+        if (library is null) return res.Root;
+        return res.Manifest.Dependencies.Any(d => d.Name == library) && _resources.TryGetValue(library, out var dependency)
+            ? dependency.Root
+            : null;
     }
 
     private bool StopInternal(string name, string reason)

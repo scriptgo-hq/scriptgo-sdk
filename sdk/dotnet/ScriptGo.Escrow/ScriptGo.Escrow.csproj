@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>ScriptGo.Escrow</RootNamespace>
+    <PackageId>ScriptGo.Escrow</PackageId>
+    <Description>SCRIPT//GO escrow for any .NET host: verify a signed, encrypted script release, get its key released to this server only, decrypt it in native memory (libscriptgo) and load Lua chunks into your own VM without the plaintext entering the managed heap. Deterrence, traceability and revocation; not a guarantee against the operator of the host. No dependency on the SCRIPT//GO sandbox.</Description>
+    <PackageTags>scriptgo;escrow;lua;licensing;game-server;modding</PackageTags>
+    <!-- Placeholder until the owner states the SDK licence; see LEGAL_DEPENDENCIES.md. -->
+    <PackageLicenseExpression>LicenseRef-ScriptGo</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CS1573;NU5124</NoWarn>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Only the managed fallback backend uses it (X25519, ed25519). The native backend links its
+         own libsodium statically and never loads this one. -->
+    <PackageReference Include="NSec.Cryptography" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ScriptGo.Host.Tests" />
+  </ItemGroup>
+
+  <!-- The native loader, built by sdk/native/build.ps1 into sdk/native/dist/<rid>/. It is packed
+       under runtimes/<rid>/native/ and copied next to every project that references this one.
+       When it has not been built the project still compiles: the native backend then fails closed
+       at run time with a message that says what to build. -->
+  <PropertyGroup>
+    <ScriptGoNativeDist>$(MSBuildThisFileDirectory)../../native/dist/</ScriptGoNativeDist>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="$(ScriptGoNativeDist)win-x64/scriptgo.dll" Condition="Exists('$(ScriptGoNativeDist)win-x64/scriptgo.dll')"
+          Pack="true" PackagePath="runtimes/win-x64/native/" Link="runtimes/win-x64/native/scriptgo.dll"
+          CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(ScriptGoNativeDist)linux-x64/libscriptgo.so" Condition="Exists('$(ScriptGoNativeDist)linux-x64/libscriptgo.so')"
+          Pack="true" PackagePath="runtimes/linux-x64/native/" Link="runtimes/linux-x64/native/libscriptgo.so"
+          CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(ScriptGoNativeDist)osx-arm64/libscriptgo.dylib" Condition="Exists('$(ScriptGoNativeDist)osx-arm64/libscriptgo.dylib')"
+          Pack="true" PackagePath="runtimes/osx-arm64/native/" Link="runtimes/osx-arm64/native/libscriptgo.dylib"
+          CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)../../native/THIRD-PARTY-NOTICES.txt" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
+</Project>

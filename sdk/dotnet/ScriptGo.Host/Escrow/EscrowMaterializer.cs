@@ -1,64 +1,58 @@
-// Materializes a decrypted escrow resource as a normal local-resource folder for a host that loads
-// resources from disk (OPEN//77's ServerResourceHost.Discover reads open77.lua folders and their
-// scripts from disk — there is no in-process resource-provider seam a dropped-in DLL could hook).
+// THE LICENSE-ONLY-GRADE FALLBACK. Materializes a decrypted escrow resource as a normal
+// local-resource folder, for a host that can only load resources from disk (OPEN//77's
+// ServerResourceHost.Discover reads open77.lua folders and their scripts from disk: there is no
+// in-process resource-provider seam a dropped-in DLL could hook).
 //
-// This is the Option A hand-off for OPEN//77 (sdk/adapters/open77/escrow/PROPOSAL.md): decryption
-// happens in C# (EscrowLoader), and the plaintext is written into the operator's resources root so
-// OPEN//77 discovers it unchanged — no OPEN//77 core change. HONEST CAVEAT: on OPEN//77 the plaintext
-// must land on the operator's own disk (the host reads scripts from there), so code secrecy there is
-// license-only-grade; binding, revocation, signing and traceability remain real. Option B keeps the
-// plaintext in memory via a core hook (the proposal), and is the only way to avoid the disk write.
-using System.Security.Cryptography;
+// This is the Option A hand-off for OPEN//77 (sdk/adapters/open77/escrow/PROPOSAL.md). The key is
+// released only to a licensed, bound server and the unwrap and the decryption happen in
+// libscriptgo (on the native backend), but the plaintext then has to be written into the operator's own resources
+// directory. So there is NO code-secrecy claim on this path: it is license-only grade. What still
+// holds is binding (a leaked encrypted copy will not open on an unbound server), revocation of
+// future key releases, signing and the delivery marker. A host that can load from memory should
+// use EscrowLoader instead (Option B on OPEN//77): that keeps the scripts off the disk.
+using ScriptGo.Escrow;
 
-namespace ScriptGo.Host.Escrow;
+namespace ScriptGo.Host;
 
 public static class EscrowMaterializer
 {
-    /// <summary>Loads an escrowed bundle (verify → wrapped key → decrypt in memory) and writes the
-    /// decrypted resource into <paramref name="resourcesRoot"/> as a folder named after the resource,
-    /// ready for a disk-reading host to discover. Returns the resource folder, or a failure reason.</summary>
+    /// <summary>Opens an escrowed bundle and writes the decrypted resource into
+    /// <paramref name="resourcesRoot"/> as a folder named after the resource, ready for a disk-reading
+    /// host to discover. Returns the resource folder, or a failure reason. Nothing is written when the
+    /// key is refused.</summary>
     public static async Task<(bool Ok, string? Reason, string? ResourceDir)> MaterializeAsync(
         byte[] bundle,
         string resourcesRoot,
-        EscrowServerIdentity identity,
+        EscrowIdentity identity,
         IEscrowKeyService keyService,
         string? trustedSignerPublicKey,
         CancellationToken cancellation = default)
     {
-        var files = new EscrowResourceFiles();
-        var load = await EscrowLoader.LoadAsync(bundle, files, identity, keyService, trustedSignerPublicKey, cancellation).ConfigureAwait(false);
-        if (!load.Ok) return (false, load.Reason, null);
+        EscrowContent content;
+        try { content = await EscrowSession.OpenAsync(bundle, identity, keyService, trustedSignerPublicKey, null, cancellation).ConfigureAwait(false); }
+        catch (EscrowException e) { return (false, e.Reason, null); }
 
-        // Read the resource name from the decrypted manifest so the folder matches it.
-        var manifestName = ResolveResourceName(files, load.ResourceRoot!);
-        if (manifestName is null) return (false, "no_manifest_in_bundle", null);
-
-        var dir = Path.Combine(resourcesRoot, manifestName);
-        try
+        using (content)
         {
-            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
-            foreach (var relative in files.List(load.ResourceRoot!))
-            {
-                var bytes = files.Read(load.ResourceRoot!, relative);
-                if (bytes is null) continue;
-                var full = Path.GetFullPath(Path.Combine(dir, relative.Replace('/', Path.DirectorySeparatorChar)));
-                var prefix = Path.GetFullPath(dir) + Path.DirectorySeparatorChar;
-                if (!full.StartsWith(prefix, StringComparison.Ordinal)) return (false, "unsafe_path:" + relative, null);
-                Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-                File.WriteAllBytes(full, bytes);
-            }
+            // The resource's folder is named after the manifest, which is a clear file.
+            var manifestName = ResolveResourceName(content);
+            if (manifestName is null) return (false, "no_manifest_in_bundle", null);
+            if (!EscrowPaths.IsSafe(manifestName) || manifestName.Contains('/')) return (false, "unsafe_path:" + manifestName, null);
+
+            var dir = Path.Combine(resourcesRoot, manifestName);
+            try { EscrowDiskFallback.WriteTo(content, dir); }
+            catch (InvalidDataException e) { return (false, "unsafe_path:" + e.Message, null); }
+            catch (IOException e) { return (false, "write_failed:" + e.Message, null); }
+            catch (UnauthorizedAccessException e) { return (false, "write_failed:" + e.Message, null); }
+            return (true, null, dir);
         }
-        catch (IOException e) { return (false, "write_failed:" + e.Message, null); }
-        finally { files.Unmount(load.ResourceRoot!); }
-        return (true, null, dir);
     }
 
-    private static string? ResolveResourceName(EscrowResourceFiles files, string root)
+    private static string? ResolveResourceName(EscrowContent content)
     {
         foreach (var candidate in Manifest.ManifestParser.ManifestFiles)
         {
-            var bytes = files.Read(root, candidate);
-            if (bytes is null) continue;
+            if (!content.ClearFiles.TryGetValue(candidate, out var bytes)) continue;
             var parsed = Manifest.ManifestParser.Parse(System.Text.Encoding.UTF8.GetString(bytes), candidate);
             return parsed.Manifest?.Name;
         }

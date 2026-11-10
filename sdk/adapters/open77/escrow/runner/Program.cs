@@ -5,18 +5,31 @@
 //   scriptgo-open77-escrow --bundle <release>.escrow.zip --resources-root <server>/resources
 //       --master https://api... --deployment-token sg_dep_... --package <creator//name>
 //       --environment open77 [--trusted-signer <ed25519-pubkey-b64url>]
-//       [--identity-file <path>]   (the server's X25519 key pair; created on first run, kept secret)
+//       [--identity-file <path>]   (the server's X25519 identity; created on first run, kept secret)
 //
 // HONEST NOTE: on OPEN//77 the decrypted scripts must land in the operator's own resources directory
 // (OPEN//77 reads scripts from disk), so code secrecy there is license-only-grade; binding,
 // revocation, signing and traceability remain real. Option B keeps the plaintext in memory.
+//
+// The crypto is the ScriptGo.Escrow package: the identity's private key and the content key stay
+// inside libscriptgo (native), and the identity file is sealed for this user (DPAPI on Windows, a
+// 0600 file elsewhere). ScriptGo.Host is referenced only to read the resource name from the manifest.
+using System.Security.Cryptography;
 using System.Text.Json;
-using ScriptGo.Host.Escrow;
+using ScriptGo.Escrow;
+using ScriptGo.Host;
 
 var options = ParseArgs(args);
 if (options is null) return 2;
 
-var identity = LoadOrCreateIdentity(options.IdentityFile);
+EscrowIdentity identity;
+try { identity = LoadOrCreateIdentity(options.IdentityFile); }
+catch (Exception e) when (e is EscrowException or CryptographicException or IOException)
+{
+    Console.Error.WriteLine($"cannot open the server identity: {e.Message}");
+    return 1;
+}
+using var ownedIdentity = identity;
 Console.WriteLine($"server public key: {identity.PublicKeyBase64Url}");
 
 using var http = new HttpClient { BaseAddress = new Uri(options.Master) };
@@ -60,21 +73,26 @@ static Options? ParseArgs(string[] argv)
         map.GetValueOrDefault("identity-file", Path.Combine(root, ".scriptgo-escrow-identity.json")));
 }
 
-static EscrowServerIdentity LoadOrCreateIdentity(string path)
+static EscrowIdentity LoadOrCreateIdentity(string path)
 {
-    if (File.Exists(path))
+    // Earlier versions of this runner kept the key pair as plain JSON. Such a file is read once,
+    // rewritten in the sealed format, and the server keeps the public key its deployment knows.
+    if (File.Exists(path) && File.ReadAllBytes(path) is [(byte)'{', ..])
     {
-        var saved = JsonSerializer.Deserialize<IdentityFile>(File.ReadAllText(path))!;
-        return EscrowServerIdentity.FromRaw(Convert.FromBase64String(saved.PrivateKey), Convert.FromBase64String(saved.PublicKey));
+        var saved = JsonSerializer.Deserialize<LegacyIdentityFile>(File.ReadAllText(path))!;
+        var privateKey = Convert.FromBase64String(saved.PrivateKey);
+        try
+        {
+            var migrated = EscrowIdentity.ImportPrivateKey(privateKey);
+            migrated.Save(path, replace: true);
+            Console.WriteLine("identity file migrated to the sealed format.");
+            return migrated;
+        }
+        finally { CryptographicOperations.ZeroMemory(privateKey); }
     }
-    var identity = EscrowServerIdentity.Generate();
-    Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-    File.WriteAllText(path, JsonSerializer.Serialize(new IdentityFile(
-        Convert.ToBase64String(identity.ExportPrivateKey()), Convert.ToBase64String(identity.PublicKey))));
-    // The identity file holds the server's PRIVATE key. Protect it; it is what binds this server.
-    if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-    return identity;
+    // The identity file is what binds this server. It is created on first run and never replaced.
+    return EscrowIdentity.LoadOrCreate(path);
 }
 
 internal sealed record Options(string Bundle, string ResourcesRoot, string Master, string DeploymentToken, string Package, string Environment, string? TrustedSigner, string IdentityFile);
-internal sealed record IdentityFile(string PrivateKey, string PublicKey);
+internal sealed record LegacyIdentityFile(string PrivateKey, string PublicKey);

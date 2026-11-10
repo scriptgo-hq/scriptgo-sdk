@@ -8,7 +8,7 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>scriptgo-open77-escrow</AssemblyName>
     <RootNamespace>ScriptGo.Open77.Escrow.Runner</RootNamespace>
-    <Description>Option A loader (CREATOR-PROTECTION §4): fetches a SCRIPT//GO escrow release, decrypts in C#, and materializes it into an OPEN//77 resources root as a normal local resource. No OPEN//77 change.</Description>
+    <Description>Option A loader (CREATOR-PROTECTION §4): fetches a SCRIPT//GO escrow release, decrypts it with ScriptGo.Escrow (libscriptgo), and materializes it into an OPEN//77 resources root as a normal local resource. No OPEN//77 change.</Description>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../../../dotnet/ScriptGo.Host/ScriptGo.Host.csproj" />
