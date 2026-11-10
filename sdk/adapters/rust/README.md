@@ -140,7 +140,7 @@ Off by default. In the plugin config (`oxide/config/ScriptGo.json`, `carbon/conf
 ```json
 "escrow": {
   "enabled": true,
-  "master": "https://api.example.com",
+  "master": "https://api.scriptgo.dev",
   "environment": "rust",
   "identityFile": "escrow/identity.key",
   "tokensDirectory": "escrow/tokens",

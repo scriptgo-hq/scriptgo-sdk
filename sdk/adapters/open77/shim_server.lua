@@ -89,13 +89,13 @@ SG.http = { request = httpRequest }
 -- @end
 
 -- @capability licensing
--- Talks to the SCRIPT//GO API at the `scriptgo_api` convar (default http://localhost:4100), with
+-- Talks to the SCRIPT//GO API at the `scriptgo_api` convar (default https://api.scriptgo.dev), with
 -- the request and answer shapes of a SCRIPT//GO host: the decoded answer, or nil, reason[, body].
 -- The operator allows the API host in server.jsonc `http.allowedHosts`.
 do
     local function apiBase()
         local v = GetConvar("scriptgo_api", "")
-        if v == nil or v == "" then return "http://localhost:4100" end
+        if v == nil or v == "" then return "https://api.scriptgo.dev" end
         return (v:gsub("/+$", ""))
     end
     local function call(path, body)
@@ -143,7 +143,7 @@ end
 -- operator who allows the API host in server.jsonc), Open77.players.identifier (the player's durable
 -- authenticated identifier), the wall clock and the resource's kvp for the cache.
 --
--- Convars: `scriptgo_api` (default http://localhost:4100) and `scriptgo_server_token` (the sg_srv_
+-- Convars: `scriptgo_api` (default https://api.scriptgo.dev) and `scriptgo_server_token` (the sg_srv_
 -- token of the server link made in the SCRIPT//GO dashboard). The shim is packed per resource, so each
 -- resource that uses perks pulls the event queue on its own.
 do

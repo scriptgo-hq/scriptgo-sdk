@@ -101,7 +101,7 @@ export function packForGarrysmod(res: LoadedResource, parent: string, opts: { ru
   writeFileSync(join(addon, "addon.json"), addonJson(`${m.title ?? m.name} (SCRIPT//GO resource)`));
   const runtime = opts.runtime === false ? undefined : buildGarrysmodRuntime(join(parent, "scriptgo"));
   if (m.capabilities.includes("http") || m.capabilities.includes("licensing") || m.optionalCapabilities.includes("licensing")) {
-    r.warnings.push("licensing calls the SCRIPT//GO API at the scriptgo_api convar (default http://localhost:4100); set it in server.cfg");
+    r.warnings.push("licensing calls the SCRIPT//GO API at the scriptgo_api convar (default https://api.scriptgo.dev); the server needs outbound HTTPS to it");
   }
   return { dest: addon, warnings: r.warnings, errors: [], runtime };
 }

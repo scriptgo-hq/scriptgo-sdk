@@ -55,5 +55,5 @@ public sealed class HostOptions
     /// </summary>
     public Func<string, string, bool>? GrantPermission { get; init; }
     /// <summary>Default SCRIPT//GO API for ScriptGo.licensing when the convar scriptgo_api is not set.</summary>
-    public string DefaultApi { get; init; } = "http://localhost:4100";
+    public string DefaultApi { get; init; } = "https://api.scriptgo.dev";
 }

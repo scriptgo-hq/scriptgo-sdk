@@ -33,8 +33,13 @@ scriptgo login --token sg_pat_...      # or --token - to read it from stdin
 ```
 
 `login` checks the token against the API and saves it in `~/.scriptgo/credentials.json`.
-`--api <url>` picks the API (default `http://localhost:4100`). The environment variables
+`--api <url>` picks the API (default `https://api.scriptgo.dev`). The environment variables
 `SCRIPTGO_TOKEN` and `SCRIPTGO_API` win over the saved file.
+
+To work against a local API in development, log in to it once
+(`scriptgo login --token sg_pat_... --api http://localhost:4100`) or set
+`SCRIPTGO_API=http://localhost:4100` for one shell. Game servers take the same URL in their
+`scriptgo_api` setting.
 
 The CLI sends the token as `Authorization: Bearer sg_pat_...` on every request. A token is
 scoped to one user. Revoke it from the same settings page if it leaks.

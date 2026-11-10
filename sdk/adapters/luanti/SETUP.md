@@ -14,7 +14,7 @@
    ```json
    {
      "resources": { "sg_inventory": { "slots": 30 } },
-     "convars": { "scriptgo_api": "https://api.example.com" },
+     "convars": { "scriptgo_api": "https://api.scriptgo.dev" },
      "permissions": { "alice": ["command.giveitem"] }
    }
    ```

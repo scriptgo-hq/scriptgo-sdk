@@ -31,8 +31,8 @@ on Linux and a start through `runds.sh` are written from the documentation and u
    ```json
    {
      "resources": { "sg_inventory": { "slots": 30 } },
-     "convars": { "scriptgo_api": "https://api.example.com" },
-     "httpAllowedHosts": ["api.example.com"],
+     "convars": { "scriptgo_api": "https://api.scriptgo.dev" },
+     "httpAllowedHosts": ["api.scriptgo.dev"],
      "start": null
    }
    ```
@@ -77,7 +77,7 @@ guarantee, and the operator of the machine can ultimately recover what their own
 4. Turn escrow on in the plugin config and reload the plugin:
 
    ```json
-   "escrow": { "enabled": true, "master": "https://api.example.com", "trustedSigners": [] }
+   "escrow": { "enabled": true, "master": "https://api.scriptgo.dev", "trustedSigners": [] }
    ```
 
    The first escrowed start creates this server's identity in
@@ -93,7 +93,7 @@ guarantee, and the operator of the machine can ultimately recover what their own
 Player perks (`ScriptGo.perks`, `docs/spec/perks.md`): the server asks SCRIPT//GO which of the operator's perks a player has. It needs the server linked to the operator's account (Dashboard, Perks, Servers) and the link's token, a secret, in the host's settings. In the plugin's configuration, next to `scriptgo_api`:
 
 ```json
-"convars": { "scriptgo_api": "https://api.example.com", "scriptgo_server_token": "sg_srv_..." }
+"convars": { "scriptgo_api": "https://api.scriptgo.dev", "scriptgo_server_token": "sg_srv_..." }
 ```
 
 A player is `steam:<steamid64>`. The cache goes to the plugin's data files (`scriptgo.perks`). This

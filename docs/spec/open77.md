@@ -54,7 +54,7 @@ shared script, and because its client sandbox has no `setmetatable`.
 | `config.get(key, default)` | `GetConvar("<resource>:<key>")`, which falls through to the resource's tunables; JSON, booleans and numbers decoded | server |
 | `ui.notify(target, payload)` | server: `Open77.notifications.send/broadcast` (permission `network.events`); client: the `open77_notifications` package's `show` export | both |
 | `http.request{ method, url, headers, body }` | `Open77.http.request` (permission `http.request`) awaited on a promise; answers `{ status, body, headers, error }`, `status = 0` when the exchange did not complete; a request the server refuses at once answers `nil, reason` (`host_not_allowed`, `http_unavailable`...) | server |
-| `licensing.activate/verify` | POST to the `scriptgo_api` convar (default `http://localhost:4100`) over `Open77.http.request`, same request and answer shapes as every SCRIPT//GO host (`/v1/licenses/*`) | server |
+| `licensing.activate/verify` | POST to the `scriptgo_api` convar (default `https://api.scriptgo.dev`) over `Open77.http.request`, same request and answer shapes as every SCRIPT//GO host (`/v1/licenses/*`) | server |
 | `perks.*` | The portable core's module `sdk/lua/scriptgo/perks.lua`, included word for word in the server shim by `scriptgo pack`, over `Open77.http.request`, `Open77.players.identifier`, `Open77.time.unix` and the resource's kvp (key `scriptgo.perks`). Convars `scriptgo_api`, `scriptgo_server_token`, optionally `scriptgo_perks_poll_seconds`. Nothing payment-related is in OPEN//77: see `docs/spec/perks.md` | server |
 | events, exports, commands, promises | native OPEN//77 globals, untouched | both |
 
@@ -73,11 +73,12 @@ OPEN//77 keeps outbound HTTP off until the server operator turns it on, and then
 hosts they list. A resource that uses `http` or `licensing` needs, in `server.jsonc`:
 
 ```jsonc
-"http": { "enabled": true, "allowedHosts": ["api.scriptgo.example"] },
-"convars": { "scriptgo_api": "https://api.scriptgo.example" }
+"http": { "enabled": true, "allowedHosts": ["api.scriptgo.dev"] },
+"convars": { "scriptgo_api": "https://api.scriptgo.dev" }
 ```
 
-`pack` prints this as a warning. Anything not on the list answers `nil, "host_not_allowed"` before a
+`scriptgo_api` can be left out: it defaults to `https://api.scriptgo.dev`. `pack` prints this as a
+warning. Anything not on the list answers `nil, "host_not_allowed"` before a
 byte leaves the server, and redirects are never followed. The licence key itself goes in the
 `<resource>:license_key` convar (or a tunable), never in the resource folder.
 

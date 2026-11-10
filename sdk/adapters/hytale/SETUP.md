@@ -24,9 +24,9 @@ steps need the server owner's own Hytale account: SCRIPT//GO never downloads or 
    ```json
    {
      "resources": { "sg_inventory": { "slots": 30 } },
-     "convars": { "scriptgo_api": "https://api.example.com" },
+     "convars": { "scriptgo_api": "https://api.scriptgo.dev" },
      "permissions": { "Alice": ["command.giveitem"] },
-     "http": { "allowedHosts": ["api.example.com"] },
+     "http": { "allowedHosts": ["api.scriptgo.dev"] },
      "start": ["sg_inventory"]
    }
    ```

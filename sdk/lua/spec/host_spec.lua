@@ -641,7 +641,7 @@ describe("licensing", function()
             ["lic/s.lua"] = 'exports("verify", function() return ScriptGo.licensing.verify({ licenseKey = "bad", package = "x//y" }) end)',
         }, {
             http = {
-                ["POST http://localhost:4100/v1/licenses/verify"] = { status = 404, body = '{"error":{"code":"license_not_found","message":"No such license."}}' },
+                ["POST https://api.scriptgo.dev/v1/licenses/verify"] = { status = 404, body = '{"error":{"code":"license_not_found","message":"No such license."}}' },
             },
         })
         h:add("lic"); h:start("lic")

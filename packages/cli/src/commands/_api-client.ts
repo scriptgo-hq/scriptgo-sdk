@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-export const DEFAULT_API = "http://localhost:4100";
+export const DEFAULT_API = "https://api.scriptgo.dev";
 
 export interface Credentials {
   api: string;

@@ -1,4 +1,4 @@
-// scriptgo login --token <sg_pat_...> [--api http://localhost:4100]
+// scriptgo login --token <sg_pat_...> [--api <url>]   (default https://api.scriptgo.dev)
 //
 // Checks a personal access token against GET /v1/me and saves it to ~/.scriptgo/credentials.json
 // (mode 0600). Create tokens in the web app under Account > Tokens. `--token -` reads it from
@@ -13,6 +13,7 @@ export async function run(args: string[]): Promise<number> {
   const a = parseArgs(args, { booleans: ["help"] });
   if (a.bools.has("help")) {
     console.log("scriptgo login --token <sg_pat_...|-> [--api <url>]");
+    console.log("  --api defaults to SCRIPTGO_API, then the saved API, then https://api.scriptgo.dev");
     return 0;
   }
   let token = a.flags.token ?? process.env.SCRIPTGO_TOKEN ?? "";

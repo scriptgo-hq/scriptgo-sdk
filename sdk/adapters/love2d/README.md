@@ -50,7 +50,7 @@ function love.load()
         config = {
             permissions = { ["1"] = { "inventory.give" } },              -- privileges per player id
             resources = { sg_inventory = { slots = 12, maxWeight = 20 } }, -- ScriptGo.config.get
-            convars = { scriptgo_api = "https://api.example" },          -- GetConvar
+            convars = { scriptgo_api = "https://api.scriptgo.dev" },          -- GetConvar
             -- http = false,                                             -- switch HTTP off
         },
     })

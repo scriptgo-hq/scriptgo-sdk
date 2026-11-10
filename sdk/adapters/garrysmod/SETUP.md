@@ -25,8 +25,9 @@
 
    Permissions also come from superadmin and, with an admin mod such as ULX or SAM, from the CAMI
    privileges `scriptgo.<name>`.
-4. For licensed packages, point `scriptgo_api` at the SCRIPT//GO API in `server.cfg`
-   (`scriptgo_api "https://api.example.com"`). An API on a loopback or private address also needs
+4. Licensed packages call the SCRIPT//GO API at `https://api.scriptgo.dev`. To use another one (a
+   local API in development), set `scriptgo_api` in `server.cfg`
+   (`scriptgo_api "http://localhost:4100"`). An API on a loopback or private address also needs
    `-allowlocalhttp` on the srcds command line.
 
 Only the server side runs: client scripts are not executed yet. Keep `sv_hibernate_think 1` if

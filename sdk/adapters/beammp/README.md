@@ -25,12 +25,12 @@ Optional `Resources/Server/scriptgo/scriptgo.json`:
 ```json
 {
   "resources": { "sg_inventory": { "slots": 30 } },
-  "convars": { "scriptgo_api": "https://api.example.com" },
+  "convars": { "scriptgo_api": "https://api.scriptgo.dev" },
   "permissions": { "beammp:123456": ["*"], "Ada": ["command.giveitem", "shop.*"] },
   "start": ["sg_inventory"],
   "dataDir": "Resources/Server/scriptgo/data",
   "http": true,
-  "httpAllowedHosts": ["api.example.com"]
+  "httpAllowedHosts": ["api.scriptgo.dev"]
 }
 ```
 

@@ -1,5 +1,5 @@
 -- Run with: scriptgo test examples/packages/inventory_pro --search sdk/packages
-local VERIFY = "POST http://localhost:4100/v1/licenses/verify"
+local VERIFY = "POST https://api.scriptgo.dev/v1/licenses/verify"
 
 local function iso(offsetSeconds)
     return os.date("!%Y-%m-%dT%H:%M:%SZ", os.time() + offsetSeconds)

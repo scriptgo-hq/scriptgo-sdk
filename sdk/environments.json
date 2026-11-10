@@ -1327,7 +1327,7 @@
         "config": "data/scriptgo/config.json per resource; GetConvar reads its convars, then the server's convars.",
         "events": "Server side only; client scripts do not run yet. The scheduler ticks on the Think hook, every server frame.",
         "http": "The engine's asynchronous HTTP(): any method, status, body and headers. Loopback and private addresses need srcds -allowlocalhttp.",
-        "licensing": "Over HTTP() to the scriptgo_api convar (default http://localhost:4100).",
+        "licensing": "Over HTTP() to the scriptgo_api convar (default https://api.scriptgo.dev).",
         "logging": "The server console (and garrysmod/console.log with -condebug).",
         "perks": "Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here.",
         "permissions": "superadmin, then CAMI (privilege scriptgo.<name>, for ULX, SAM and other admin mods), then grants by usergroup, SteamID64 or SteamID in data/scriptgo/config.json.",

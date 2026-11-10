@@ -56,7 +56,7 @@ end
 local verifyReq = readJson("scriptgo/verify.json")
 local cfg = verifyReq and (verifyReq.config or {}) or (readJson("scriptgo/config.json") or {})
 
-CreateConVar("scriptgo_api", "", 0, "SCRIPT//GO licensing API base URL (default http://localhost:4100)")
+CreateConVar("scriptgo_api", "", 0, "SCRIPT//GO licensing API base URL (default https://api.scriptgo.dev)")
 CreateConVar("scriptgo_debug", "0", 0, "Print SCRIPT//GO debug log lines")
 
 local logs = {}

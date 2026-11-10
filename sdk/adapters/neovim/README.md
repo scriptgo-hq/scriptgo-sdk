@@ -45,7 +45,7 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim), from a local checkout:
       config = {
         permissions = { ["1"] = { "*" } },                   -- the local user may do everything
         resources = { inventory_pro = { license_key = os.getenv("INVENTORY_PRO_KEY") } },
-        convars = { scriptgo_api = "https://api.example" },  -- the SCRIPT//GO API
+        convars = { scriptgo_api = "https://api.scriptgo.dev" },  -- the SCRIPT//GO API
       },
     })
   end,

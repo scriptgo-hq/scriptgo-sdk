@@ -19,9 +19,9 @@ the server half of a package runs (BeamNG.drive client mods are not a SCRIPT//GO
    ```json
    {
      "resources": { "my_resource": { "slots": 30 } },
-     "convars": { "scriptgo_api": "https://api.scriptgo.example" },
+     "convars": { "scriptgo_api": "https://api.scriptgo.dev" },
      "permissions": { "beammp:123456": ["*"], "Ada": ["command.giveitem"] },
-     "httpAllowedHosts": ["api.scriptgo.example"]
+     "httpAllowedHosts": ["api.scriptgo.dev"]
    }
    ```
 

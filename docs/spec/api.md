@@ -5,7 +5,9 @@ OpenAPI document (`GET /v1/openapi.json`, Swagger UI at `/docs`) is generated fr
 schemas exported by `packages/shared`. **When a shape changes, update `packages/shared` and this
 file in the same change.**
 
-- Base URL in dev: `http://localhost:4100`. The web app proxies `/v1/*` and `/api/auth/*` to the
+- Base URL: `https://api.scriptgo.dev` in production, `http://localhost:4100` in dev. Every SDK
+  default (CLI, hosts, the .NET kit) is production; `SCRIPTGO_API`, `--api` or the `scriptgo_api`
+  setting point a client at another API. The web app proxies `/v1/*` and `/api/auth/*` to the
   API with Next.js rewrites so cookies stay first-party.
 - JSON everywhere, `camelCase`, timestamps ISO-8601 UTC strings, money as
   `{ "amount": 600, "currency": "EUR" }` in **minor units**.

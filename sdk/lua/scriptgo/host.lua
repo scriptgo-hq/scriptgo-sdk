@@ -875,7 +875,7 @@ function Host:_checkLicense(guard)
     local http = self.adapter.http
     if not http or not http.request or not self.capabilities.http then return self:_licenseAnswer(guard, nil) end
     local cfg = self.adapter.config
-    local base = (cfg and cfg.get and cfg.get(nil, "scriptgo_api")) or "http://localhost:4100"
+    local base = (cfg and cfg.get and cfg.get(nil, "scriptgo_api")) or "https://api.scriptgo.dev"
     guard.pending = true
     local ok = pcall(http.request, {
         method = "POST", url = base .. "/v1/licenses/verify",
@@ -1345,7 +1345,7 @@ function Host:_buildEnv(side)
     })
     local function apiBase()
         local cfg = host.adapter.config
-        return (cfg and cfg.get and cfg.get(nil, "scriptgo_api")) or "http://localhost:4100"
+        return (cfg and cfg.get and cfg.get(nil, "scriptgo_api")) or "https://api.scriptgo.dev"
     end
     local function licensingCall(path, body)
         inThread("ScriptGo.licensing")

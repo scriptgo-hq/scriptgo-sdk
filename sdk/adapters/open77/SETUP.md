@@ -10,9 +10,12 @@ A resource that uses `http` or `licensing` also needs the operator to allow the 
 `server.jsonc`:
 
 ```jsonc
-"http": { "enabled": true, "allowedHosts": ["api.scriptgo.example"] },
-"convars": { "scriptgo_api": "https://api.scriptgo.example" }
+"http": { "enabled": true, "allowedHosts": ["api.scriptgo.dev"] },
+"convars": { "scriptgo_api": "https://api.scriptgo.dev" }
 ```
+
+`scriptgo_api` defaults to `https://api.scriptgo.dev`: set it only to use another SCRIPT//GO API (a
+local one in development), and allow that host instead.
 
 The license key goes in the `<resource>:license_key` convar, never in the resource folder.
 
@@ -21,8 +24,8 @@ The license key goes in the `<resource>:license_key` convar, never in the resour
 Player perks (`ScriptGo.perks`, `docs/spec/perks.md`): the server asks SCRIPT//GO which of the operator's perks a player has. It needs the server linked to the operator's account (Dashboard, Perks, Servers) and the link's token, a secret, in the host's settings.
 
 ```jsonc
-"http": { "enabled": true, "allowedHosts": ["api.scriptgo.example"] },
-"convars": { "scriptgo_api": "https://api.scriptgo.example", "scriptgo_server_token": "sg_srv_..." }
+"http": { "enabled": true, "allowedHosts": ["api.scriptgo.dev"] },
+"convars": { "scriptgo_api": "https://api.scriptgo.dev", "scriptgo_server_token": "sg_srv_..." }
 ```
 
 Nothing about payments is in OPEN//77: `scriptgo pack` puts the portable perks module into the

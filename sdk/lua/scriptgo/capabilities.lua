@@ -387,7 +387,7 @@ M.ENVIRONMENTS = {
             config = "data/scriptgo/config.json per resource; GetConvar reads its convars, then the server's convars.",
             ui = "Notifications are chat lines (ChatPrint, PrintMessage).",
             http = "The engine's asynchronous HTTP(): any method, status, body and headers. Loopback and private addresses need srcds -allowlocalhttp.",
-            licensing = "Over HTTP() to the scriptgo_api convar (default http://localhost:4100).",
+            licensing = "Over HTTP() to the scriptgo_api convar (default https://api.scriptgo.dev).",
         },
         limitations = {
             "Server side only: client scripts (HUD, Derma) need a game client and are not run yet.",

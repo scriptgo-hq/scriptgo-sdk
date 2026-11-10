@@ -262,8 +262,10 @@ end)
 `POST /v1/licenses/verify`. `opts` takes `licenseKey` or `deploymentToken`, and `package`; the
 host adds `environment` and `adapterVersion` itself. `licensing.activate(opts)` takes
 `licenseKey`, `package` and `deploymentName` and calls `POST /v1/licenses/activate`. Both send to
-the API named by the `scriptgo_api` convar (default `http://localhost:4100`) and return the
-decoded answer, or `nil, code, body` when the call failed or the API answered 4xx/5xx.
+the API named by the `scriptgo_api` convar (default `https://api.scriptgo.dev`) and return the
+decoded answer, or `nil, code, body` when the call failed or the API answered 4xx/5xx. Set
+`scriptgo_api` only to test against another API, for example a local one
+(`http://localhost:4100`).
 
 > [!CAPABILITY] licensing
 > A resource that declares `licensing` as required does not start where the host cannot provide

@@ -153,7 +153,7 @@ export function open77Manifest(m: ParsedManifest, warnings: string[], source = "
   if (caps.has("http") || caps.has("licensing") || caps.has("perks")) {
     warnings.push(
       "outbound HTTP is off on an OPEN//77 server until the operator sets server.jsonc http.enabled and lists every host the resource calls in http.allowedHosts" +
-        (caps.has("licensing") || caps.has("perks") ? " (licensing and perks call the SCRIPT//GO API at the scriptgo_api convar, default http://localhost:4100)" : ""),
+        (caps.has("licensing") || caps.has("perks") ? " (licensing and perks call the SCRIPT//GO API at the scriptgo_api convar, default https://api.scriptgo.dev: allow api.scriptgo.dev)" : ""),
     );
   }
   if (caps.has("perks")) {

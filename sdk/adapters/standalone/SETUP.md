@@ -20,7 +20,7 @@ later and a Lua interpreter (`lua`/`luajit` on the `PATH`).
    {
      "permissions": { "1": ["inventory.give"] },
      "resources": { "sg_inventory": { "slots": 12 } },
-     "convars": { "scriptgo_api": "https://api.example" }
+     "convars": { "scriptgo_api": "https://api.scriptgo.dev" }
    }
    ```
 
@@ -34,7 +34,7 @@ later and a Lua interpreter (`lua`/`luajit` on the `PATH`).
 
    ```json
    {
-     "convars": { "scriptgo_api": "https://api.example" },
+     "convars": { "scriptgo_api": "https://api.scriptgo.dev" },
      "licenses": { "inventory_pro": { "deploymentToken": "sg_dep_...", "package": "kestrel//inventory-pro" } }
    }
    ```
@@ -52,7 +52,7 @@ system `curl`.
 Player perks (`ScriptGo.perks`, `docs/spec/perks.md`): the server asks SCRIPT//GO which of the operator's perks a player has. It needs the server linked to the operator's account (Dashboard, Perks, Servers) and the link's token, a secret, in the host's settings.
 
 ```json
-{ "convars": { "scriptgo_api": "https://api.example", "scriptgo_server_token": "sg_srv_..." } }
+{ "convars": { "scriptgo_api": "https://api.scriptgo.dev", "scriptgo_server_token": "sg_srv_..." } }
 ```
 
 Players here are the simulated ones, so their identifiers are `local:<name>`: this host is for

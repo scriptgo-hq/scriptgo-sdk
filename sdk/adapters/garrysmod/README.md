@@ -32,7 +32,7 @@ Optional `garrysmod/data/scriptgo/config.json`:
 ```json
 {
   "resources": { "sg_inventory": { "slots": 30 } },
-  "convars": { "scriptgo_api": "https://api.example.com" },
+  "convars": { "scriptgo_api": "https://api.scriptgo.dev" },
   "permissions": { "admin": ["command.giveitem"], "76561198000000000": ["shop.*"] },
   "start": ["sg_inventory"]
 }

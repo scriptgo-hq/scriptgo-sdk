@@ -112,7 +112,7 @@ function M.new(s)
     end
 
     local function apiBase()
-        return ((setting("scriptgo_api") or "http://localhost:4100"):gsub("/+$", ""))
+        return ((setting("scriptgo_api") or "https://api.scriptgo.dev"):gsub("/+$", ""))
     end
 
     -- Persistence ---------------------------------------------------------------------------------
