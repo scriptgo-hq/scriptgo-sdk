@@ -853,17 +853,33 @@ internal static partial class Program
                 -- What that reach does not give: the text or the bytecode of a function, its locals, its upvalues.
                 print("OP tools=" .. tostring(theirs.string.dump) .. " " .. tostring(theirs.debug) .. " " .. tostring(theirs.load) .. " " .. tostring(debug) .. " " .. tostring(load))
                 print("OP tostring=" .. tostring(tostring(theirs.Reveal):match("^function: ") ~= nil) .. " secret=" .. tostring(theirs.secret))
+                -- The same object holds the host services of every resource.
+                print("OP services=" .. type(core.adapter.storage.load) .. " " .. type(core.adapter.readFile))
                 print("OP DONE")
             end)
             """, "dependency \"paid\"");
+        // A resource that declares nothing can stop another one through the same object.
+        Ordinary(rig.Resources, "stopper", """
+            CreateThread(function()
+                while GetResourceState("paid") ~= "started" do Wait(50) end
+                Wait(200)
+                local core = promise.new().host
+                print("ST stop=" .. tostring(core:stop("paid", "by another resource")) .. " " .. core:resourceState("paid"))
+            end)
+            """);
         rig.Boot();
         Assert(rig.UntilLog("OP DONE"), "the operator resource did not finish:\n" + rig.Log.Dump());
+        Assert(rig.UntilLog("ST stop="), "the stopper resource did not finish:\n" + rig.Log.Dump());
         // Could: reach the other resource's environment through the core, call and replace its globals.
         Assert(rig.Log.Has("OP reach=true config=7 call=12"), rig.Log.Dump());
         Assert(rig.Log.Has("OP replaced=REPLACED"), rig.Log.Dump());
         // Could not, even so: get at the script. No dump, no debug, no load; a local is not a global.
         Assert(rig.Log.Has("OP tools=nil nil nil nil nil"), rig.Log.Dump());
         Assert(rig.Log.Has("OP tostring=true secret=nil"), rig.Log.Dump());
+        // Could: use the host services through the core, and stop the other resource.
+        Assert(rig.Log.Has("OP services=function function"), rig.Log.Dump());
+        Assert(rig.Log.Has("SECRET STOPPING") && rig.Log.Has("ST stop=true stopped"), rig.Log.Dump());
+        Assert(rig.Line("paid") == "paid 1.2.0  stopped  [escrow not running]", "a stop from Lua must also wipe the release: " + rig.Line("paid"));
         // Could not: turn a function into bytecode, or replace the string methods other resources use.
         Assert(rig.Log.Has("OP dump=nil viamethod=nil"), rig.Log.Dump());
         Assert(rig.Log.Has("OP meta=false"), rig.Log.Dump());
