@@ -1,6 +1,6 @@
 // Installs an escrow bundle as an OPEN//77 resource folder WITHOUT decrypting anything.
 //
-// The folder is what an OPEN//77 server with `resourceEscrow.enabled` loads (ADR-0025):
+// The folder is what an OPEN//77 server with `resourceEscrow.enabled` loads (ADR-0032):
 //
 //   <resources>/<name>/open77.lua          a SIGNED clear file of the bundle (generated at pack time)
 //   <resources>/<name>/scriptgo_shim*.lua  the OPEN//77 shim, signed clear files of the bundle too

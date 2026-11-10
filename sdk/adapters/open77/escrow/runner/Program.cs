@@ -1,4 +1,4 @@
-// scriptgo-open77-escrow: the Option A loader (PROPOSAL.md). It decrypts a SCRIPT//GO escrow release
+// scriptgo-open77-escrow: the licence-only FALLBACK loader (../README.md). It decrypts a SCRIPT//GO escrow release
 // in C# and writes it into an OPEN//77 resources root as a normal open77.lua resource, which the
 // OPEN//77 server then discovers unchanged — no OPEN//77 core change.
 //

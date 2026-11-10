@@ -87,7 +87,7 @@ the wrapped key, unwraps with the server identity, decrypts **in managed memory*
 payload and clear-file hashes, stamps the delivery marker, zeroes the content key, and serves the
 plaintext through `EscrowResourceFiles` (an `IResourceFiles`) — the host's local-resource path, never
 the guest VM. `EscrowMaterializer` is the Option A hand-off for disk-reading hosts (OPEN//77); see
-`sdk/adapters/open77/escrow/PROPOSAL.md`.
+`sdk/adapters/open77/escrow/README.md` (the server feature that keeps plaintext in native memory, and this disk fallback).
 
 ## Native loader and the `ScriptGo.Escrow` package (added 2026-11-10)
 

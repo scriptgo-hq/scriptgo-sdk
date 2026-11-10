@@ -3,7 +3,7 @@
 // ServerResourceHost.Discover reads open77.lua folders and their scripts from disk: there is no
 // in-process resource-provider seam a dropped-in DLL could hook).
 //
-// This is the Option A hand-off for OPEN//77 (sdk/adapters/open77/escrow/PROPOSAL.md). The key is
+// This is the Option A hand-off for OPEN//77 (sdk/adapters/open77/escrow/README.md, "The fallback loader"). The key is
 // released only to a licensed, bound server and the unwrap and the decryption happen in
 // libscriptgo (on the native backend), but the plaintext then has to be written into the operator's own resources
 // directory. So there is NO code-secrecy claim on this path: it is license-only grade. What still

@@ -161,7 +161,7 @@ M.ENVIRONMENTS = {
         },
     },
     open77 = {
-        protection = { tier = "escrow", state = "planned", optIn = true, note = "Code escrow as an opt-in, default-off server feature: the compiled server decrypts in memory, the key is handled natively and plaintext never reaches the disk. The fallback loader that writes the decrypted copy to disk is licence-only protection." },
+        protection = { tier = "escrow", state = "planned", optIn = true, note = "Code escrow as an opt-in, default-off server feature: the server decrypts through a native library, the key stays in native memory and plaintext never reaches the disk. It is built and proven on a development server, and becomes available with the server release that includes it. Until then the loader that writes the decrypted copy to disk gives licence-only protection." },
         name = "OPEN//77",
         -- A layer on top of an existing game (players need the game); every other entry is an engine
         -- or runtime that hosts Lua itself.
