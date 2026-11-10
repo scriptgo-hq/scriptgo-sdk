@@ -8,7 +8,7 @@ There are two ways. The first is the real one.
 
 | | What runs | Where the plaintext lives | Protection |
 |---|---|---|---|
-| **Server feature** (`resourceEscrow`) | The OPEN//77 server itself, with the native loader `scriptgo` | Native memory only: never on disk, never a managed string | Code escrow |
+| **Server feature** (`resourceEscrow`) | The OPEN//77 server itself, through an optional adapter over the `ScriptGo.Escrow` package and its native loader | Native memory only: never on disk, never a managed string | Code escrow |
 | **Fallback loader** (`runner/`) | A separate tool the operator runs before the server | The operator's resources folder, as ordinary files | Licence only |
 
 ## What it is, and what it is not
@@ -40,7 +40,12 @@ OPEN//77 has an optional, default-off section in `server.jsonc`:
 
 With it off (the default) the server behaves exactly as before and refuses an encrypted folder with
 one log line. OPEN//77 does not depend on SCRIPT//GO to build, test or run: the hook is a neutral
-seam in its scripting host, and the native library is a separate binary the operator installs.
+seam in its scripting host, and what implements it is an **optional adapter assembly**
+(`Open77.Server.Escrow.ScriptGo.dll`) built against the `ScriptGo.Escrow` package, which carries
+the native loader. The adapter is the one escrow integration in OPEN//77 and it holds no copy of
+the format: the manifest, the canonical JSON, the key request, the lease and the native calls are
+the package's. With the section enabled and no adapter beside the executable, the server boots and
+refuses each encrypted folder with `adapter_missing`.
 
 ### What the operator does
 
@@ -58,26 +63,44 @@ seam in its scripting host, and the native library is a separate binary the oper
 4. Add a deployment for the licence (dashboard or `POST /v1/licenses/activate`) and put its token in
    `<tokensDirectory>/<resource>.token`, one line. The token never goes in `server.jsonc` or in the
    resource folder.
-5. Put the native loader next to the server executable (`scriptgo.dll`, built from `sdk/native`;
-   OPEN//77 ships a staging script) and start the server.
+5. Have the adapter next to the server executable (`Open77.Server.Escrow.ScriptGo.dll`,
+   `ScriptGo.Escrow.dll` and `runtimes/<rid>/native/scriptgo.dll` or `libscriptgo.so`), then start
+   the server. Until `ScriptGo.Escrow` is published on a feed, a server built from source gets it
+   with OPEN//77's staging script, from the package this repository packs:
 
-At start the server verifies the release signature, asks the master for the content key wrapped to
-this server's own key, and the native library decrypts and compiles each script straight into the
-resource's Lua VM. The server's identity is created on first start and sealed for the account it
+   ```text
+   pwsh -File sdk/dotnet/pack.ps1                                   (here: writes sdk/dotnet/artifacts)
+   pwsh -File server/scripts/stage-scriptgo-escrow.ps1 -Feed <this repository>/sdk/dotnet/artifacts   (in OPEN//77)
+   dotnet build server/Open77.Server.slnx -c Release
+   ```
+
+At start the server verifies the release signature and the folder, asks the master **in the
+background** for the content key wrapped to this server's own key (the game loop does not wait: the
+resource reads `pending_key` and starts at the tick after the answer), and the native library
+decrypts and compiles each script straight into the resource's Lua VM. The server's identity is created on first start and sealed for the account it
 runs as; the licence is bound to it on first use. Back it up with the rest of `.open77/`.
 
 ### Where the code is
 
 In the OPEN//77 repository (branch `feat/scriptgo-escrow` at the time of writing):
 
-- `Open77.Server.Scripting`: the seam (`IResourceEscrowProvider`, `IEscrowedResource`), one appended
-  optional constructor parameter on `ServerResourceHost`, and one branch in
+- `Open77.Server.Scripting`: the seam (`IResourceEscrowProvider` with its `Ready` signal,
+  `IEscrowedResource`, `IResourceEscrowProviderFactory`), one appended optional constructor
+  parameter on `ServerResourceHost`, the wait for a key that is on its way, and one branch in
   `LuaResourceRuntime.Prepare`: an encrypted script is compiled by the provider instead of
   `LoadBuffer`, under the same instruction hook and error path. `string.dump` is removed from an
-  escrowed resource's VM.
-- `Open77.Server/Escrow`: the provider. Managed code handles only public or encrypted data (the
-  signed manifest, the key request, the renewal timer). Everything secret is behind `IEscrowNative`,
-  bound to `scriptgo` through P/Invoke: identity, unwrap, decrypt, `sg_bundle_lua_load`.
+  escrowed resource's VM, on start, restart and reload.
+- `Open77.Server/Escrow/ResourceEscrowAdapter.cs`: finds the adapter assembly next to the
+  executable and hands it the `resourceEscrow` section; nothing vendor-specific.
+- `Open77.Server.Escrow.ScriptGo` (optional, outside the default solution): the adapter, one file
+  over `ScriptGo.Escrow`: `EscrowBundle.ReadFolder`, `EscrowIdentity.LoadOrCreate`,
+  `HttpEscrowKeyService`, `EscrowKeyCache`, `EscrowSession.Open`, `EscrowContent.LoadLuaChunk`
+  with `LuaChunkLoader.FromLibraryName("lua54", typeof(KeraLua.Lua).Assembly)`, renewal and
+  `Revoked`. It declares no native function and never uses the package's managed-copy door (a
+  test reads its IL to assert both). What it adds is OPEN//77's own: which files of a resource
+  must belong to the release, the per-resource token files, the reason codes and log lines.
+  Once the package is published, moving it into OPEN//77's default build is a small change
+  (listed in OPEN//77's `wiki/resource-escrow.md`).
 - Configuration, schema, Warden writer, a lab config (`server.escrow-local.jsonc`), the wiki page
   `wiki/resource-escrow.md` and a research note.
 
@@ -95,14 +118,16 @@ process.
 through `tools/open77-escrow-loader.mjs`:
 
 ```text
-node tools/escrow-e2e.mjs --environment open77 --require-output --loader-stays-up --stop-window 80 \
+node tools/escrow-e2e.mjs --environment open77 --require-output --loader-stays-up --stop-window 90 \
   --loader "node tools/open77-escrow-loader.mjs --open77-server <path to OPEN//77>/server"
 ```
 
 It publishes a protected release, buys it through the mock payment provider, binds a server and
 checks that the resource runs; then that it is refused without a licence, on a second server
 identity, with a tampered bundle, after a refund and after a staff revoke; and that a **running**
-server stops the resource by itself once the offline grace ends. Results are in `TEST_RESULTS.md`.
+server stops the resource by itself after a refund: at once, because the key endpoint marks that
+refusal final (a refusal that is not final, or an unreachable master, runs to the end of the
+offline grace). Results are in `TEST_RESULTS.md`.
 
 ## The fallback loader (licence only)
 
@@ -119,11 +144,13 @@ offered. Build: `dotnet build runner/ScriptGo.Open77.Escrow.Runner.csproj`.
 
 - A Lua error in an encrypted script reports the script's path, a line number and, for a syntax
   error, the token it stopped near. The source is never logged.
-- The server floors the lifetime of a key answer and sweeps on a timer, so a revoked resource stops
-  within about 45 seconds of the end of its grace, not at the exact second.
+- A resource whose licence is revoked or refunded stops at the first renewal after it (a key answer
+  lives 15 minutes in production and is renewed a third of that before it expires), not at the
+  second of the refund. A refusal that is not final, and an outage, stop it at the end of the
+  offline grace of its last valid answer.
 - Key answers are kept in memory only. After a server restart with the master unreachable, encrypted
   resources stay stopped until it answers.
-- The native library is built and tested on Windows x64 and Linux x64. On Linux the OPEN//77 escrow tests (73) pass and the end-to-end script reaches 32/32 against a server built there, in a container (`tools/escrow-e2e-linux.ps1 -Loader open77`); no production host, no players.
+- The native library is built and tested on Windows x64 and Linux x64. The Linux figures for the adapter are in `TEST_RESULTS.md` (the container script `tools/escrow-e2e-linux.ps1 -Loader open77` packs the package and builds the adapter there); no production host, no players.
 - Client-side code is not protected. Keep valuable logic on the server.
 - With players connected, measured with network bots only (OPEN//77's own `Open77.Bots`, real
   protocol clients, on Windows): three players connected while the encrypted script ran were greeted

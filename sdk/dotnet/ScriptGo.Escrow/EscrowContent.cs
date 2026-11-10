@@ -58,6 +58,7 @@ public sealed class EscrowContent : IDisposable
     private readonly EscrowIdentity _identity;
     private readonly IEscrowKeyService _keyService;
     private readonly EscrowOpenOptions _options;
+    private readonly string? _trustedSigner;
     private readonly TimeProvider _time;
     private readonly object _gate = new();
     private readonly SemaphoreSlim _renewing = new(1, 1);
@@ -70,8 +71,9 @@ public sealed class EscrowContent : IDisposable
     private Task? _renewalTask;
 
     internal EscrowContent(EscrowBundle bundle, IContentStore store, EscrowIdentity identity, IEscrowKeyService keyService,
-        EscrowKeyResult grant, EscrowOpenOptions options)
+        EscrowKeyResult grant, EscrowOpenOptions options, string? trustedSignerPublicKey = null)
     {
+        _trustedSigner = trustedSignerPublicKey;
         _bundle = bundle;
         _store = store;
         _identity = identity;
@@ -233,7 +235,9 @@ public sealed class EscrowContent : IDisposable
     /// <summary>
     /// Asks the key service again, now. Granted: the lease is extended. Refused or unreachable: the
     /// lease is not extended and the resource runs on grace; once <see cref="OfflineGraceUntil"/> has
-    /// passed the content is revoked (handlers run, then the decrypted files are wiped).
+    /// passed the content is revoked (handlers run, then the decrypted files are wiped). A refusal
+    /// the key service marked final (<see cref="EscrowKeyResult.Final"/>: revoked, refunded, expired,
+    /// deactivated) revokes at once, without waiting for the end of grace: grace is for outages.
     /// Call it yourself on your own schedule, or let <see cref="StartRenewal"/> do it.
     /// </summary>
     public async Task<EscrowRenewal> RenewAsync(CancellationToken cancellation = default)
@@ -250,8 +254,15 @@ public sealed class EscrowContent : IDisposable
 
             if (answer.Valid && answer.WrappedKey is not null)
             {
-                ApplyGrant(answer);
-                return Snapshot();
+                // A grant for another release, or signed by a key the licence no longer names,
+                // is not a grant for what is running: treated as a refusal, on grace.
+                if (EscrowSession.CheckGrant(answer, Manifest, _trustedSigner) is { } mismatch)
+                    answer = EscrowKeyResult.Refused(mismatch.Failure == EscrowFailure.Signature ? "signer_mismatch" : "release_mismatch");
+                else
+                {
+                    ApplyGrant(answer);
+                    return Snapshot();
+                }
             }
 
             // Not granted. A definitive refusal and an unreachable service both leave the resource
@@ -265,7 +276,10 @@ public sealed class EscrowContent : IDisposable
                 _pendingReason = reason;
                 exhausted = _time.GetUtcNow() >= _graceUntil;
             }
-            if (exhausted) Revoke(answer.TransportError ? "offline_grace_exhausted:" + reason : reason);
+            // The service said the right to run is over for good: stop now. An outage never
+            // does this, whatever it looks like.
+            if (answer.Final && !answer.TransportError) Revoke(reason);
+            else if (exhausted) Revoke(answer.TransportError ? "offline_grace_exhausted:" + reason : reason);
             return Snapshot();
         }
         finally { _renewing.Release(); }

@@ -13,7 +13,7 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- ScriptGo.Host brings ScriptGo.Escrow with it. In your own repository:
-           <PackageReference Include="ScriptGo.Host" Version="0.1.0" /> -->
+           <PackageReference Include="ScriptGo.Host" Version="0.2.0" /> -->
     <ProjectReference Include="../../dotnet/ScriptGo.Host/ScriptGo.Host.csproj" />
   </ItemGroup>
 </Project>

@@ -3,11 +3,9 @@
 // memory by both backends. The ed25519 release signature covers the canonical JSON of the manifest
 // with its signature field emptied: the same bytes packages/escrow/src/escrow.ts signs.
 // CanonicalManifest below reproduces JS JSON.stringify of recursively sorted keys so the two agree.
-using System.Buffers;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Encodings.Web;
 using System.Text.Json;
 using ScriptGo.Escrow.Managed;
 using ScriptGo.Escrow.Native;
@@ -65,6 +63,180 @@ public sealed class EscrowBundle
         return new EscrowBundle(manifest, escrowJson, payload, clear);
     }
 
+    // ---------------- a release installed as a folder (docs/spec/escrow.md, "On disk")
+
+    /// <summary>The largest <c>escrow.json</c> read from a folder.</summary>
+    public const int MaximumManifestBytes = 4 * 1024 * 1024;
+
+    /// <summary>The native library's own ceiling for <c>payload.enc</c>.</summary>
+    public const long MaximumPayloadBytes = 256L * 1024 * 1024;
+
+    /// <summary>
+    /// Reads a release that is installed, still encrypted, as a folder: <c>escrow.json</c>,
+    /// <c>payload.enc</c>, the clear files at their paths and a one-line stub at the path of each
+    /// encrypted file (what <c>scriptgo escrow install</c> writes). This is how a host that discovers
+    /// resources on disk keeps a release encrypted at rest.
+    /// <para>The manifest's shape is validated strictly and <c>payload.enc</c> is checked against
+    /// the signed size and hash here, before any key is asked for. Clear files are read as they are
+    /// on disk: an operator may have edited one, so compare them with
+    /// <see cref="EditedClearFiles"/> and decide (see <see cref="EscrowOpenOptions.AllowEditedClearFile"/>).
+    /// Nothing is decrypted and no stub is read: check the stubs your host would otherwise execute
+    /// with <see cref="IsStub"/>.</para>
+    /// </summary>
+    /// <exception cref="EscrowException"><c>invalid_bundle:</c> the folder is not an installed
+    /// release or its manifest is malformed; <c>decrypt_failed:</c> <c>payload.enc</c> is not the
+    /// signed one.</exception>
+    public static EscrowBundle ReadFolder(string directory)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(directory);
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory)) + Path.DirectorySeparatorChar;
+
+        var escrowJson = ReadFile(Path.Combine(root, EscrowFormat.EscrowJson), MaximumManifestBytes, "escrow.json");
+        // A byte-order mark is not JSON; a packer never writes one, an editor might.
+        if (escrowJson.Length >= 3 && escrowJson[0] == 0xEF && escrowJson[1] == 0xBB && escrowJson[2] == 0xBF) escrowJson = escrowJson[3..];
+        EscrowManifest? manifest;
+        try { manifest = JsonSerializer.Deserialize<EscrowManifest>(escrowJson, EscrowFormat.Json); }
+        catch (JsonException e) { throw Invalid("escrow.json is not valid JSON: " + e.Message, e); }
+        if (manifest is null) throw Invalid("escrow.json is not a valid manifest.");
+        if (ShapeProblem(manifest) is { } problem) throw Invalid(problem);
+        // What the signature covers must be reproducible exactly; a manifest that is not is
+        // refused by name here rather than as a bad signature later.
+        try { EscrowCanonicalJson.ForSignature(escrowJson); }
+        catch (InvalidDataException e) { throw Invalid(e.Message, e); }
+
+        byte[] payload;
+        try
+        {
+            using var stream = File.OpenRead(Path.Combine(root, EscrowFormat.Payload));
+            if (stream.Length != manifest.Payload.Bytes)
+                throw new EscrowException(EscrowFailure.DecryptFailed, "decrypt_failed:payload.enc does not have the signed size");
+            payload = new byte[checked((int)stream.Length)];
+            stream.ReadExactly(payload);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            throw new EscrowException(EscrowFailure.DecryptFailed, "decrypt_failed:payload.enc could not be read: " + e.Message, e);
+        }
+        if (!FixedTimeHexEquals(SHA256.HashData(payload), manifest.Payload.Sha256))
+            throw new EscrowException(EscrowFailure.DecryptFailed, "decrypt_failed:payload.enc does not match the signed hash");
+
+        var clear = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        foreach (var file in manifest.ClearFiles)
+        {
+            var full = Path.GetFullPath(Path.Combine(root, file.Path.Replace('/', Path.DirectorySeparatorChar)));
+            if (!full.StartsWith(root, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                throw Invalid($"clear file {EscrowPaths.Printable(file.Path)} escapes the folder.");
+            try
+            {
+                var info = new FileInfo(full);
+                // A missing or oversized file is simply absent: EditedClearFiles reports it.
+                if (info.Exists && info.Length <= EscrowFormat.MaxEntryBytes) clear[file.Path] = File.ReadAllBytes(full);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
+        return new EscrowBundle(manifest, escrowJson, payload, clear);
+    }
+
+    private static byte[] ReadFile(string path, int maximum, string label)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            if (stream.Length > maximum) throw Invalid($"{label} is too large.");
+            var bytes = new byte[checked((int)stream.Length)];
+            stream.ReadExactly(bytes);
+            return bytes;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            throw Invalid($"{label} could not be read: {e.Message}", e);
+        }
+    }
+
+    private static EscrowException Invalid(string detail, Exception? inner = null) =>
+        new(EscrowFailure.InvalidBundle, "invalid_bundle:" + detail, inner);
+
+    /// <summary>
+    /// The first thing wrong with a manifest's shape, or null. Stricter than what a signature check
+    /// alone needs: a host that reads releases from disk refuses, by name, a manifest it would
+    /// otherwise have to trust in part (a path that escapes the folder, a file listed twice, a size
+    /// outside the format's limits).
+    /// </summary>
+    public static string? ShapeProblem(EscrowManifest manifest)
+    {
+        ArgumentNullException.ThrowIfNull(manifest);
+        if (manifest.Format != EscrowFormat.Format)
+            return $"unsupported escrow format '{EscrowPaths.Printable(manifest.Format ?? "")}' (this loader reads {EscrowFormat.Format})";
+        if (manifest.Cipher != EscrowFormat.Cipher || manifest.Kdf != EscrowFormat.Kdf) return "unsupported cipher or kdf";
+        if (!Bounded(manifest.Package, 200)) return "package is empty, too long or holds a control character";
+        if (!Bounded(manifest.Version, 64)) return "version is empty, too long or holds a control character";
+        if (manifest.Aad != $"{manifest.Package}@{manifest.Version}") return "aad does not name this package and version";
+        if (manifest.Payload is null) return "payload is missing";
+        if (!Decodes(manifest.Payload.Nonce, 12)) return "payload.nonce is not 12 bytes of base64url";
+        if (!IsLowerSha256(manifest.Payload.Sha256)) return "payload.sha256 is not a lowercase SHA-256";
+        if (manifest.Payload.Bytes < 16 || manifest.Payload.Bytes > MaximumPayloadBytes) return "payload.bytes is out of range";
+        if (manifest.ClearFiles is null || manifest.EncryptedFiles is null) return "clearFiles or encryptedFiles is missing";
+        if (manifest.ClearFiles.Count + manifest.EncryptedFiles.Count > 32768) return "too many files";
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var file in manifest.ClearFiles)
+        {
+            if (file is null || !EscrowPaths.IsSafe(file.Path)) return "clearFiles[].path is not a safe relative path";
+            if (!IsLowerSha256(file.Sha256)) return "clearFiles[].sha256 is not a lowercase SHA-256";
+            if (file.Bytes < 0) return "clearFiles[].bytes is out of range";
+            if (!seen.Add(file.Path)) return $"'{EscrowPaths.Printable(file.Path)}' is listed twice";
+        }
+        foreach (var path in manifest.EncryptedFiles)
+        {
+            if (path is null || !EscrowPaths.IsSafe(path)) return "encryptedFiles[] is not a safe relative path";
+            if (!seen.Add(path)) return $"'{EscrowPaths.Printable(path)}' is listed twice";
+        }
+        if (!Decodes(manifest.SignerPublicKey, 32)) return "signerPublicKey is not 32 bytes of base64url";
+        if (!Decodes(manifest.Signature, 64)) return "signature is not 64 bytes of base64url";
+        if (manifest.Watermark is { } mark && (mark.Length > 256 || mark.Any(char.IsControl))) return "watermark is too long or holds a control character";
+        return null;
+
+        static bool Bounded(string? value, int maximum) => value is { Length: > 0 } && value.Length <= maximum && !value.Any(char.IsControl);
+        static bool IsLowerSha256(string? value) => value is { Length: 64 } && value.All(static c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
+        // No padding: the packer never writes it, and one spelling per value keeps a signer
+        // comparison a plain string comparison.
+        static bool Decodes(string? value, int length)
+        {
+            if (value is null || value.Length > 4096 || value.Any(static c => !(char.IsAsciiLetterOrDigit(c) || c is '-' or '_'))) return false;
+            try { return Base64Url.Decode(value).Length == length; }
+            catch (FormatException) { return false; }
+        }
+    }
+
+    /// <summary>The clear files that are missing or differ from the signed release, in manifest
+    /// order. Empty when the folder (or the archive) holds exactly what was signed.</summary>
+    public IReadOnlyList<string> EditedClearFiles()
+    {
+        var edited = new List<string>();
+        foreach (var file in Manifest.ClearFiles)
+            if (!_clear.TryGetValue(file.Path, out var bytes) || !FixedTimeHexEquals(SHA256.HashData(bytes), file.Sha256))
+                edited.Add(file.Path);
+        return edited;
+    }
+
+    /// <summary>The one line an installed folder holds at the path of an encrypted file, without
+    /// its line ending. A stub names the release and the payload, so replacing the payload changes
+    /// every stub (and with them whatever digest a host computes over the folder).</summary>
+    public string StubLine(string path) =>
+        $"-- {EscrowFormat.Format} {Manifest.Package}@{Manifest.Version} sha256={Manifest.Payload.Sha256} path={path}";
+
+    /// <summary>True when <paramref name="fileBytes"/> is exactly the stub of <paramref name="path"/>
+    /// for this release (a byte-order mark and surrounding blank space are ignored). A host that
+    /// loads scripts from disk must never execute the file at an encrypted path; checking it is the
+    /// stub tells an operator early that the folder was altered.</summary>
+    public bool IsStub(string path, ReadOnlySpan<byte> fileBytes)
+    {
+        if (fileBytes.Length > 4096) return false;
+        string text;
+        try { text = new UTF8Encoding(false, throwOnInvalidBytes: true).GetString(fileBytes); }
+        catch (ArgumentException) { return false; }
+        return text.Trim('﻿', ' ', '\t', '\r', '\n') == StubLine(path);
+    }
+
     /// <summary>Opens a zip, turning every way the reader can choke on hostile bytes into the one
     /// exception callers handle.</summary>
     private static ZipArchive OpenZip(Stream stream, long length)
@@ -105,7 +277,7 @@ public sealed class EscrowBundle
             return (false, "signer is not the trusted release key");
         byte[] signed, signature, publicKey;
         try { signed = Encoding.UTF8.GetBytes(CanonicalManifestWithoutSignature()); }
-        catch (JsonException e) { return (false, "escrow.json is not canonicalisable: " + e.Message); }
+        catch (Exception e) when (e is JsonException or InvalidDataException) { return (false, "escrow.json is not canonicalisable: " + e.Message); }
         try
         {
             signature = Base64Url.Decode(Manifest.Signature);
@@ -208,42 +380,16 @@ public sealed class EscrowBundle
 
     /// <summary>The exact text the release signature covers. Public so another implementation can
     /// compare its own canonicaliser against this one.</summary>
-    public string CanonicalManifestWithoutSignature()
-    {
-        using var doc = JsonDocument.Parse(_escrowJsonRaw);
-        var buffer = new ArrayBufferWriter<byte>();
-        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
-        {
-            WriteCanonical(writer, doc.RootElement, isRoot: true);
-        }
-        return Encoding.UTF8.GetString(buffer.WrittenSpan);
-    }
+    public string CanonicalManifestWithoutSignature() => CanonicalManifest(_escrowJsonRaw);
 
-    private static void WriteCanonical(Utf8JsonWriter writer, JsonElement element, bool isRoot = false)
-    {
-        switch (element.ValueKind)
-        {
-            case JsonValueKind.Object:
-                writer.WriteStartObject();
-                foreach (var property in element.EnumerateObject().OrderBy(p => p.Name, StringComparer.Ordinal))
-                {
-                    writer.WritePropertyName(property.Name);
-                    // Empty the top-level signature, as the TS signer does before signing.
-                    if (isRoot && property.Name == "signature") writer.WriteStringValue("");
-                    else WriteCanonical(writer, property.Value);
-                }
-                writer.WriteEndObject();
-                break;
-            case JsonValueKind.Array:
-                writer.WriteStartArray();
-                foreach (var item in element.EnumerateArray()) WriteCanonical(writer, item);
-                writer.WriteEndArray();
-                break;
-            default:
-                element.WriteTo(writer);
-                break;
-        }
-    }
+    /// <summary>The text a release signature covers, for the bytes of an <c>escrow.json</c>: keys
+    /// sorted recursively, no insignificant white space, the top-level <c>signature</c> emptied.
+    /// A packer written in .NET signs exactly this.</summary>
+    /// <exception cref="InvalidDataException">The bytes are not a JSON object with a string
+    /// <c>signature</c>, or hold something JavaScript would not write back identically (a repeated
+    /// key, a number that is not a plain integer): see <see cref="EscrowCanonicalJson"/>.</exception>
+    public static string CanonicalManifest(ReadOnlyMemory<byte> escrowJson) =>
+        Encoding.UTF8.GetString(EscrowCanonicalJson.ForSignature(escrowJson));
 
     /// <summary>A read-only stream over memory the caller owns (no copy of the bundle).</summary>
     private sealed class ReadOnlyMemoryStream(ReadOnlyMemory<byte> memory) : Stream

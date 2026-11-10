@@ -53,6 +53,23 @@ content.Revoked += (_, e) => QueueStopOnYourMainThread("name", e.Reason);   // t
 content.StartRenewal();
 ```
 
+A host with a main loop that must not wait on the network, and resources it discovers on disk,
+uses the other entry points (this is how the OPEN//77 server adapter is written):
+
+```csharp
+var bundle = EscrowBundle.ReadFolder("resources/name");             // a release installed still encrypted
+var cache = new EscrowKeyCache();                                    // key answers, in memory only
+var keys = cache.Recording(new HttpEscrowKeyService(HttpEscrowKeyService.CreateClient(master), () => ReadOptions()));
+if (cache.TryGet(bundle.Manifest, identity, out var held) != EscrowKeyFreshness.Fresh)
+    held = await keys.RequestKeyAsync(bundle.Manifest, identity);    // in the background, off your loop
+using var content = EscrowSession.Open(bundle, identity, held!, keys, trustedSigner);   // on your loop: no request
+```
+
+`ReadFolder` validates the manifest strictly and checks `payload.enc` against the signed size and
+hash; `bundle.EditedClearFiles()` lists what an operator changed (allow some with
+`EscrowOpenOptions.AllowEditedClearFile`), and `bundle.IsStub(path, bytes)` recognises the one-line
+stub at the path of an encrypted file, which a host must never execute.
+
 That is the whole integration. `content.ClearFiles` holds the release's clear files (its manifest,
 README, creator-named config); `content.EncryptedEntries` lists the encrypted files by path and
 size, so you know which scripts exist (including the ones meant for clients) without reading them.
@@ -64,7 +81,7 @@ size, so you know which scripts exist (including the ones meant for clients) wit
 | Keep the identity file where only the server's account reads it, and back it up with the server | It is what binds the server. Lose it and the deployment must be re-bound; leak it and the binding is worth less |
 | Pin `trustedSignerPublicKey` | Without it a signature only proves "not modified since signing", by anyone |
 | Call `StartRenewal()` (or `RenewAsync()` on your own schedule) | The key answer expires (`ExpiresAt`); revocation reaches a server through the next request |
-| Handle `Revoked`: stop the resource, close its VM | The package wipes its decrypted files; bytecode already inside your VM is yours to release |
+| Handle `Revoked`: stop the resource, close its VM | The package wipes its decrypted files; bytecode already inside your VM is yours to release. It is raised **at once** when the key service marks a refusal final (revoked, refunded, expired, deactivated), and at the end of the offline grace after any other refusal or an outage |
 | Never log file contents, the deployment token or anything from `CopyTo` / `ReadAllBytes` | Logs get shared |
 | Treat client-side files as public | Whatever you send to players leaves the server. Escrow protects server-side code |
 
@@ -110,7 +127,7 @@ macOS build is written and not yet built or tested (`sdk/native/README.md`). It 
 |---|---|---|
 | `invalid_bundle:` | not an escrow bundle, a malformed archive, an unsafe path | no |
 | `signature:` | bad signature, or not signed by the trusted key | no |
-| `refused:<reason>` | the license says no: `revoked`, `expired`, `refunded`, `deactivated`, `environment_not_covered`, `deployment_limit`, `unknown_key`, `unbound`, `not_escrowed` | after fixing the license |
+| `refused:<reason>` | the license says no: `revoked`, `expired`, `refunded`, `deactivated`, `environment_not_covered`, `deployment_limit`, `unknown_key`, `unbound`, `not_escrowed`; also `release_mismatch` (the answer names another release) | after fixing the license |
 | `key_service_unreachable:` | network error or 4xx/5xx; **not** a refusal (`IsTransient`) | yes |
 | `unwrap_failed:` | the key was wrapped to another server or another release | no: re-bind the deployment |
 | `decrypt_failed:` | the payload or a clear file was modified | no |
