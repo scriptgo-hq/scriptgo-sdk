@@ -2,8 +2,8 @@
 //
 // The folder is what an OPEN//77 server with `resourceEscrow.enabled` loads (ADR-0025):
 //
-//   <resources>/<name>/open77.lua          generated from the clear manifest (as `pack --target open77`)
-//   <resources>/<name>/scriptgo_shim*.lua  the public OPEN//77 shim, cut to the declared capabilities
+//   <resources>/<name>/open77.lua          a SIGNED clear file of the bundle (generated at pack time)
+//   <resources>/<name>/scriptgo_shim*.lua  the OPEN//77 shim, signed clear files of the bundle too
 //   <resources>/<name>/escrow.json         the signed escrow manifest, byte for byte from the bundle
 //   <resources>/<name>/payload.enc         the encrypted payload, byte for byte from the bundle
 //   <resources>/<name>/<server script>     a one-line STUB at each encrypted server script's path
@@ -15,18 +15,19 @@
 // on disk.
 //
 // Honest limits: client and shared scripts are sent to game clients by OPEN//77, so they must be
-// clear (the packer keeps them clear; this installer refuses a bundle that encrypted one). Only the
-// files listed in escrow.json are covered by the release signature; open77.lua and the shim are
-// generated here from public inputs.
+// clear (the packer keeps them clear; this installer refuses a bundle that encrypted one).
+//
+// Nothing is generated here. The OPEN//77 server refuses an escrowed resource unless open77.lua is
+// a signed clear file of the release and every script it lists belongs to the signed release, so
+// the packer (CLI or master, both through prepareEscrowFiles) puts open77.lua and the shim in the
+// bundle. A bundle without open77.lua was not packed for OPEN//77 and is refused: writing an
+// unsigned manifest next to signed files would be exactly what the server rejects.
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { unzipSync } from "fflate";
 import { ESCROW_JSON, ESCROW_PAYLOAD, verifyManifest, type EscrowManifest } from "@scriptgo/escrow";
-import { expandGlob, parseManifest, scriptLanguage, validateResourceFiles } from "@scriptgo/manifest";
-import { OPEN77_SHIM, open77Manifest, stripCapabilitySections } from "../commands/pack.ts";
-import { clientFacingFiles } from "./escrow-pack.ts";
-import { sdkRoot } from "./sdk.ts";
+import { clientFacingFiles, expandGlob, parseManifest, scriptLanguage, validateResourceFiles } from "@scriptgo/manifest";
 
 export interface Open77EscrowInstall {
   dest: string;
@@ -89,8 +90,14 @@ export function installEscrowForOpen77(opts: {
   }
   for (const p of manifest.encryptedFiles) if (!safeRelative(p)) throw new Open77EscrowError("unsafe_path", `unsafe path in the bundle: ${p}`);
 
-  const manifestFile = ["open77.lua", "scriptgo.lua", "scriptgo.json"].find((f) => clear.has(f));
-  if (!manifestFile) throw new Open77EscrowError("no_manifest", "the bundle has no clear resource manifest (scriptgo.lua or open77.lua).");
+  // open77.lua must be in the bundle, as a clear file the signature covers. It is used as is.
+  const manifestFile = "open77.lua";
+  if (!clear.has(manifestFile)) {
+    throw new Open77EscrowError(
+      "not_open77",
+      "this release was not packed for OPEN//77: its bundle has no signed open77.lua. The creator packs it for OPEN//77 (Lua scripts only, and open77 in the manifest's environments, or none listed) and publishes it again.",
+    );
+  }
   const parsed = parseManifest(Buffer.from(clear.get(manifestFile)!).toString("utf8"), { fileName: manifestFile });
   if (!parsed.ok) throw new Open77EscrowError("manifest", parsed.errors.map((e) => e.message).join("; "));
   const m = parsed.manifest;
@@ -135,14 +142,6 @@ export function installEscrowForOpen77(opts: {
 
   const warnings: string[] = [];
   if (!opts.trustedSignerPublicKey) warnings.push("no --trusted-signer given: the signature proves integrity, not who signed. Pin the creator's release key.");
-  if (m.format !== "open77") {
-    const caps = new Set<string>([...m.capabilities, ...m.optionalCapabilities]);
-    for (const s of OPEN77_SHIM) {
-      const text = readFileSync(join(sdkRoot, "adapters", "open77", s.from), "utf8");
-      write(s.to, stripCapabilitySections(text, caps));
-    }
-    write("open77.lua", open77Manifest(m, warnings, manifestFile));
-  }
 
   // Re-check the installed folder with the parser the OPEN//77 rules are encoded in.
   const check = parseManifest(readFileSync(join(dest, "open77.lua"), "utf8"), { fileName: "open77.lua" });

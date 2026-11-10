@@ -39,7 +39,8 @@ describe("packEscrow", () => {
       archive: archive(), manifest: (parsed as { manifest: any }).manifest, manifestFile: "scriptgo.lua",
       identifier: "kestrel//inv-pro", outDir: tmp, allowlist: ["config.lua"],
     });
-    expect(r.clearFiles.sort()).toEqual(["README.md", "config.lua", "scriptgo.lua"]);
+    // The docs, the manifest, the named config, and the OPEN//77 files generated for a Lua package.
+    expect(r.clearFiles.sort()).toEqual(["README.md", "config.lua", "open77.lua", "scriptgo.lua", "scriptgo_shim.lua", "scriptgo_shim_client.lua", "scriptgo_shim_server.lua"]);
     expect(r.encryptedFiles).toEqual(["server/main.lua"]);
 
     const bundle = readFileSync(r.bundlePath);

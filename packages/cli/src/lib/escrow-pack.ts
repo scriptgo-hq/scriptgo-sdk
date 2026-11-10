@@ -1,17 +1,27 @@
-// `scriptgo pack --escrow`: builds the encrypted escrow variant of a resource. The packed archive
-// (minus the clear allowlist) is encrypted with a fresh per-release content key; the bundle is safe
-// to store/ship, the content key is written to a SEPARATE secret file for the master only.
+// `scriptgo pack --escrow` and `scriptgo publish --escrow`: build the encrypted escrow variant of a
+// resource. The packed archive (minus the clear allowlist) is encrypted with a fresh per-release
+// content key; the bundle is safe to store/ship, the content key goes to the master only (handed
+// over the authenticated API by `publish`, or written to a SEPARATE secret file by `pack`).
+//
+// What stays clear is decided in one place, `prepareEscrowFiles` (@scriptgo/manifest), which the
+// master calls too when it protects an uploaded archive: files a host sends to game clients, and
+// for a package that can run on OPEN//77 the generated open77.lua and shim, as signed clear files.
 //
 // Honest stance (CREATOR-PROTECTION.md): this is real crypto only where a host can hold the key (the
 // .NET / native kits). On a pure-Lua host the operator can read the key, so escrow there is
 // license-only-grade — the packer still produces a bundle, but the protection claim degrades. The
 // CLI prints that where it matters.
 import { mkdirSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { unzipSync } from "fflate";
-import { buildEscrowRelease, openEscrowRelease, releaseSignerFromEnv } from "@scriptgo/escrow";
-import { expandGlob, type ParsedManifest } from "@scriptgo/manifest";
+import { buildEscrowRelease, openEscrowRelease, releaseSignerFromEnv, type BuiltEscrow, type ReleaseSigner } from "@scriptgo/escrow";
+import { clientFacingFiles, prepareEscrowFiles, type ParsedManifest } from "@scriptgo/manifest";
+import { sdkRoot } from "./sdk.ts";
+
+// Kept as an export of this module for its callers; the rule itself lives in @scriptgo/manifest.
+export { clientFacingFiles };
 
 export interface EscrowPackResult {
   bundlePath: string;
@@ -21,23 +31,68 @@ export interface EscrowPackResult {
   bytes: number;
 }
 
-/** Paths a host sends to game clients: they cannot be secret, so they must be clear in the bundle. */
-export function clientFacingFiles(m: ParsedManifest, all: string[]): string[] {
-  const out = new Set<string>();
-  const add = (pattern: string): void => {
-    for (const f of expandGlob(pattern, all)) out.add(f);
-  };
-  for (const p of [...m.sharedScripts, ...m.clientScripts, ...m.files, ...m.webFiles]) add(p);
-  // OPEN//77 loads its environment scripts as shared scripts, so they reach clients too.
-  for (const p of m.environmentScripts["open77"] ?? []) add(p);
-  if (m.webUiPage) add(m.webUiPage);
-  return [...out].sort();
+/**
+ * The creator's own ed25519 key: it signs `escrow.json`, so buyers and the master can tell who built
+ * a bundle. SCRIPTGO_SIGNING_KEY (base64 32-byte seed), else RELEASE_SIGNING_KEY, else a key file
+ * created on first use in the CLI config folder (~/.scriptgo, or SCRIPTGO_CONFIG_DIR). It is the
+ * creator's key, not the registry's release-signing key and not the license-token key.
+ */
+export function creatorSigner(env: NodeJS.ProcessEnv = process.env): ReleaseSigner {
+  const dir = env.SCRIPTGO_CONFIG_DIR || join(homedir(), ".scriptgo");
+  const seed = env.SCRIPTGO_SIGNING_KEY?.trim() || env.RELEASE_SIGNING_KEY?.trim();
+  // The key file is the creator's own; "production" only matters to the master's key loader.
+  return releaseSignerFromEnv({ ...env, RELEASE_SIGNING_KEY: seed ?? "", NODE_ENV: "development" }, join(dir, "release-signing.key"));
 }
 
 /**
- * Turns the plain SCRIPT//GO archive (entries `<name>/<path>`) into an escrow bundle + a secret key
- * file. `allowlist` are extra clear-text globs (the manifest and docs are always clear). The signing
- * key is RELEASE_SIGNING_KEY or a dev key under ~/.scriptgo. Self-checks the round-trip before writing.
+ * Builds the escrow bundle of a plain SCRIPT//GO archive (entries `<name>/<path>`) in memory, and
+ * proves it decrypts with its key before anything is shipped. `allowlist` are extra clear-text
+ * globs; the manifest, the docs and every client-facing file are always clear, and only server-side
+ * code is encrypted. Each bundle gets a release-level watermark: an opaque token only this build
+ * knows, recorded by the master so a leaked copy names its release.
+ */
+export function buildEscrow(opts: {
+  archive: Uint8Array;
+  manifest: ParsedManifest;
+  manifestFile: string;
+  /** "creator//name": bound into the ciphertext and every wrapped key (the release's AAD). */
+  identifier: string;
+  allowlist: string[];
+  signer?: ReleaseSigner;
+}): BuiltEscrow {
+  const m = opts.manifest;
+  const prefix = `${m.name}/`;
+  const source = new Map<string, Buffer>();
+  for (const [path, data] of Object.entries(unzipSync(opts.archive))) {
+    if (!path.startsWith(prefix)) continue;
+    source.set(path.slice(prefix.length), Buffer.from(data));
+  }
+  if (!source.has(opts.manifestFile)) throw new Error(`escrow: the archive has no ${opts.manifestFile}.`);
+
+  // The same file set the master builds: client-facing files clear, OPEN//77 files generated and signed.
+  const prepared = prepareEscrowFiles({ manifest: m, manifestFile: opts.manifestFile, files: source, allowlist: opts.allowlist, shimDir: join(sdkRoot, "adapters", "open77") });
+  const files = prepared.files;
+
+  const signer = opts.signer ?? creatorSigner();
+  const built = buildEscrowRelease({
+    files, package: opts.identifier, version: m.version, manifestFile: opts.manifestFile,
+    allowlist: prepared.allowlist, signingSeed: signer.seed, watermarkSecret: randomBytes(32).toString("hex"),
+  });
+  if (built.encryptedFiles.length === 0) {
+    throw new Error("escrow: nothing would be encrypted: every file is client-facing or in the clear-text allowlist (--escrow-ignore). Only server-side code can be protected.");
+  }
+
+  // Prove the bundle decrypts with the key before shipping either (never ship an unopenable bundle).
+  const reopened = openEscrowRelease({ bundle: built.bundle, contentKey: built.contentKey, trustedSignerPublicKey: built.manifest.signerPublicKey });
+  for (const path of built.encryptedFiles) {
+    if (!reopened.get(path)?.equals(files.get(path)!)) throw new Error(`escrow self-check failed for ${path}`);
+  }
+  return built;
+}
+
+/**
+ * Turns the plain archive into an escrow bundle + a secret key file on disk (`scriptgo pack
+ * --escrow`). Publish the pair later with `scriptgo publish --bundle <zip> --escrow-key <json>`.
  */
 export function packEscrow(opts: {
   archive: Uint8Array;
@@ -48,29 +103,7 @@ export function packEscrow(opts: {
   allowlist: string[];
 }): EscrowPackResult {
   const m = opts.manifest;
-  const prefix = `${m.name}/`;
-  const files = new Map<string, Buffer>();
-  for (const [path, data] of Object.entries(unzipSync(opts.archive))) {
-    if (!path.startsWith(prefix)) continue;
-    files.set(path.slice(prefix.length), Buffer.from(data));
-  }
-  if (!files.has(opts.manifestFile)) throw new Error(`escrow: the archive has no ${opts.manifestFile}.`);
-
-  // Files a host sends to game clients (shared and client scripts, files, web files) cannot be
-  // secret: they stay clear, so only server-side code is encrypted.
-  const clientFacing = clientFacingFiles(m, [...files.keys()]);
-
-  const signer = releaseSignerFromEnv(process.env, join(homedir(), ".scriptgo", "release-signing.key"));
-  const built = buildEscrowRelease({
-    files, package: opts.identifier, version: m.version, manifestFile: opts.manifestFile,
-    allowlist: [...clientFacing, ...opts.allowlist], signingSeed: signer.seed, watermarkSecret: undefined,
-  });
-
-  // Prove the bundle decrypts with the key before shipping either (never ship an unopenable bundle).
-  const reopened = openEscrowRelease({ bundle: built.bundle, contentKey: built.contentKey, trustedSignerPublicKey: built.manifest.signerPublicKey });
-  for (const path of built.encryptedFiles) {
-    if (!reopened.get(path)?.equals(files.get(path)!)) throw new Error(`escrow self-check failed for ${path}`);
-  }
+  const built = buildEscrow(opts);
 
   mkdirSync(opts.outDir, { recursive: true });
   const bundlePath = join(opts.outDir, `${m.name}-${m.version}.escrow.zip`);

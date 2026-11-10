@@ -431,6 +431,14 @@ function Host:start(name, visiting)
     local res = self.resources[name]
     if not res then return false, "missing" end
     if res.state == "started" then return true end
+    -- A guarded resource (Host:guardLicense) starts only on a valid license answer.
+    local guard = self.licenseGuards and self.licenseGuards[name]
+    if guard and not self:_licenseAllows(guard) then
+        if guard.state == "unchecked" then return false, "license_pending" end
+        res.state, res.failure = "failed", "license_" .. tostring(guard.reason)
+        self:log("error", name .. ": " .. res.failure)
+        return false, res.failure
+    end
     visiting = visiting or {}
     if visiting[name] then return false, "dependency cycle through " .. name end
     visiting[name] = true
@@ -762,10 +770,136 @@ function Host:httpRequest(opts)
     return response
 end
 
+-- License guard ----------------------------------------------------------------------------------------
+-- Reference behaviour for a host that enforces a license itself (creator protection, phase 0).
+-- A guarded resource starts only after the API said the license is valid for this deployment, is
+-- checked again every `interval` seconds, and is stopped when the offline grace of its last valid
+-- answer runs out. While it runs, a definitive refusal (valid = false: revoked, refunded, expired,
+-- unknown key...) and an API that cannot answer are treated alike: it keeps running until that
+-- grace ends. A resource that is not running never starts on a refusal, so a copy of the folder on
+-- a server without a valid deployment token does not start at all.
+--
+-- This is a license check, not code secrecy. On a pure-Lua host the operator can read every script,
+-- and this guard with them: it makes running without a license a deliberate act that leaves traces,
+-- it does not make it impossible.
+
+-- "2026-11-13T10:00:00.000Z" -> Unix seconds (UTC), without os.date (hosts differ on it).
+local function parseIsoTime(text)
+    local y, mo, d, h, mi, s = tostring(text):match("^(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)")
+    if not y then return nil end
+    y, mo, d = tonumber(y), tonumber(mo), tonumber(d)
+    if mo <= 2 then y = y - 1 end
+    local era = math.floor(y / 400)
+    local yoe = y - era * 400
+    local doy = math.floor((153 * (mo + (mo > 2 and -3 or 9)) + 2) / 5) + d - 1
+    local doe = yoe * 365 + math.floor(yoe / 4) - math.floor(yoe / 100) + doy
+    return (era * 146097 + doe - 719468) * 86400 + tonumber(h) * 3600 + tonumber(mi) * 60 + tonumber(s)
+end
+M.parseIsoTime = parseIsoTime
+
+-- Wall clock in Unix seconds: the adapter's when it gives one, else os.time.
+function Host:_wall()
+    if self.adapter.wallTime then return self.adapter.wallTime() end
+    return os.time()
+end
+
+-- Guards `name` with a license. opts: deploymentToken (preferred: one per server) or licenseKey;
+-- package ("creator//name"); interval in seconds between checks (default 600); autoStart (start
+-- the resource on the first valid answer; default true). Returns the guard state table.
+function Host:guardLicense(name, opts)
+    opts = opts or {}
+    self.licenseGuards = self.licenseGuards or {}
+    local guard = {
+        name = name, deploymentToken = opts.deploymentToken, licenseKey = opts.licenseKey,
+        package = opts.package or name, interval = opts.interval or 600, autoStart = opts.autoStart ~= false,
+        -- state: "unchecked" | "valid" | "refused" | "unreachable"
+        state = "unchecked", reason = "unverified", graceUntil = 0, nextCheck = self.now, pending = false,
+    }
+    self.licenseGuards[name] = guard
+    return guard
+end
+
+-- True when the guard lets the resource start now: the last answer was valid, or the API stopped
+-- answering after a valid one, and the offline grace of that answer is still running.
+function Host:_licenseAllows(guard)
+    return (guard.state == "valid" or guard.state == "unreachable") and self:_wall() < guard.graceUntil
+end
+
+function Host:_licenseAnswer(guard, response)
+    local decoded
+    if type(response) == "table" and (response.status or 0) == 200 then
+        local ok, d = pcall(json.decode, response.body or "")
+        if ok and type(d) == "table" then decoded = d end
+    end
+    local res = self.resources[guard.name]
+    if decoded and decoded.valid == true then
+        guard.state, guard.reason = "valid", nil
+        -- The API's own bound; when it is missing, three days as the documented default.
+        guard.graceUntil = parseIsoTime(decoded.offlineGraceUntil) or (self:_wall() + 72 * 3600)
+        if res and res.state ~= "started" and guard.autoStart then self:start(guard.name) end
+    elseif decoded and decoded.valid == false then
+        local changed = guard.state ~= "refused" or guard.reason ~= tostring(decoded.reason)
+        guard.state, guard.reason = "refused", tostring(decoded.reason or "refused")
+        if changed then
+            local running = res and res.state == "started"
+            self:log("warn", guard.name .. ": license refused (" .. guard.reason .. ")"
+                .. (running and "; it keeps running until the offline grace ends" or ""))
+        end
+    else
+        -- 4xx, 5xx, no route, no HTTP: the API could not answer. Nothing is revoked by that.
+        if guard.state == "valid" then guard.state = "unreachable" end
+        if guard.state ~= "refused" then guard.reason = "unreachable" end
+    end
+end
+
+function Host:_checkLicense(guard)
+    if guard.pending then return end
+    local http = self.adapter.http
+    if not http or not http.request or not self.capabilities.http then return self:_licenseAnswer(guard, nil) end
+    local cfg = self.adapter.config
+    local base = (cfg and cfg.get and cfg.get(nil, "scriptgo_api")) or "http://localhost:4100"
+    guard.pending = true
+    local ok = pcall(http.request, {
+        method = "POST", url = base .. "/v1/licenses/verify",
+        headers = { ["content-type"] = "application/json" },
+        body = json.encode({
+            deploymentToken = guard.deploymentToken, licenseKey = guard.licenseKey, package = guard.package,
+            environment = self.environment, adapterVersion = self.adapter.adapterVersion,
+        }),
+    }, function(response)
+        guard.pending = false
+        self:_licenseAnswer(guard, response)
+    end)
+    if not ok then
+        guard.pending = false
+        self:_licenseAnswer(guard, nil)
+    end
+end
+
+function Host:_tickLicenses()
+    for _, name in ipairs(self.order) do
+        local guard = self.licenseGuards[name]
+        if guard then
+            if self.now >= guard.nextCheck then
+                guard.nextCheck = self.now + guard.interval
+                self:_checkLicense(guard)
+            end
+            local res = self.resources[name]
+            if res and res.state == "started" and guard.state ~= "valid" and self:_wall() >= guard.graceUntil then
+                local why = "license_" .. tostring(guard.reason)
+                self:stop(name, why)
+                res.state, res.failure = "failed", why
+                self:log("error", name .. ": stopped, " .. why .. " and the offline grace ended")
+            end
+        end
+    end
+end
+
 -- Tick -------------------------------------------------------------------------------------------------
 function Host:tick(now)
     self.now = now or self:_clock()
     self.tickCount = self.tickCount + 1
+    if self.licenseGuards then self:_tickLicenses() end
     self:_drain()
     for _, rname in ipairs(self.order) do
         local r = self.resources[rname]

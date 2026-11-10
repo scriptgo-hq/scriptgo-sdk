@@ -1,16 +1,25 @@
-// scriptgo add <creator//name[@version]> [--dir resources] [--force]
+// scriptgo add <creator//name[@version]> [--dir resources] [--force] [--trust-new-key] [--allow-unsigned]
+//                                         [--deployment-token <sg_dep_...>]
 //
-// Downloads a published release, checks its SHA-256 against the registry, and extracts it into
+// Downloads a published release, checks its SHA-256 and the registry's ed25519 signature (keys
+// pinned on first use: see src/lib/release-signature.ts), and extracts it into
 // ./resources/<resource>. Paths are re-checked locally: nothing is written outside that folder.
+// A tampered archive is refused before a single file is written.
+//
+// A PROTECTED release arrives as its encrypted bundle, for a licensed customer only (log in as the
+// license holder, or pass a deployment token). The bundle is saved as
+// ./resources/<resource>-<version>.escrow.zip, never extracted: a loader on your bound server opens
+// it (the .NET kit in memory, or `scriptgo escrow load`, the reference loader).
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, join, resolve, sep } from "node:path";
 import { unzipSync } from "fflate";
 import { parseIdentifier } from "@scriptgo/shared";
 import { parseArgs } from "../lib/args.ts";
+import { signatureFromHeaders, trustedKeysFor, verifyRelease, type TrustedKey } from "../lib/release-signature.ts";
 import { ApiClient, describeError } from "./_api-client.ts";
 
-export const summary = "Download a package into ./resources, verifying its SHA-256";
+export const summary = "Download a package into ./resources, verifying its SHA-256 and signature";
 
 interface PackageDetail {
   resourceName: string | null;
@@ -41,10 +50,10 @@ export function stripTopFolder(entries: Record<string, Uint8Array>): Record<stri
 }
 
 export async function run(args: string[]): Promise<number> {
-  const a = parseArgs(args, { booleans: ["help", "force"] });
+  const a = parseArgs(args, { booleans: ["help", "force", "trust-new-key", "allow-unsigned"] });
   const target = a.positional[0];
   if (a.bools.has("help") || !target) {
-    console.log("scriptgo add <creator//name[@version]> [--dir resources] [--force]");
+    console.log("scriptgo add <creator//name[@version]> [--dir resources] [--force] [--trust-new-key] [--allow-unsigned] [--deployment-token <sg_dep_...>]");
     return a.bools.has("help") ? 0 : 2;
   }
   const ident = parseIdentifier(target);
@@ -60,7 +69,10 @@ export async function run(args: string[]): Promise<number> {
     if (!version) throw new Error(`${ident.creator}//${ident.name} has no published version`);
     if (!pkg.resourceName) throw new Error(`${ident.creator}//${ident.name} has no resource name yet`);
 
-    const res = await api.raw("GET", `/v1/packages/${ident.creator}/${ident.name}/versions/${encodeURIComponent(version)}/download`);
+    const deploymentToken = a.flags["deployment-token"] ?? process.env.SCRIPTGO_DEPLOYMENT_TOKEN;
+    const res = await api.raw("GET", `/v1/packages/${ident.creator}/${ident.name}/versions/${encodeURIComponent(version)}/download`, {
+      headers: deploymentToken ? { "x-scriptgo-deployment-token": deploymentToken } : undefined,
+    });
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;
       throw new Error(`${body?.error?.code ?? `http_${res.status}`}: ${body?.error?.message ?? "download refused"}`);
@@ -73,12 +85,39 @@ export async function run(args: string[]): Promise<number> {
       throw new Error(`SHA-256 mismatch for ${ident.creator}//${ident.name}@${version}: got ${actual}, registry says ${listed ?? announced ?? "nothing"}. Nothing was written.`);
     }
 
+    // The registry's signature: the bytes are the ones it published, whoever served them.
+    const signature = signatureFromHeaders(res.headers);
+    if (!signature) {
+      if (!a.bools.has("allow-unsigned")) {
+        throw new Error(`${ident.creator}//${ident.name}@${version} carries no release signature. Nothing was written. (A registry that predates release signing: rerun with --allow-unsigned.)`);
+      }
+      console.log("warning: this release is not signed; only its SHA-256 was checked");
+    } else {
+      const served = (await api.get<{ keys: TrustedKey[] }>("/v1/signing-keys")).data.keys;
+      const trust = trustedKeysFor(api.base, served, { trustNew: a.bools.has("trust-new-key") });
+      for (const n of trust.notes) console.log(n);
+      const verdict = verifyRelease(signature, trust.keys, { package: `${ident.creator}//${ident.name}`, version, sha256: actual });
+      if (!verdict.ok) throw new Error(`signature check failed for ${ident.creator}//${ident.name}@${version}: ${verdict.reason}. Nothing was written.`);
+    }
+
+    const root = resolve(a.flags.dir ?? "resources");
+    if (res.headers.get("x-scriptgo-artifact") === "escrow") {
+      // A protected release is kept as its encrypted bundle. It is never extracted here.
+      const file = join(root, `${pkg.resourceName}-${version}.escrow.zip`);
+      if (existsSync(file) && !a.bools.has("force")) throw new Error(`${file} already exists; pass --force to replace it`);
+      mkdirSync(root, { recursive: true });
+      writeFileSync(file, bytes);
+      console.log(`added ${ident.creator}//${ident.name}@${version} -> ${file} (protected release: encrypted bundle, sha256 ${actual}, signature verified)`);
+      console.log("it opens only on a licensed, bound server: load it with a host that holds your server key (the .NET kit decrypts in memory),");
+      console.log(`or with the reference loader: scriptgo escrow load --bundle "${file}" --package ${ident.creator}//${ident.name} --environment <env> --deployment-token <sg_dep_...> --identity <file>`);
+      return 0;
+    }
+
     const entries = stripTopFolder(unzipSync(bytes));
     for (const name of Object.keys(entries)) {
       const why = unsafeEntry(name);
       if (why) throw new Error(`refusing archive entry '${name}': ${why}. Nothing was written.`);
     }
-    const root = resolve(a.flags.dir ?? "resources");
     const dest = join(root, pkg.resourceName);
     if (existsSync(dest)) {
       if (!a.bools.has("force")) throw new Error(`${dest} already exists; pass --force to replace it`);
@@ -90,7 +129,7 @@ export async function run(args: string[]): Promise<number> {
       mkdirSync(dirname(file), { recursive: true });
       writeFileSync(file, data);
     }
-    console.log(`added ${ident.creator}//${ident.name}@${version} -> ${dest} (${Object.keys(entries).length} files, sha256 ${actual})`);
+    console.log(`added ${ident.creator}//${ident.name}@${version} -> ${dest} (${Object.keys(entries).length} files, sha256 ${actual}${signature ? ", signature verified" : ""})`);
     if (pkg.pricing?.kind === "paid") console.log("this package is sold under license: activate it with `scriptgo license activate`");
     return 0;
   } catch (e) {

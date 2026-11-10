@@ -38,7 +38,26 @@ Category            = "inventory" | "permissions" | "economy" | "events" | "ui" 
                     | "vehicles" | "housing" | "quests" | "library" | "other"
 VerifyFailureReason = "expired" | "revoked" | "refunded" | "environment_not_covered" | "deployment_limit"
                     | "unknown_key" | "deactivated"
+KeyReleaseFailureReason = VerifyFailureReason | "unbound" | "server_key_mismatch" | "not_escrowed"
+ProtectionTier      = "escrow" | "license" | "none"   // what a buyer's server gets in an environment (ADR-0027)
+ProtectionState     = "available" | "planned"
 ```
+
+```ts
+// On every Environment (list and detail). "none" is exactly the free_only environments.
+EnvironmentProtection = { tier: ProtectionTier, state: ProtectionState, optIn: boolean, note: string }
+// On a published release (Release, PackageVersion). Verify with GET /v1/signing-keys.
+ReleaseSignature  = { alg: "ed25519", keyId, payload, signature }
+                    // payload: canonical JSON { v: 1, package, version, sha256, size, escrow, publishedAt }
+// Public facts of a release's encrypted variant; null when the release is not protected. Never a key.
+ReleaseEscrowInfo = { format, cipher, kdf, aad, signerPublicKey, signerKeyId, signerOrigin: "master" | "creator" | null,
+                      allowlist: string[], clearFiles: string[], encryptedFiles: string[], watermarked: boolean,
+                      builtBy: "cli" | "server", sealedKeyPresent: boolean }
+```
+
+`Release` and `PackageVersion` carry `escrow: ReleaseEscrowInfo | null` and `signature: ReleaseSignature | null`
+(null only for a release published before signing; the seed signs those). For a protected release
+`sha256` and `size` describe the encrypted bundle: that is what is delivered.
 
 ## Public
 
@@ -184,6 +203,16 @@ POST /v1/creator/packages { name, title, summary, category, license, visibility,
 GET  /v1/creator/packages/:name                  → CreatorPackageDetail
 PATCH /v1/creator/packages/:name                 → CreatorPackageDetail
 POST /v1/creator/packages/:name/releases  (multipart: archive=zip)  → Release (status "validating")
+     + escrow=true [allowlist=<globs, one per line or comma-separated>]   → Release (status "ready" | "validation_failed")
+       the master builds the encrypted bundle from the plain archive, signs escrow.json with the creator's
+       master-held key, validates in the request (no worker) and keeps no plaintext
+     + archive=<escrow bundle> contentKey=<base64, 32 bytes>               → Release (status "ready" | "validation_failed")
+       a bundle built by `scriptgo publish --escrow`: the master checks the signature, opens it in memory with
+       the key, validates the plaintext, stores the bundle and seals the key
+       422 escrow_key_required | escrow_key_invalid | escrow_key_mismatch | escrow_bundle_invalid |
+           escrow_signature_invalid | escrow_package_mismatch | escrow_version_mismatch |
+           escrow_nothing_to_encrypt | escrow_reserved_file | invalid_allowlist | signer_retired
+GET  /v1/creator/packages/:name/key-activity?days=30  → KeyActivity   (counts from the key endpoint's log)
 GET  /v1/creator/releases/:id                    → Release with validation report
 POST /v1/creator/releases/:id/rights { ownsCode, targetsProprietaryGame, thirdPartyAssets[] }
 POST /v1/creator/releases/:id/publish            → Release (409 publish_blocked, details.blockers: string[])
@@ -200,6 +229,17 @@ POST /v1/creator/stores/:id/test-event           → { delivered: boolean, statu
 GET  /v1/creator/customers                       → { license, customer: { username }, offer }[]
 GET  /v1/creator/analytics?days=30&package=      → { downloads: Series, activations: Series, verifications: Series }
 ```
+
+```ts
+KeyActivity = { days, released, refused, refusalsByReason: Record<KeyReleaseFailureReason, number>,
+                deployments,            // distinct deployments that received a key in the window
+                lastReleasedAt, lastRefusedAt }
+```
+
+The content key of a protected release is sealed at rest, is in no log and no audit record, and is in
+no response of this API other than `POST /v1/licenses/key`, wrapped to one bound server. Publishing
+signs the release (`signature`) with the registry key. A protected release is immutable like any
+other: a new key is a new release.
 
 ```ts
 Release = { id, packageName, version, status: ReleaseStatus, createdAt, sha256, size,
@@ -232,13 +272,47 @@ POST /v1/licenses/key        { licenseKey | deploymentToken, package, version?, 
                              → 200 { valid, reason: KeyReleaseFailureReason | null, wrappedKey: {epk,nonce,wrapped} | null,
                                      aad, signerPublicKey, deliveryWatermark, offlineGraceUntil, expiresAt }
                                // escrow: content key wrapped to the bound server. Gated like verify, plus binding +
-                               // escrowed release. Reasons add unbound, not_escrowed. 4xx/5xx → loader offline grace.
+                               // escrowed release. Reasons add unbound, server_key_mismatch, not_escrowed.
+                               // Cache-Control: no-store. 4xx/5xx → loader offline grace. 300/min per IP and
+                               // 60/min per key or token (429). Every answer is logged with its reason.
                                // See docs/spec/escrow.md.
 POST /v1/licenses/deactivate { licenseKey, activationId }  → { ok: true }
 GET  /v1/licenses/:id        (owner session only)          → LicenseDetail
 GET  /v1/licenses/public-key                               → { alg: "ed25519", publicKey, kid }
 (activate and deactivate: 30/min per IP)
+
+GET  /v1/signing-keys                                      → { keys: { keyId, alg: "ed25519", publicKey, status: "current" | "retired" }[] }
+                                                             // the registry's RELEASE-signing keys (raw public key, base64url);
+                                                             // not the license-token key above
+GET  /v1/creators/:username/signing-keys                   → { keys: { keyId, alg, publicKey, origin: "master" | "creator", createdAt, retiredAt }[] }
+                                                             // the keys that sign this creator's escrow manifests
+POST /v1/me/licenses/:id/deployments/:activationId/reset-server-key   (owner; 10/min)
+                             → 200 Activation   404 not_found, 409 not_bound, 429 reset_limit (3 per deployment per 24 h)
+                               // unbinds the server key; the next key request binds the server that makes it. Audited.
 ```
+
+`Activation` (in `LicenseDetail.activations`) carries `binding: { bound, serverKeyFingerprint, boundAt,
+lastKeyReleaseAt, resets, lastResetAt }`: the server key as a fingerprint (16 hex characters of the
+SHA-256 of the raw public key), never the key. Activating the same deployment name again renews its
+token but answers 409 `server_key_mismatch` when it names another server key than the bound one.
+
+**Download of a release** (`GET /v1/packages/:creator/:name/versions/:version/download`): the answer
+carries `X-Sha256`, `X-ScriptGo-Artifact: plain | escrow` and the release signature in
+`X-ScriptGo-Signature`, `X-ScriptGo-Signature-Key`, `X-ScriptGo-Signature-Payload` (base64url of the
+signed JSON). A protected release is delivered as its encrypted bundle, and only to a licensed
+customer: the session or personal token of the license holder, or `X-ScriptGo-Deployment-Token` /
+`X-ScriptGo-License-Key`; anyone else gets 403 `license_required`. `?variant=plain` returns the
+plaintext to the package's creator and to staff only, and is audited
+(`release.escrow_plain_downloaded`); it answers 403 to a buyer and 409 `not_escrowed` on an
+unprotected release.
+
+**Key-release refusal reasons** (stable; a loader switches on them):
+`unknown_key` no license matches the key or token for this package · `expired` · `revoked` ·
+`refunded` · `deactivated` the deployment was deactivated · `environment_not_covered` ·
+`deployment_limit` · `unbound` the request names no server key to wrap to (a license key alone, or a
+deployment without a key and none sent) · `server_key_mismatch` another server key than the bound
+one (a copy on another machine; an honest move needs the owner's reset) · `not_escrowed` no protected
+release for the version asked (or it was yanked or restricted).
 
 `package` is the `creator//name` identifier or the manifest resource name (`inventory_pro`).
 
@@ -318,3 +392,72 @@ CompatibilityRun = { runId, package: "scriptgo//event-bus" | "sg_eventbus", vers
 writes it. A resource name must designate one package; when several creators use it, the single
 first-party package wins, otherwise the run is refused with `409 ambiguous_package`. Unknown
 packages are `404 unknown_package`. Ingestion is idempotent on `runId`.
+
+## Escrow (staff)
+
+```
+GET  /v1/admin/escrow/key-events?limit=&outcome=released|refused&reason=&license=   (staff)
+                             → KeyEventRow[]   // every answer of POST /v1/licenses/key, newest first
+POST /v1/admin/escrow/marker-lookup { marker, reason }                              (staff; 30/min)
+                             → MarkerLookupResult   // audited as escrow.marker_lookup with the reason
+```
+
+```ts
+KeyEventRow = { id, at, outcome: "released" | "refused", reason: string | null, packageRef, package: string | null,
+                version, environment, licenseId, deploymentId, deploymentName, serverKeyFingerprint }
+// marker: the bare token, the .scriptgo-escrow file a loader stamps into a decrypted copy, or an escrow.json
+MarkerLookupResult = { kind: "delivery" | "release" | "unknown", marker,
+                       release: { package, version } | null,
+                       license: { id, status, holderUserId, holderName, holderEmail } | null,
+                       deployment: { id, name, environment, status, serverKeyFingerprint } | null,
+                       deliveries: { count, firstAt, lastAt, recent: Timestamp[] } }
+```
+
+A delivery marker names one license and one deployment; a release watermark names the release only.
+The log and the lookup never hold or return a content key. Traceability, not prevention.
+
+## Commerce readiness (Tebex)
+
+What is configured and what is missing before a Tebex store can sell. Both routes compute their
+answer from real state on each call: the server's settings, whether a sealed credential exists (never
+its value), the offers, and the webhook deliveries the server recorded. Nothing is stored as "ready",
+no secret is returned, and a `GET` changes nothing: checkout still opens only with
+`COMMERCE_CHECKOUT_ENABLED=true` and an approved store (ADR-0007). The owner's checklist is
+`docs/ops/TEBEX-GO-LIVE.md`. Schemas: `packages/shared/src/readiness.ts`.
+
+```
+GET /v1/creator/stores/:id/readiness   (creator, own store) → StoreReadiness
+                                       404 not_found (not your store), 409 sandbox_store (a mock store)
+GET /v1/admin/commerce/readiness       (admin) → CommerceReadiness
+```
+
+```ts
+ReadinessCheck    = { id: string, label: string, status: "ok" | "missing" | "warning" | "blocked",
+                      detail: string, fix: string | null }
+ReadinessSummary  = { ready: boolean, remaining: string[] }
+StoreReadiness    = { storeId, provider: "tebex", creator: string, webhookUrl: string, approved: boolean,
+                      checks: ReadinessCheck[], summary: ReadinessSummary, generatedAt: Timestamp }
+CommerceReadiness = { platform: { checks: ReadinessCheck[], summary: ReadinessSummary },
+                      stores: StoreReadiness[], generatedAt: Timestamp }
+```
+
+`status`: `ok` configured or proven by a recorded event; `missing` the operator or the creator still
+has to supply something; `warning` worth a look, does not block; `blocked` waits for a decision
+outside configuration (the written approval, a review). `summary.ready` is true when no check is
+`missing` or `blocked`; `summary.remaining` has one line per such check, in order. With every Tebex
+value in place it is exactly `["Approval of this store by SCRIPT//GO staff", "Written approval from
+Tebex, then COMMERCE_CHECKOUT_ENABLED=true"]`, then only the second line, then empty.
+
+Store checks, in order (`id`): `store_connected`, `webhook_secret` (saved yes/no), `public_token`
+(saved yes/no; needed to open a checkout basket), `webhook_url` (the URL to paste in Tebex; `missing`
+when `PUBLIC_API_URL` is not a public https address), `webhook_delivery` (the last delivery recorded
+for this store: accepted → `ok`, refused → `missing` with the reason; none recorded → `warning`,
+because the validation webhook is answered but not recorded), `webhook_failures` (last 24 hours),
+`product_mapping` (every active paid Tebex offer carries a provider product id; unmapped offers are
+named), `offer_review` and `published_release` (only when the store has paid offers),
+`store_approval`, `checkout_flag`.
+
+Platform checks, in order: `public_api_url`, `ip_allowlist` (`TEBEX_ENFORCE_IP_ALLOWLIST`),
+`trust_proxy` (a warning when the sender check is on and `TRUST_PROXY` is false), `mock_provider`,
+`platform_webhook_secret` (`TEBEX_WEBHOOK_SECRET`, optional), `checkout_flag`
+(`COMMERCE_CHECKOUT_ENABLED`; `blocked` until the written approval).

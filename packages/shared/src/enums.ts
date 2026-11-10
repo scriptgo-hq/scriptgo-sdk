@@ -17,6 +17,17 @@ export type AdapterState = z.infer<typeof AdapterState>;
 export const IntegrationType = z.enum(["cli", "library", "addon", "mod", "plugin", "program", "shim", "kit"]);
 export type IntegrationType = z.infer<typeof IntegrationType>;
 
+/**
+ * What a buyer's server gets in an environment (ADR-0027). escrow: the host runs compiled code and
+ * can hold a key, so an encrypted release is decrypted in memory. license: licence check and signed
+ * releases only (a pure-script host; no code-secrecy claim). none: free-only environment.
+ */
+export const ProtectionTier = z.enum(["escrow", "license", "none"]);
+export type ProtectionTier = z.infer<typeof ProtectionTier>;
+/** Whether that tier works in the environment today. */
+export const ProtectionState = z.enum(["available", "planned"]);
+export type ProtectionState = z.infer<typeof ProtectionState>;
+
 export const CapabilitySupport = z.enum(["supported", "partial", "fallback", "unavailable"]);
 export type CapabilitySupport = z.infer<typeof CapabilitySupport>;
 
@@ -150,6 +161,9 @@ export const KeyReleaseFailureReason = z.enum([
   "deactivated",
   /** The deployment registered no server public key (not bound); a key cannot be wrapped to it. */
   "unbound",
+  /** The request carries a server public key other than the one bound to the deployment (a copy on
+   * another machine, or an honest re-install: the owner resets the server key in the dashboard). */
+  "server_key_mismatch",
   /** The package/release has no encrypted variant (nothing to release a key for). */
   "not_escrowed",
 ]);

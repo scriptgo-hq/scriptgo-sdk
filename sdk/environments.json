@@ -27,6 +27,12 @@
         "summary": "The `scriptgo` CLI runs resources on a plain Lua interpreter, with no engine. `scriptgo run` ticks the host in simulated or real time and `scriptgo test` runs test scripts; it is the reference host the other environments are compared with.",
         "type": "cli"
       },
+      "protection": {
+        "tier": "license",
+        "state": "available",
+        "optIn": false,
+        "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
+      },
       "proof": [
         {
           "package": "inventory_pro",
@@ -233,7 +239,7 @@
         "players": "Simulated local players (one by default).",
         "ui": "Notifications are printed to the console."
       },
-      "setupMarkdown": "The standalone host is the `scriptgo` CLI on plain Lua 5.4, 5.1 or LuaJIT. It needs Node.js 22 or\nlater and a Lua interpreter (`lua`/`luajit` on the `PATH`).\n\n1. Install the package into `./resources`:\n\n   ```bash\n   scriptgo add scriptgo//inventory-kit\n   ```\n\n2. Run it. Without `--for` or `--script`, the host reads steps from the terminal\n   (`cmd 1 /help`, `console <cmd>`, `wait <ms>`, `quit`):\n\n   ```bash\n   scriptgo run resources/sg_inventory --search resources --realtime\n   ```\n\n3. Privileges, per-resource values and convars come from a JSON file:\n\n   ```json\n   {\n     \"permissions\": { \"1\": [\"inventory.give\"] },\n     \"resources\": { \"sg_inventory\": { \"slots\": 12 } },\n     \"convars\": { \"scriptgo_api\": \"https://api.example\" }\n   }\n   ```\n\n   ```bash\n   scriptgo run resources/sg_inventory --search resources --config config.json\n   ```\n\nStorage goes to `.scriptgo-data/storage/` (`--data` to change it). HTTP and licensing use the\nsystem `curl`.\n",
+      "setupMarkdown": "The standalone host is the `scriptgo` CLI on plain Lua 5.4, 5.1 or LuaJIT. It needs Node.js 22 or\nlater and a Lua interpreter (`lua`/`luajit` on the `PATH`).\n\n1. Install the package into `./resources`:\n\n   ```bash\n   scriptgo add scriptgo//inventory-kit\n   ```\n\n2. Run it. Without `--for` or `--script`, the host reads steps from the terminal\n   (`cmd 1 /help`, `console <cmd>`, `wait <ms>`, `quit`):\n\n   ```bash\n   scriptgo run resources/sg_inventory --search resources --realtime\n   ```\n\n3. Privileges, per-resource values and convars come from a JSON file:\n\n   ```json\n   {\n     \"permissions\": { \"1\": [\"inventory.give\"] },\n     \"resources\": { \"sg_inventory\": { \"slots\": 12 } },\n     \"convars\": { \"scriptgo_api\": \"https://api.example\" }\n   }\n   ```\n\n   ```bash\n   scriptgo run resources/sg_inventory --search resources --config config.json\n   ```\n\n4. A licensed package: add a deployment on its licence page, then let the host check it. A guarded\n   resource starts only on a valid answer, is checked again every ten minutes, and stops when the\n   offline grace of its last valid answer ends (72 hours by default):\n\n   ```json\n   {\n     \"convars\": { \"scriptgo_api\": \"https://api.example\" },\n     \"licenses\": { \"inventory_pro\": { \"deploymentToken\": \"sg_dep_...\", \"package\": \"kestrel//inventory-pro\" } }\n   }\n   ```\n\n   This is a licence check, not code secrecy: the host runs plain Lua, so its operator can read\n   what it loads. A protected (escrow) release arrives as an encrypted bundle; on this host\n   `scriptgo escrow load --out <dir>` opens it on your bound server and writes the copy to disk,\n   which is licence-only protection.\n\nStorage goes to `.scriptgo-data/storage/` (`--data` to change it). HTTP and licensing use the\nsystem `curl`.\n",
       "limitations": [
         "No rendering: `ui` falls back to console output.",
         "HTTP needs curl on the PATH."
@@ -271,6 +277,12 @@
         "runtime": "LÖVE 11.5 (LuaJIT 2.1)",
         "summary": "A Lua module the game loads, `scriptgo_love.lua`. It runs the core in LÖVE's LuaJIT, ticks it from `love.update` through `sg:update(dt)` and draws notifications with `sg:draw()`. Server and local client share the game process.",
         "type": "library"
+      },
+      "protection": {
+        "tier": "license",
+        "state": "available",
+        "optIn": false,
+        "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
       },
       "proof": [
         {
@@ -391,6 +403,12 @@
         "summary": "An autoload node, `ScriptGoHost`, creates a Lua state through the lua-gdextension addon, runs the core in it and ticks it from `_process`. Server and local client share the game process.",
         "type": "addon"
       },
+      "protection": {
+        "tier": "license",
+        "state": "planned",
+        "optIn": false,
+        "note": "Licence check and signed releases, once the adapter has HTTP. The adapter is script-level, so the operator can read what it loads; a native GDExtension loader would be a later upgrade."
+      },
       "proof": [
         {
           "package": "sg_eventbus",
@@ -500,6 +518,12 @@
         "summary": "One regular Luanti mod, `scriptgo`, runs the core in the server's Lua and ticks it from a globalstep. It needs no trusted-mod entry; HTTP needs the server owner to list it in `secure.http_mods`.",
         "type": "mod"
       },
+      "protection": {
+        "tier": "license",
+        "state": "available",
+        "optIn": false,
+        "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
+      },
       "proof": [
         {
           "package": "sg_eventbus",
@@ -606,6 +630,12 @@
         "runtime": "OPEN//77's own Lua 5.4 runtime, on its dedicated server and game client",
         "summary": "OPEN//77 runs its own Lua runtime with the same resource shape. `scriptgo pack --target open77` adapts a package to it: a generated `open77.lua` manifest, the package's files, and a three-file shim (shared, server, client), loaded first, that maps `ScriptGo.*` onto OPEN//77's `Open77.*` API. The packed manifest asks only for the permissions the package's capabilities need.",
         "type": "shim"
+      },
+      "protection": {
+        "tier": "escrow",
+        "state": "planned",
+        "optIn": true,
+        "note": "Code escrow as an opt-in, default-off server feature: the compiled server decrypts in memory, the key is handled natively and plaintext never reaches the disk. The fallback loader that writes the decrypted copy to disk is licence-only protection."
       },
       "proof": [
         {
@@ -731,6 +761,12 @@
       "adapterState": "none",
       "blockedOn": "",
       "integration": null,
+      "protection": {
+        "tier": "license",
+        "state": "planned",
+        "optIn": false,
+        "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
+      },
       "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
@@ -763,6 +799,12 @@
       "adapterState": "none",
       "blockedOn": "",
       "integration": null,
+      "protection": {
+        "tier": "license",
+        "state": "planned",
+        "optIn": false,
+        "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
+      },
       "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
@@ -798,6 +840,12 @@
         "runtime": "Neovim 0.12.6 (LuaJIT 2.1)",
         "summary": "An ordinary Neovim plugin. `setup()` starts the core in Neovim's LuaJIT, a libuv timer ticks it on the main loop, and `:ScriptGo <command>` runs resource commands. Server and local client run in the editor.",
         "type": "plugin"
+      },
+      "protection": {
+        "tier": "license",
+        "state": "available",
+        "optIn": false,
+        "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
       },
       "proof": [
         {
@@ -928,6 +976,12 @@
         "summary": "A program on one ComputerCraft computer, which the CC: Tweaked mod adds to a Fabric server. It runs the core in the computer's Lua 5.2 VM, ticked by a CC timer every server tick; the server and client sides both run on that computer.",
         "type": "program"
       },
+      "protection": {
+        "tier": "none",
+        "state": "available",
+        "optIn": false,
+        "note": "Free packages only here, so nothing is sold or licensed. Releases are still signed."
+      },
       "proof": [
         {
           "package": "sg_probe",
@@ -1013,6 +1067,12 @@
         "runtime": ".NET 10, with KeraLua 1.4.9 (Lua 5.4) and Jint 4.17.0",
         "summary": "An embedded host kit: `ScriptGo.Host`, a .NET 10 library that a C# engine or server references and ticks from its own loop. It runs Lua 5.4 (KeraLua) and JavaScript or TypeScript (Jint) side by side, one VM per resource side and language. Its console host, `scriptgo-dotnet`, runs the verification.",
         "type": "kit"
+      },
+      "protection": {
+        "tier": "escrow",
+        "state": "available",
+        "optIn": false,
+        "note": "Code escrow: the kit's compiled loader decrypts in memory with a key released to this server only. The operator of the machine can still inspect their own process; that takes real effort and the copy is traceable."
       },
       "proof": [
         {
@@ -1121,6 +1181,12 @@
         "summary": "A Java server plugin that embeds Cobalt, a Lua 5.2 VM written in Java, and runs the core on its own host thread, never on a world thread. Players install nothing.",
         "type": "plugin"
       },
+      "protection": {
+        "tier": "escrow",
+        "state": "planned",
+        "optIn": false,
+        "note": "Code escrow is planned: a JVM plugin with a native library would hold the key. Until it exists, licence check and signed releases only."
+      },
       "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
@@ -1183,6 +1249,12 @@
         "runtime": "Garry's Mod dedicated server: GLua on LuaJIT 2.0.4 (32-bit) or LuaJIT 2.1 (64-bit)",
         "summary": "One server addon, `scriptgo`, carries the core and runs it in the server's GLua, ticked on the `Think` hook. `scriptgo pack --target garrysmod` turns each package into its own addon.",
         "type": "addon"
+      },
+      "protection": {
+        "tier": "license",
+        "state": "available",
+        "optIn": false,
+        "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
       },
       "proof": [
         {
@@ -1275,6 +1347,12 @@
         "summary": "One C# plugin, `ScriptGo.cs`, the same file for Oxide and Carbon. Rust's plugin frameworks no longer run Lua, so the plugin loads a small bridge that runs the core in a KeraLua (Lua 5.4) VM, ticked by a framework timer.",
         "type": "plugin"
       },
+      "protection": {
+        "tier": "escrow",
+        "state": "planned",
+        "optIn": false,
+        "note": "Code escrow is planned: the decryptor would live in the compiled bridge next to the Oxide/Carbon plugin. Until it exists, licence check and signed releases only."
+      },
       "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
@@ -1336,6 +1414,12 @@
         "summary": "One BeamMP server plugin, `scriptgo`, runs the core in the plugin's own Lua 5.3 state, ticked by a 25 ms event timer. `scriptgo pack --target beammp` builds it with the package and its dependencies.",
         "type": "plugin"
       },
+      "protection": {
+        "tier": "license",
+        "state": "planned",
+        "optIn": false,
+        "note": "Licence check and signed releases, once paid packages are confirmed there. The server plugin is plain Lua, so the operator can read what it loads: no code-secrecy claim."
+      },
       "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
@@ -1393,6 +1477,12 @@
       "adapterState": "none",
       "blockedOn": "",
       "integration": null,
+      "protection": {
+        "tier": "license",
+        "state": "planned",
+        "optIn": false,
+        "note": "Licence check and signed releases at most, and only after the legal review. No code-secrecy claim."
+      },
       "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
@@ -1428,6 +1518,12 @@
         "runtime": "FXServer and the FiveM client (Lua 5.4)",
         "summary": "FiveM already runs this resource shape. `scriptgo pack --target fivem` emits a resource folder with a generated `fxmanifest.lua` and one shared shim file, loaded first, that maps `ScriptGo.*` onto FiveM natives. Threads, events and exports stay FiveM's own.",
         "type": "shim"
+      },
+      "protection": {
+        "tier": "none",
+        "state": "available",
+        "optIn": false,
+        "note": "Free packages only here, so nothing is sold or licensed. Releases are still signed."
       },
       "proof": [],
       "runtimeVersions": [],
@@ -1490,6 +1586,12 @@
       "adapterState": "none",
       "blockedOn": "",
       "integration": null,
+      "protection": {
+        "tier": "none",
+        "state": "available",
+        "optIn": false,
+        "note": "Free packages only here, so nothing is sold or licensed. Releases are still signed."
+      },
       "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
@@ -1522,6 +1624,12 @@
       "adapterState": "none",
       "blockedOn": "",
       "integration": null,
+      "protection": {
+        "tier": "none",
+        "state": "available",
+        "optIn": false,
+        "note": "Free packages only here, so nothing is sold or licensed. Releases are still signed."
+      },
       "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
@@ -1554,6 +1662,12 @@
       "adapterState": "none",
       "blockedOn": "",
       "integration": null,
+      "protection": {
+        "tier": "none",
+        "state": "available",
+        "optIn": false,
+        "note": "Free packages only here, so nothing is sold or licensed. Releases are still signed."
+      },
       "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
@@ -1586,6 +1700,12 @@
       "adapterState": "none",
       "blockedOn": "",
       "integration": null,
+      "protection": {
+        "tier": "none",
+        "state": "available",
+        "optIn": false,
+        "note": "Free packages only here, so nothing is sold or licensed. Releases are still signed."
+      },
       "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",

@@ -1,11 +1,12 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { unzipSync, zipSync } from "fflate";
-import { parseManifest } from "@scriptgo/manifest";
+import { OPEN77_GENERATED_FILES, open77Capable, open77Manifest, open77ShimFiles, parseManifest } from "@scriptgo/manifest";
 import { readBundle } from "@scriptgo/escrow";
-import { packEscrow } from "../src/lib/escrow-pack.ts";
+import { buildEscrow, packEscrow } from "../src/lib/escrow-pack.ts";
 import { Open77EscrowError, escrowStub, installEscrowForOpen77 } from "../src/lib/open77-escrow.ts";
 
 const tmp = mkdtempSync(join(tmpdir(), "scriptgo-open77-escrow-"));
@@ -47,7 +48,53 @@ describe("escrow packer", () => {
     const { bundle } = pack(join(tmp, "p1"));
     const { manifest } = readBundle(bundle);
     expect(manifest.encryptedFiles).toEqual(["server/main.lua"]);
-    expect(manifest.clearFiles.map((f) => f.path).sort()).toEqual(["README.md", "client/hud.lua", "config.lua", "scriptgo.lua", "shared/items.lua"]);
+    expect(manifest.clearFiles.map((f) => f.path).sort()).toEqual(["README.md", "client/hud.lua", "config.lua", "open77.lua", "scriptgo.lua", "scriptgo_shim.lua", "scriptgo_shim_client.lua", "scriptgo_shim_server.lua", "shared/items.lua"]);
+  });
+
+  it("puts the generated OPEN//77 files in the bundle as clear files the signature covers", () => {
+    const { bundle } = pack(join(tmp, "p1b"));
+    const { manifest, clear } = readBundle(bundle);
+    const sha = (d: Uint8Array) => createHash("sha256").update(d).digest("hex");
+    for (const f of OPEN77_GENERATED_FILES) {
+      const entry = manifest.clearFiles.find((c) => c.path === f);
+      expect(entry, f).toBeTruthy();
+      expect(sha(clear.get(f)!)).toBe(entry!.sha256);
+    }
+    // Exactly what `pack --target open77` writes: the manifest lists the shim first, then the scripts.
+    const parsed = parseManifest(manifestText, { fileName: "scriptgo.lua" }) as { ok: true; manifest: any };
+    expect(clear.get("open77.lua")!.toString("utf8")).toBe(open77Manifest(parsed.manifest, [], "scriptgo.lua"));
+    for (const [to, data] of open77ShimFiles(parsed.manifest)) expect(clear.get(to)!.equals(data)).toBe(true);
+    // A changed open77.lua breaks the signed manifest: the installer refuses it.
+    const entries = unzipSync(bundle);
+    const forged = zipSync({ ...entries, "open77.lua": enc(clear.get("open77.lua")!.toString("utf8") + 'server_script "backdoor.lua"\n') });
+    expect(() => installEscrowForOpen77({ bundle: forged, resourcesRoot: join(tmp, "resources-forged") })).toThrow(/open77\.lua/);
+  });
+
+  it("generates nothing for a package that cannot run on OPEN//77", () => {
+    // TypeScript scripts: OPEN//77 runs Lua only.
+    const tsManifest = ['resource "ts_only"', 'version "1.0.0"', 'server_script "server/main.ts"'].join("\n");
+    const ts = parseManifest(tsManifest, { fileName: "scriptgo.lua" }) as { ok: true; manifest: any };
+    expect(open77Capable(ts.manifest)).toBe(false);
+    const archive = zipSync({ "ts_only/scriptgo.lua": enc(tsManifest), "ts_only/server/main.ts": enc("export {};"), "ts_only/server/main.ts.js": enc("// compiled") });
+    const built = buildEscrow({ archive, manifest: ts.manifest, manifestFile: "scriptgo.lua", identifier: "kestrel//ts-only", allowlist: [] });
+    expect(built.clearFiles).toEqual(["scriptgo.lua"]);
+    expect(built.encryptedFiles.sort()).toEqual(["server/main.ts", "server/main.ts.js"]);
+    // Its bundle has no signed open77.lua, so it is not installable there, and nothing unsigned is written.
+    const root = join(tmp, "resources-ts");
+    expect(() => installEscrowForOpen77({ bundle: built.bundle, resourcesRoot: root })).toThrow(/not packed for OPEN\/\/77/);
+    expect(existsSync(join(root, "ts_only"))).toBe(false);
+
+    // A Lua package that lists other environments only is not packed for OPEN//77 either.
+    const elsewhere = parseManifest(manifestText + '\nenvironments { "standalone" }', { fileName: "scriptgo.lua" }) as { ok: true; manifest: any };
+    expect(open77Capable(elsewhere.manifest)).toBe(false);
+    const listed = parseManifest(manifestText + '\nenvironments { "standalone", "open77" }', { fileName: "scriptgo.lua" }) as { ok: true; manifest: any };
+    expect(open77Capable(listed.manifest)).toBe(true);
+  });
+
+  it("refuses a resource that already has a file with a generated name", () => {
+    const parsed = parseManifest(manifestText, { fileName: "scriptgo.lua" }) as { ok: true; manifest: any };
+    const archive = zipSync({ "inv_pro/scriptgo.lua": enc(manifestText), "inv_pro/scriptgo_shim.lua": enc("-- mine"), "inv_pro/server/main.lua": enc(SECRET), "inv_pro/shared/items.lua": enc("Items = {}"), "inv_pro/client/hud.lua": enc("-- hud"), "inv_pro/config.lua": enc("return {}") });
+    expect(() => buildEscrow({ archive, manifest: parsed.manifest, manifestFile: "scriptgo.lua", identifier: "kestrel//inv-pro", allowlist: [] })).toThrow(/scriptgo_shim\.lua/);
   });
 });
 
@@ -78,6 +125,20 @@ describe("installEscrowForOpen77", () => {
     const open77 = readFileSync(join(dest, "open77.lua"), "utf8");
     expect(open77).toContain('server_script "server/main.lua"');
     expect(open77.indexOf("scriptgo_shim.lua")).toBeLessThan(open77.indexOf("shared/items.lua"));
+
+    // No unsigned script: every file on disk is a signed clear file of the bundle, byte for byte,
+    // the bundle's own escrow.json / payload.enc, or a one-line stub. The installer generated nothing.
+    const sha = (d: Uint8Array) => createHash("sha256").update(d).digest("hex");
+    const walk = (dir: string, prefix = ""): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? walk(join(dir, d.name), `${prefix}${d.name}/`) : [`${prefix}${d.name}`]));
+    const onDisk = walk(dest);
+    expect(onDisk.length).toBe(manifest.clearFiles.length + 2 + r.stubs.length);
+    for (const f of onDisk) {
+      if (f === "escrow.json" || f === "payload.enc") continue;
+      const signed = manifest.clearFiles.find((c) => c.path === f);
+      if (signed) expect(sha(readFileSync(join(dest, f))), f).toBe(signed.sha256);
+      else expect(readFileSync(join(dest, f), "utf8"), f).toBe(escrowStub(manifest, f));
+    }
+    expect(readFileSync(join(dest, "open77.lua")).equals(Buffer.from(raw["open77.lua"]!))).toBe(true);
   });
 
   it("warns when the signer is not pinned, and refuses another signer", () => {

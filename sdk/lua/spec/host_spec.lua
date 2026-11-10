@@ -651,6 +651,173 @@ describe("licensing", function()
     end)
 end)
 
+-- Host:guardLicense: the reference license enforcement of a host (creator protection, phase 0).
+-- A fake wall clock and a fake API: the host's own clock is the harness's manual one.
+describe("license guard", function()
+    local VERIFY = "POST http://api.test/v1/licenses/verify"
+    local T0 = 1794268800 -- 2026-11-10T00:00:00Z
+    local GRACE = 72 * 3600
+
+    local function iso(t)
+        return os.date("!%Y-%m-%dT%H:%M:%S.000Z", t)
+    end
+
+    -- `api.answer` is what the licensing API says now; `api.calls` what it was asked.
+    local function guarded(opts)
+        opts = opts or {}
+        local wall = { now = T0 }
+        local api = { answer = opts.answer, calls = {} }
+        local h = harness({
+            ["vip/scriptgo.lua"] = manifestFor("vip", 'server_script "s.lua"\nlicensed true\n'),
+            ["vip/s.lua"] = 'exports("open", function() return "lounge open" end)',
+        }, {
+            config = { _global = { scriptgo_api = "http://api.test" } },
+            wallTime = function() return wall.now end,
+            http = {
+                [VERIFY] = function(req)
+                    api.calls[#api.calls + 1] = scriptgo.json.decode(req.body)
+                    if api.answer == "down" then return { status = 503, body = "{}" } end
+                    if api.answer == "valid" then
+                        return { status = 200, body = '{"valid":true,"status":"active","offlineGraceUntil":"' .. iso(wall.now + GRACE) .. '"}' }
+                    end
+                    return { status = 200, body = '{"valid":false,"reason":"' .. api.answer .. '"}' }
+                end,
+            },
+        })
+        h:add("vip")
+        local guard = h.host:guardLicense("vip", { deploymentToken = opts.token or "sg_dep_bound", package = "kestrel//vip-pass", interval = 600 })
+        -- Advances the host clock and the wall clock together.
+        local function pass(seconds)
+            local left = seconds
+            while left > 0 do
+                local step = math.min(left, 60)
+                wall.now = wall.now + step
+                h.adapter.advance(step)
+                h.host:tick(h.adapter.now())
+                left = left - step
+            end
+        end
+        return h, api, guard, pass, wall
+    end
+
+    test("parses the API's timestamps as UTC", function()
+        local host = scriptgo.host
+        expect(host.parseIsoTime("1970-01-01T00:00:00.000Z")).toBe(0)
+        expect(host.parseIsoTime("2026-11-10T00:00:00.000Z")).toBe(T0)
+        expect(host.parseIsoTime("2024-02-29T12:30:15Z")).toBe(1709209815)
+        expect(host.parseIsoTime("not a date")).toBeNil()
+    end)
+
+    test("a licensed, bound server starts the resource after the first valid answer", function()
+        local h, api, guard = guarded({ answer = "valid" })
+        -- Before any answer the resource does not start.
+        local ok, why = h.host:start("vip")
+        expect(ok).toBe(false)
+        expect(why).toBe("license_pending")
+        h:tick(0)
+        expect(guard.state).toBe("valid")
+        expect(h.host.resources.vip.state).toBe("started")
+        expect(h:call("vip", "open")).toBe("lounge open")
+        expect(api.calls[1].deploymentToken).toBe("sg_dep_bound")
+        expect(api.calls[1].package).toBe("kestrel//vip-pass")
+        expect(api.calls[1].environment).toBe("standalone")
+        expect(guard.graceUntil).toBe(T0 + GRACE)
+    end)
+
+    test("a copy without a valid deployment token is refused and never starts", function()
+        local h, api, guard, pass = guarded({ answer = "unknown_key", token = "sg_dep_copied_folder_no_token" })
+        h:tick(0)
+        expect(guard.state).toBe("refused")
+        local ok, why = h.host:start("vip")
+        expect(ok).toBe(false)
+        expect(why).toBe("license_unknown_key")
+        expect(h.host.resources.vip.state).toBe("failed")
+        pass(3600)
+        expect(h.host.resources.vip.state).toBe("failed")
+        expect(#api.calls >= 6).toBe(true)
+        expect(h:findLog("license refused %(unknown_key%)")).toBeTruthy()
+    end)
+
+    test("does not start when the API cannot answer and there was never a valid answer", function()
+        local h, _, guard = guarded({ answer = "down" })
+        h:tick(0)
+        expect(guard.state).toBe("unchecked")
+        local ok, why = h.host:start("vip")
+        expect(ok).toBe(false)
+        expect(why).toBe("license_pending")
+    end)
+
+    test("revocation stops the resource at the end of offline grace, not before", function()
+        local h, api, guard, pass, wall = guarded({ answer = "valid" })
+        h:tick(0)
+        expect(h.host.resources.vip.state).toBe("started")
+        -- An hour of valid checks: each one renews the grace.
+        pass(3600)
+        expect(guard.graceUntil > T0 + GRACE).toBe(true)
+        local lastValid = guard.graceUntil
+
+        api.answer = "revoked"
+        pass(600)
+        expect(guard.state).toBe("refused")
+        expect(guard.reason).toBe("revoked")
+        -- Refused, but inside the grace of the last valid answer: it keeps running.
+        expect(h.host.resources.vip.state).toBe("started")
+        expect(h:call("vip", "open")).toBe("lounge open")
+        expect(h:findLog("license refused %(revoked%); it keeps running until the offline grace ends")).toBeTruthy()
+
+        -- One minute before the grace ends it still runs; after it, it is stopped.
+        pass(lastValid - wall.now - 60)
+        expect(h.host.resources.vip.state).toBe("started")
+        pass(120)
+        expect(h.host.resources.vip.state).toBe("failed")
+        expect(h.host.resources.vip.failure).toBe("license_revoked")
+        expect(h:findLog("stopped, license_revoked and the offline grace ended")).toBeTruthy()
+        -- It does not come back by itself, and cannot be started by hand.
+        pass(3600)
+        local ok, why = h.host:start("vip")
+        expect(ok).toBe(false)
+        expect(why).toBe("license_revoked")
+    end)
+
+    test("an API outage keeps the resource running on offline grace, then stops it; a valid answer restarts it", function()
+        local h, api, guard, pass, wall = guarded({ answer = "valid" })
+        h:tick(0)
+        api.answer = "down"
+        pass(3600)
+        expect(guard.state).toBe("unreachable")
+        expect(h.host.resources.vip.state).toBe("started")
+        -- Within grace a stopped resource may be started again: the last answer was valid.
+        h.host:stop("vip")
+        expect(h.host:start("vip")).toBe(true)
+        pass(guard.graceUntil - wall.now + 60)
+        expect(h.host.resources.vip.state).toBe("failed")
+        expect(h.host.resources.vip.failure).toBe("license_unreachable")
+        -- The API is back and the license is still good: the next check starts it again.
+        api.answer = "valid"
+        pass(600)
+        expect(guard.state).toBe("valid")
+        expect(h.host.resources.vip.state).toBe("started")
+    end)
+
+    test("a refund is treated like any refusal, and an unguarded resource is not affected", function()
+        local h, api, guard, pass, wall = guarded({ answer = "valid" })
+        h:tick(0)
+        api.answer = "refunded"
+        pass(600)
+        expect(guard.reason).toBe("refunded")
+        pass(guard.graceUntil - wall.now + 60)
+        expect(h.host.resources.vip.failure).toBe("license_refunded")
+
+        local free = harness({
+            ["free/scriptgo.lua"] = manifestFor("free", 'server_script "s.lua"\n'),
+            ["free/s.lua"] = 'exports("ok", function() return true end)',
+        })
+        free:add("free")
+        expect(free:start("free")).toBe(true)
+        expect(free.host.licenseGuards).toBeNil()
+    end)
+end)
+
 describe("OPEN//77 manifest semantics", function()
     test("server_export publishes a global function after the last script", function()
         local h = harness({
