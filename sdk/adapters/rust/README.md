@@ -6,8 +6,9 @@ storage. Rust's plugin frameworks dropped their Lua support long ago, so the plu
 Lua 5.4 VM through [KeraLua](https://github.com/nlua/KeraLua), the binding OPEN//77's server uses.
 
 **Status: experimental.** On a real Windows dedicated server with Oxide, the conformance probe is
-verified and the escrow chain passes end to end, and both again with Carbon in place of Oxide. No
-Linux server and no connected player have been measured. See "What has run" below.
+verified and the escrow chain passes end to end, and both again with Carbon in place of Oxide, and
+on a Linux dedicated server with Oxide in a container. No connected player has been measured. See
+"What has run" below.
 
 Encrypted (escrowed) packages are supported through the native library of `sdk/native`, off by
 default: see "Escrow". That part is planned too, and proven only in the bridge's test process.
@@ -281,10 +282,11 @@ None of this is about the operator. The operator is not limited to writing resou
   passes as an argument; `Marshal.GetFunctionPointerForDelegate` gives back the native address of
   a Lua C function (used to find the Lua library the VM runs on; if it does not, the bridge falls
   back to the `lua54` it loaded by path, or refuses with `native_missing`).
-- **No Rust server on either system.** On Linux, `libscriptgo.so` is built (`sdk/native/README.md`)
-  and the 45 bridge tests pass in a plain .NET 10 process, 17 of them with the real library
-  (2026-11-10, container). That covers `dlopen` of both libraries by full path and the POSIX
-  identity file; it does not cover Mono, nor `runds.sh` and its `LD_LIBRARY_PATH`.
+- **Linux is measured in a container only.** `libscriptgo.so` is built (`sdk/native/README.md`),
+  the 45 bridge tests pass there in a plain .NET 10 process (17 with the real library), and the
+  escrow chain passes on a Linux Rust dedicated server with Oxide ("What has run"). The server was
+  started directly, as root, with `LD_LIBRARY_PATH` set by the runner: `runds.sh`, a service
+  account and Carbon on Linux are not covered.
 - The identity is sealed for the account the server runs as. Running the server under another
   account, or as a service after a first start from a console session, gives `unbound` until the
   licence is bound again.
@@ -333,8 +335,16 @@ limit is 20 minutes. Without a server folder the run is reported as skipped, nev
   What that settles: under Unity's Mono, `lua54.dll` and `scriptgo.dll` are found by full path, the
   function-pointer round trip to `luaL_loadbufferx` works, the identity file is created and reused,
   and Oxide compiles the plugin. The same two commands pass on that build with Carbon 2.0.264 in
-  place of Oxide (verified, 30 checks; 32/32). What it does not settle: a Linux server
-  (`liblua54.so`, `libscriptgo.so`, `runds.sh`), and anything a connected player triggers.
+  place of Oxide (verified, 30 checks; 32/32). What it does not settle: anything a connected player
+  triggers.
+- **A real Rust dedicated server on Linux** (2026-11-10: the public Linux build, Oxide 2.0.7900 for
+  Linux, in a container of `mcr.microsoft.com/dotnet/sdk:10.0`, Ubuntu 24.04, as root, loopback):
+  `pwsh -File tools/rust-server-linux.ps1 -RustServer <folder> -Mode both`. The probe is verified,
+  30 checks, and the escrow chain is 32/32, with `liblua54.so` and `libscriptgo.so` loaded by full
+  path (`dlopen`) under Unity's Mono and the POSIX identity file. Two things seen there and handled
+  by the test tools, neither about escrow: two server starts out of about twenty-five never reached
+  their plugins (the wrapper now restarts once and says so), and a request sent after minutes of waiting
+  failed on a connection the API had closed (the script no longer reuses connections).
 - `dotnet run --project sdk/adapters/rust/tests -c Release`: 45 bridge tests in a **plain .NET 10
   process**. The services are fakes; the KeraLua Lua 5.4.8 VM, the portable core, this glue, the
   conformance probe and the official kits are the real ones. On that host, `sg_probe` passes 25/25

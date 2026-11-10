@@ -1,7 +1,7 @@
 These steps were followed on real Windows dedicated servers, one with Oxide and one with Carbon
 (2026-11-10: the conformance probe and the escrow chain pass on both, see README.md, "What has
-run"). The Linux variants are written from the frameworks' documentation: treat those as untested
-on a live server.
+run"). On Linux, Oxide was run the same way in a container (`tools/rust-server-linux.ps1`); Carbon
+on Linux and a start through `runds.sh` are written from the documentation and untested.
 
 1. Build the plugin files, optionally with resources:
 
@@ -49,8 +49,8 @@ Only the server side runs: Rust has no client-side plugins. Check what is runnin
 
 ## Encrypted (escrowed) packages
 
-Optional and off by default. Proven on Windows servers with Oxide and with Carbon; untested on
-Linux. Read
+Optional and off by default. Proven on Windows servers with Oxide and with Carbon, and on a Linux
+server with Oxide in a container. Read
 "Escrow" in README.md first: it is deterrence, licence binding, revocation and traceability, not a
 guarantee, and the operator of the machine can ultimately recover what their own server runs.
 
