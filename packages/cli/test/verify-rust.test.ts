@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readResource, repoRoot } from "../src/lib/sdk.ts";
 import {
   RUST_GAME_PORT, RUST_RCON_PORT, detectRustFramework, findRustServer, rustClosure, rustFrameworkPaths, rustInstallFiles,
-  rustServerArgs, rustVerifyConfig, verifyRust,
+  rustServerArgs, rustVerifyConfig, scrubServerPath, verifyRust,
 } from "../src/commands/verify-rust.ts";
 
 const packages = join(repoRoot, "sdk", "packages");
@@ -134,5 +134,26 @@ describe("rust verify runner", () => {
     expect(order[order.length - 1]!.root).toBe(res.root);
     const { missing: none } = rustClosure(res, [join(tmp, "empty")]);
     expect(none.length).toBeGreaterThan(0);
+  });
+});
+
+describe("a Rust report says nothing about where the server is installed", () => {
+  it("replaces the server folder in every string, both slash styles, and drops coloured copies of log lines", () => {
+    const server = join(tmp, "Rust Server");
+    const back = server.replace(/\//g, "\\");
+    const forward = server.replace(/\\/g, "/");
+    const report = scrubServerPath({
+      log: [`Lua 5.4 from ${back}\\RustDedicated_Data\\Plugins\\x86_64\\lua54.dll`, `\u001b[37mLua 5.4 from ${back}\u001b[0m`, `Mono path = '${forward}/RustDedicated_Data/Managed'`].join("\n"),
+      evidence: { nativeLibrary: { path: `${back.toUpperCase()}\\RustDedicated_Data\\Plugins\\x86_64\\lua54.dll` }, ports: "28115/28116 on 127.0.0.1" },
+      checks: [{ name: "starts", status: "passed", message: `from ${forward}` }],
+      durationMs: 12,
+    }, server);
+    const text = JSON.stringify(report);
+    expect(text).not.toContain("Rust Server");
+    expect(text.toLowerCase()).not.toContain(tmp.toLowerCase().replace(/\\/g, "\\\\"));
+    expect(report.log.split("\n")).toEqual(["Lua 5.4 from <rust-server>\\RustDedicated_Data\\Plugins\\x86_64\\lua54.dll", "Mono path = '<rust-server>/RustDedicated_Data/Managed'"]);
+    expect(report.evidence.nativeLibrary.path).toBe("<rust-server>\\RustDedicated_Data\\Plugins\\x86_64\\lua54.dll");
+    expect(report.checks[0]!.message).toBe("from <rust-server>");
+    expect(report.durationMs).toBe(12);
   });
 });

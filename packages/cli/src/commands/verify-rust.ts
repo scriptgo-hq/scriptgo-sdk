@@ -165,6 +165,27 @@ function statusOf(checks: RustCheck[]): RustReport["status"] {
   return "verified";
 }
 
+/**
+ * A report is committed and shown on the site: it must not carry where the server is installed on
+ * the machine that ran it. Every string of the report has the server folder (either slash style,
+ * any case) replaced by `<rust-server>`, and the log loses the copies of its lines that the server
+ * writes a second time with terminal colours.
+ */
+export function scrubServerPath<T>(report: T, server: string): T {
+  const folder = resolve(server).replace(/[\\/]+$/, "");
+  const pattern = new RegExp(folder.split(/[\\/]+/).map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("[\\\\/]+"), "gi");
+  const clean = (value: unknown, key?: string): unknown => {
+    if (typeof value === "string") {
+      const text = key === "log" ? value.split("\n").filter((line) => !line.includes("\u001b")).join("\n") : value;
+      return text.replace(pattern, "<rust-server>");
+    }
+    if (Array.isArray(value)) return value.map((item) => clean(item));
+    if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, clean(v, k)]));
+    return value;
+  };
+  return clean(report) as T;
+}
+
 /** Kills a process and its children (Windows: taskkill /T; elsewhere: the process group). */
 function killTree(pid: number): void {
   if (process.platform === "win32") spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" });
@@ -258,7 +279,7 @@ export async function verifyRust(res: LoadedResource, m: ParsedManifest, search:
     };
     r.status = statusOf(r.checks);
     r.durationMs = Date.now() - started;
-    return r;
+    return scrubServerPath(r, server);
   } finally {
     if (child?.pid && child.exitCode === null) killTree(child.pid);
     if (backup) writeFileSync(paths.config, backup);

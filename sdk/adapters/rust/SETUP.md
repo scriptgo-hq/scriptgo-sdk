@@ -1,6 +1,7 @@
-These steps are written from the Oxide and Carbon plugin documentation and checked by compiling the
-plugin against both frameworks' assemblies. No Rust server run has passed yet, so treat them as
-untested on a live server.
+These steps were followed on a real Windows dedicated server with Oxide (2026-11-10: the conformance
+probe and the escrow chain both pass there, see README.md, "What has run"). The Carbon and Linux
+variants are written from the frameworks' documentation and compile-checked: treat those as untested
+on a live server.
 
 1. Build the plugin files, optionally with resources:
 
@@ -48,18 +49,19 @@ Only the server side runs: Rust has no client-side plugins. Check what is runnin
 
 ## Encrypted (escrowed) packages
 
-Optional, off by default, and untested on a live server like the rest of this page. Read
+Optional and off by default. Proven on a Windows server with Oxide; untested with Carbon and on
+Linux. Read
 "Escrow" in README.md first: it is deterrence, licence binding, revocation and traceability, not a
 guarantee, and the operator of the machine can ultimately recover what their own server runs.
 
-1. Build with the native escrow library, from a build of `sdk/native` (Windows x64 is the only
-   platform built so far):
+1. Build with the native escrow library, from a build of `sdk/native` (`build.ps1` on Windows,
+   `build-linux.ps1` for Linux x64):
 
    ```bash
    node sdk/adapters/rust/build.mjs --native sdk/native/dist
    ```
 
-   `SCRIPTGO_NATIVE_DIR` works too. Copy `scriptgo.dll` (later `libscriptgo.so`) from
+   `SCRIPTGO_NATIVE_DIR` works too. Copy `scriptgo.dll` (on Linux `libscriptgo.so`) from
    `dist/rust/RustDedicated_Data/Plugins/x86_64/` to the same folder of the server, next to
    `lua54`. Without it the plugin still runs clear packages and refuses an escrowed one with
    `native_missing`.

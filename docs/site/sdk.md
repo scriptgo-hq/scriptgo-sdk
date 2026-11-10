@@ -86,7 +86,8 @@ Two separate facts are shown for every environment:
 - **Adapter state**, read from the repository and from the reports: *Real run passed*, *Adapter
   written, awaiting a real run*, or *Not started* (no adapter code yet).
 - **Status**, `available`, `beta`, `experimental` or `planned`. A written adapter does not change
-  it: Hytale, Rust, BeamMP and FiveM stay `planned` until a real run passes.
+  it: Hytale, BeamMP and FiveM stay `planned` until a real run passes. Rust moved to `experimental`
+  when the probe passed on a real dedicated server.
 
 A real run is `scriptgo verify` in the real runtime, which writes a report to
 `verification/reports/`. Unit tests against a mock, a stub of the natives, a plain JVM or .NET

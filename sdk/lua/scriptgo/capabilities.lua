@@ -384,8 +384,8 @@ M.ENVIRONMENTS = {
         },
     },
     rust = {
-        protection = { tier = "escrow", state = "planned", note = "Code escrow is planned: the decryptor would live in the compiled bridge next to the Oxide/Carbon plugin. Until it exists, licence check and signed releases only." },
-        name = "Rust (Oxide/Carbon)", kind = "mod_platform", status = "planned", dialects = { "5.4" }, sides = { "server" },
+        protection = { tier = "escrow", state = "available", note = "Code escrow: the compiled bridge next to the plugin has the native loader decrypt in memory, with a key released to this server only. It is off until the operator turns it on in the plugin config. Measured on a Windows server with Oxide; Carbon and Linux servers are not measured. The operator of the machine can still inspect their own process; that takes real effort and the copy is traceable." },
+        name = "Rust (Oxide/Carbon)", kind = "mod_platform", status = "experimental", dialects = { "5.4" }, sides = { "server" },
         summary = "An Oxide/Carbon plugin that runs SCRIPT//GO packages on Rust servers through an embedded Lua VM.",
         sales = "allowed", salesNote = "The developer allows selling mods you own.",
         capabilities = {
@@ -405,7 +405,7 @@ M.ENVIRONMENTS = {
             licensing = "Over the plugin's web requests, to the scriptgo_api convar.",
         },
         limitations = {
-            "Not yet run on a real Rust server: the plugin is compile-checked against Oxide and Carbon, and its Lua bridge is only tested in a plain .NET process.",
+            "Measured on a Windows dedicated server with Oxide and no player connected: the conformance probe and the escrow chain. Carbon is compile-checked only; Linux servers and what a connected player triggers (chat commands, permissions of real Steam ids) are not measured.",
             "No client side.",
             "KeraLua's native Lua 5.4 (lua54.dll or liblua54.so) must be installed in RustDedicated_Data/Plugins/x86_64.",
             "HTTP responses carry no headers.",
@@ -415,7 +415,6 @@ M.ENVIRONMENTS = {
             runtime = "Rust dedicated server with Oxide or Carbon; KeraLua (Lua 5.4)",
             summary = "One C# plugin, `ScriptGo.cs`, the same file for Oxide and Carbon. Rust's plugin frameworks no longer run Lua, so the plugin loads a small bridge that runs the core in a KeraLua (Lua 5.4) VM, ticked by a framework timer.",
         },
-        blockedOn = "Waiting for disk space: the Rust dedicated server needs about 6 GB installed.",
     },
     -- BeamMP has an adapter (sdk/adapters/beammp, ADR-0019) but no run on a real server yet:
     -- BeamMP-Server refuses to start without the owner's Keymaster AuthKey, so it stays planned.

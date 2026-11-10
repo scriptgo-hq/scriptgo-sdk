@@ -125,3 +125,7 @@ offered. Build: `dotnet build runner/ScriptGo.Open77.Escrow.Runner.csproj`.
   resources stay stopped until it answers.
 - The native library is built and tested on Windows x64 and Linux x64. On Linux the OPEN//77 escrow tests (73) pass and the end-to-end script reaches 32/32 against a server built there, in a container (`tools/escrow-e2e-linux.ps1 -Loader open77`); no production host, no players.
 - Client-side code is not protected. Keep valuable logic on the server.
+- With players connected, measured with network bots only (OPEN//77's own `Open77.Bots`, real
+  protocol clients, on Windows): three players connected while the encrypted script ran were greeted
+  by it, stayed connected when the server stopped the revoked resource, and the server kept running.
+  No game client was used.

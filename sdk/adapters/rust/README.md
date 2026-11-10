@@ -5,8 +5,9 @@ Resources keep their format: a `scriptgo.lua` manifest, server scripts, events, 
 storage. Rust's plugin frameworks dropped their Lua support long ago, so the plugin embeds its own
 Lua 5.4 VM through [KeraLua](https://github.com/nlua/KeraLua), the binding OPEN//77's server uses.
 
-**Status: planned.** The plugin compiles against Oxide and Carbon, and the bridge passes its tests in a
-plain .NET process, but no run on a real Rust server has passed yet. See "What has run" below.
+**Status: experimental.** On a real Windows dedicated server with Oxide, the conformance probe is
+verified and the escrow chain passes end to end. Carbon is compile-checked only, and no Linux server
+and no connected player have been measured. See "What has run" below.
 
 Encrypted (escrowed) packages are supported through the native library of `sdk/native`, off by
 default: see "Escrow". That part is planned too, and proven only in the bridge's test process.
@@ -320,10 +321,23 @@ limit is 20 minutes. Without a server folder the run is reported as skipped, nev
 
 ## What has run
 
+- **A real Rust dedicated server** (2026-11-10: the public build of 2026-11-07, Oxide 2.0.7900,
+  Windows x64, bound to loopback, no player connected):
+  - `scriptgo verify sdk/conformance/sg_probe --env rust --rust-server <folder>`: verified, 30
+    checks, in about a minute. The report is `verification/reports/sg_probe-0.1.0-rust.json`.
+  - `node tools/escrow-e2e.mjs --environment rust --require-output --loader-stays-up --start-window
+    200 --stop-window 150 --loader "node tools/rust-escrow-loader.mjs --rust-server <folder>"`:
+    32/32. An encrypted release runs when licensed and bound, is refused without a licence, from a
+    second identity, when tampered, after a refund and after a staff revoke, and a running server
+    stops the resource by itself at the end of the offline grace (6.4 s after the refund, grace 9 s).
+  What that settles: under Unity's Mono, `lua54.dll` and `scriptgo.dll` are found by full path, the
+  function-pointer round trip to `luaL_loadbufferx` works, the identity file is created and reused,
+  and Oxide compiles the plugin. What it does not: Carbon, a Linux server (`liblua54.so`,
+  `libscriptgo.so`, `runds.sh`), and anything a connected player triggers.
 - `dotnet run --project sdk/adapters/rust/tests -c Release`: 45 bridge tests in a **plain .NET 10
   process**. The services are fakes; the KeraLua Lua 5.4.8 VM, the portable core, this glue, the
   conformance probe and the official kits are the real ones. On that host, `sg_probe` passes 25/25
-  SGCHECKs. This is not a Rust server and does not count as verification.
+  SGCHECKs. This is not a Rust server and does not count as verification by itself.
 - 25 of the 45 are escrow tests. 17 of those use the real native library (`scriptgo.dll`, Windows
   x64, built from `sdk/native`) and are **skipped, with a message**, when it is not found: set
   `SCRIPTGO_NATIVE_DIR`, or copy the library to `sdk/adapters/rust/native/<rid>/` (gitignored). The
@@ -331,7 +345,8 @@ limit is 20 minutes. Without a server folder the run is reported as skipped, nev
   TypeScript packer (the cross-language vector of `sdk/dotnet`), so the packer, the native library
   and this bridge agree on the format. The other 8 need no native library.
 - `node sdk/adapters/rust/build.mjs --native <build of sdk/native>`: `dist/rust/` with
-  `scriptgo.dll` next to `lua54.dll`. No `libscriptgo.so` exists to ship yet.
+  `scriptgo.dll` next to `lua54.dll`, and `libscriptgo.so` when `sdk/native/build-linux.ps1` has
+  built it.
 - `node sdk/adapters/rust/compile-check.mjs`: the plugin compiles with Roslyn, `-nostdlib`, C# 7.3
   against Rust's `RustDedicated_Data/Managed` (public branch). It compiles once with
   Oxide.Rust 2.0.7900's assemblies on top, and once with Carbon 2.0.264's.
