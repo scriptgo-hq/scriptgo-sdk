@@ -88,3 +88,49 @@ payload and clear-file hashes, stamps the delivery marker, zeroes the content ke
 plaintext through `EscrowResourceFiles` (an `IResourceFiles`) — the host's local-resource path, never
 the guest VM. `EscrowMaterializer` is the Option A hand-off for disk-reading hosts (OPEN//77); see
 `sdk/adapters/open77/escrow/PROPOSAL.md`.
+
+## Rust (Oxide/Carbon) adapter: disk layout, native loader, asynchronous key (ADR-0031)
+
+How `sdk/adapters/rust` loads an escrowed release. The format above is unchanged; this section
+only fixes what that adapter reads and how it behaves. Status: **planned**. It is proven in the
+bridge's test process with the real native library (Windows x64); no Rust server has run it.
+
+**On disk.** A resource folder is escrowed if and only if it holds `escrow.json`. `payload.enc` sits
+next to it, the clear files of the release are at their paths, and each encrypted script has a
+one-line stub at its path:
+
+```text
+-- scriptgo-escrow/1 <package>@<version> sha256=<payload.sha256> path=<relative path>
+```
+
+A stub is never compiled. The resource manifest (`scriptgo.lua`) is one of the signed clear files.
+
+**Checks before the key is asked for**, each with a stable reason code: `escrow.json` shape, format,
+cipher and kdf (`invalid_manifest`); the pinned signer and the ed25519 signature over the canonical
+JSON, through `sg_verify_manifest` (`signature`); `payload.enc` size and SHA-256, the resource
+manifest byte for byte, the stub at each encrypted path, and that every script the manifest runs is
+a file of the release (`tampered`); the deployment token file (`token_missing`). Other clear files
+may differ unless `strictClearFiles` is set.
+
+**Key request.** `POST <master>/v1/licenses/key` with `{ deploymentToken, package, version,
+environment, adapterVersion, serverPublicKey }`, through the host's web requests. These are
+asynchronous, so the resource is `pending_key` until the answer arrives on a later tick. HTTP 200
+with `valid:false` is a definitive refusal (`not_licensed`, `unbound`, `revoked`, `expired`);
+anything else is `unreachable`, and an earlier answer for the same release still inside its
+`offlineGraceUntil` is used instead. With no pinned signer, the answer's `signerPublicKey` must be
+the manifest's.
+
+**Loading.** `sg_bundle_open`, `sg_bundle_set_marker` (the `deliveryWatermark`), then
+`sg_bundle_lua_load` per script with the `luaL_loadbufferx` of the Lua library the VM runs on. The
+adapter does not declare `sg_bundle_read` or `sg_bundle_copy`: no decrypted file enters managed
+memory, so an encrypted file that is not a script is not readable by the resource.
+
+**Renewal.** Before `expiresAt`. After a refusal or without an answer, the resource runs until the
+`offlineGraceUntil` of its last valid answer, then it is stopped with the reason.
+
+**Honest limit, specific to this adapter.** Every resource shares one Lua VM. Another resource in
+that VM cannot obtain the script (text or bytecode) or a function's locals, but it can reach an
+escrowed resource's global functions and tables through the core's host object. Deterrence, licence
+binding, revocation and traceability hold; isolation between resources does not. The operator of
+the machine can ultimately recover what their own process runs. See `sdk/adapters/rust/README.md`,
+"Escrow".

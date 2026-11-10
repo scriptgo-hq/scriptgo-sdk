@@ -8,6 +8,9 @@ Lua 5.4 VM through [KeraLua](https://github.com/nlua/KeraLua), the binding OPEN/
 **Status: planned.** The plugin compiles against Oxide and Carbon, and the bridge passes its tests in a
 plain .NET process, but no run on a real Rust server has passed yet. See "What has run" below.
 
+Encrypted (escrowed) packages are supported through the native library of `sdk/native`, off by
+default: see "Escrow". That part is planned too, and proven only in the bridge's test process.
+
 ## Layout
 
 | Path | What |
@@ -15,9 +18,10 @@ plain .NET process, but no run on a real Rust server has passed yet. See "What h
 | `lua/adapter.lua` | The adapter table of the portable core, built on the host functions `H.*` |
 | `lua/runtime.lua` | Discovery, start, players, commands and the verify report, in Lua |
 | `bridge/` | `ScriptGo.Bridge.dll` (netstandard2.0): one KeraLua state, the host services, the native loader |
+| `bridge/Escrow/` | Escrow: the manifest reader, the P/Invoke layer over `libscriptgo`, the licence state machine |
 | `plugin/ScriptGo.cs` | The Oxide/Carbon plugin: maps the framework onto the bridge's services |
 | `tests/` | Bridge tests in a plain .NET process with fake services: **not the real environment** |
-| `build.mjs` | Builds `dist/rust/` (bridge, KeraLua, lua54, plugin) |
+| `build.mjs` | Builds `dist/rust/` (bridge, KeraLua, lua54, plugin; the escrow library with `--native`) |
 | `compile-check.mjs` | Compiles the plugin against Rust's, Oxide's or Carbon's assemblies, C# 7.3 |
 
 The bridge is thin on purpose. Its service interfaces (`IHostClock`, `IHostStorage`, `IHostPlayers`,
@@ -73,6 +77,226 @@ These are inferences until a real server runs the plugin:
   needs;
 - Mono resolves `DllImport("lua54")` to the module that is already loaded.
 
+The escrow library (`scriptgo.dll`, `libscriptgo.so`) is found the same way, in the same folders or
+at `escrow.nativeLibrary`, and only when an escrowed resource starts. It does not link Lua: it
+compiles a script by calling `luaL_loadbufferx` of the Lua library the VM runs on. The bridge finds
+that library by asking the VM for the address of one of its own C functions and taking the module
+that address is in, so two copies of `lua54` in one process are never mixed (the test process
+loads two).
+
+## Escrow (encrypted packages)
+
+A paid package can ship its scripts encrypted. They stay encrypted on disk. When the resource
+starts, the bridge asks the SCRIPT//GO master for the release's key, the native library
+`libscriptgo` (`sdk/native`) unwraps it, decrypts in its own memory and compiles each script
+straight into the Lua VM. Rust has no client side, so every script of a package can be covered.
+
+**Status: planned, like the rest of this adapter.** Everything below is proven in the bridge's test
+process (a plain .NET process with a fake clock, fake files and a fake key service) with the real
+native library for Windows x64. No Rust server has run it. See "What has run" and "Escrow limits".
+
+### What it is, and what it is not
+
+- **It is** deterrence, licence binding, revocation and traceability. A copied resource folder does
+  not run on a server the licence is not bound to. A revoked licence stops the resource. A release
+  is signed, so a modified one is refused. Each key delivery carries a marker naming the licence
+  and the deployment it went to.
+- **It is not** a guarantee. The operator of the machine can ultimately recover what their own
+  server process runs: the script has to exist, decrypted, in the memory of a process they
+  control. A debugger, a memory dump or a replaced `lua54` library sees it. Nothing here claims
+  otherwise, and there is no obfuscation.
+
+### On disk
+
+A resource is escrowed **if and only if its folder holds `escrow.json`** (format:
+`docs/spec/escrow.md`).
+
+```text
+resources/<name>/scriptgo.lua       the manifest, clear, part of the signed release
+resources/<name>/escrow.json        clear, signed description of the release
+resources/<name>/payload.enc        the encrypted files (AES-256-GCM)
+resources/<name>/server/main.lua    a STUB at the path of each encrypted script: one comment line
+resources/<name>/...                the other files of the release, clear (docs, a config)
+```
+
+A stub names the release and is never executed:
+
+```lua
+-- scriptgo-escrow/1 creator//name@1.4.0 sha256=<sha256 of payload.enc> path=server/main.lua
+```
+
+The stub is what discovery, script globs and file listings see. A script the manifest lists needs
+its stub. An encrypted module that only `require` reaches does not: the bridge answers its stub
+itself. This adapter has no installer for the layout yet: the folder is the unzipped bundle plus
+the stubs.
+
+### Configuration
+
+Off by default. In the plugin config (`oxide/config/ScriptGo.json`, `carbon/configs/ScriptGo.json`):
+
+```json
+"escrow": {
+  "enabled": true,
+  "master": "https://api.example.com",
+  "environment": "rust",
+  "identityFile": "escrow/identity.key",
+  "tokensDirectory": "escrow/tokens",
+  "trustedSigners": [],
+  "strictClearFiles": false,
+  "nativeLibrary": null
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `enabled` | Off by default. While off, an escrowed folder is refused with one log line (`escrow_disabled`), nothing native is loaded and every other resource runs as before |
+| `master` | Base URL of the key service. The bridge posts to `<master>/v1/licenses/key`. It must be `https`; `http` is accepted for a loopback address only, because the deployment token travels in the request. Its host is always allowed, whatever `httpAllowedHosts` says |
+| `environment` | The licence environment asked for. Default `rust` |
+| `identityFile` | Where the native library keeps this server's X25519 key pair. Licences are bound to its public half. Relative paths are under `<data>/ScriptGo/` |
+| `tokensDirectory` | A folder with one `<resource>.token` file per escrowed resource. Relative paths are under `<data>/ScriptGo/` |
+| `trustedSigners` | ed25519 public keys (base64url) allowed to sign a release. Empty: the signer the key service names for the licence |
+| `strictClearFiles` | Refuse a start when any clear file differs from the signed release. Default `false`: see "Clear files" |
+| `nativeLibrary` | Full path of `scriptgo.dll` / `libscriptgo.so`. Default: the folders `lua54` is searched in |
+| `renewRetrySeconds` | Seconds between two attempts while the key service refuses or cannot be reached. Default 60, at least 5 |
+
+**No secret goes in the config or in a resource folder.**
+
+- The **deployment token** of each escrowed resource is a file: `<tokensDirectory>/<resource>.token`,
+  one line. With the defaults that is `oxide/data/ScriptGo/escrow/tokens/<resource>.token`. Keep the
+  folder readable by the server's account only. The token is read into the server's memory and sent
+  to the key service in the request body.
+- The **identity** is created on the first escrowed start, in `identityFile`. The private key never
+  leaves the native library. On Windows the file is sealed with DPAPI for the account the server
+  runs as; elsewhere it is a `0600` file. Back it up with the server: a server that loses it, or
+  moves to another account or machine without it, has to be bound again (`unbound`).
+- The content key and the decrypted scripts exist only inside the native library and the Lua VM.
+  The bridge's managed code sees the encrypted payload, the wrapped key (useless without the
+  private key) and the token.
+
+### How a start goes
+
+Oxide and Carbon web requests are asynchronous: the answer comes on a later tick. So an escrowed
+resource does not start inside the call that starts it.
+
+1. The folder is checked against the signed release, before any request: `escrow.json`, its
+   signature, `payload.enc` (size and SHA-256), the manifest, the stubs, and that every script the
+   manifest would run belongs to the release.
+2. The key is asked for. The resource is now **`pending_key`**: `scriptgo status` shows it, the
+   other resources start normally, and a resource that depends on it waits with it.
+3. The answer arrives, at most `httpTimeoutSeconds` later. Granted: the native library opens the
+   release, the folder is checked once more, and the resource starts. Refused or no answer: the
+   resource is `failed` with a reason code, and its dependents fail with it.
+
+An answer is kept in memory for the run of the server. `scriptgo restart <res>` inside its lifetime
+asks nothing new. After a server restart there is no earlier answer: if the key service cannot be
+reached then, escrowed resources do not start until an operator starts them again.
+
+### While it runs
+
+The licence is renewed before the answer expires (a fifth of its lifetime ahead, at most two
+minutes).
+
+- **The key service says no** (revoked, refunded, expired): the resource keeps running until the
+  `offlineGraceUntil` of its last valid answer, then it is stopped. The log says so when the
+  refusal is first seen, with the time it will stop, and again when it stops.
+- **The key service cannot be reached**: the same grace applies. If it answers again in time,
+  nothing happens.
+- The bridge asks again every `renewRetrySeconds` (60) in between. A stopped resource does not come
+  back on its own: `scriptgo start <res>` asks the key service again.
+
+### Refusals
+
+A refused resource is `failed`. One error line is logged, starting with the reason code, and
+`scriptgo status` shows the same text: `paid 1.2.0  failed  [escrow tampered: payload.enc does not
+match the signed release]`.
+
+| Reason | Meaning |
+|---|---|
+| `escrow_disabled` | The folder is escrowed and `escrow.enabled` is false, or `escrow.master` is not a usable `https` URL |
+| `native_missing` | `scriptgo.dll` / `libscriptgo.so` is not installed, is not ABI version 1, cannot find `luaL_loadbufferx` in the VM's Lua library, or the CPU has no hardware AES |
+| `invalid_manifest` | `escrow.json` is malformed, of another format, or names no clear resource manifest |
+| `signature` | The signature does not verify, or the signer is not a trusted one |
+| `tampered` | The payload, the manifest, a stub or the script list does not match the signed release |
+| `token_missing` | There is no usable `<resource>.token` file |
+| `not_licensed` | The key service does not know this token for this package, the licence does not cover `rust` or this many servers, or the release is not escrowed there |
+| `unbound` | The licence is bound to another server's identity, the key was released to another identity, or this server's identity file cannot be opened |
+| `revoked` | The licence was revoked, refunded or deactivated |
+| `expired` | The licence has expired |
+| `unreachable` | The key service did not answer (no answer, an HTTP status other than 200, an unreadable body) and no earlier answer is still inside its offline grace |
+
+### Clear files
+
+A creator leaves files clear so that operators can edit them: a config, a locale table. An edited
+or missing clear file is **allowed** by default and logged once per start; `strictClearFiles: true`
+refuses the start instead. Three things are always enforced, because they decide what runs beside
+the encrypted scripts: the resource manifest is byte for byte the signed one, every script it runs
+is part of the release (a file added to the folder is refused, also behind a glob), and what sits
+at the path of an encrypted file is its stub.
+
+A clear file that the manifest runs as a script (`shared_script "config.lua"`) is code the operator
+can replace, and it runs in the resource's own environment, next to the encrypted scripts. That is
+the creator's choice when they leave a script clear.
+
+### What shares the VM
+
+The bridge runs every resource in **one** KeraLua state. An escrowed resource is not given a VM of
+its own: exports, events, dependencies and commands all live in one core host object in that
+state, and the core has no notion of a resource in another VM. The planned .NET kit gives each
+resource its own VM (DECISIONS.md, ADR-0015); this bridge does not (ADR-0031).
+
+So here is what another resource in the same VM, written by the operator or by anybody else, can
+and cannot do to an escrowed one. `escrow.shared_vm_isolation` in the tests shows each line.
+
+It **can**:
+- call its exports, trigger and hear events: that is its public interface;
+- reach its **global** functions and tables, call them and replace them. The core's environments
+  keep honest resources apart, but they are not a security boundary: a promise, for instance,
+  carries the core's host object, and the host object leads to every resource's environment;
+- stop it, reach the host services through that same object (storage, HTTP), and use up the VM's
+  memory and time.
+
+It **cannot**, by any way we know:
+- read the script: the text is never a Lua value. It goes from the native library's memory into
+  the compiler;
+- turn a function into bytecode: `string.dump` is removed for the whole VM while escrow is on, and
+  `load`, `debug`, `io` and `package` are not available to resources;
+- read a function's `local`s or upvalues: that needs `debug`. What a script keeps in locals, and
+  does not return, stays out of reach of other resources;
+- load an encrypted file of the release into its own environment: `require("@paid/...")` answers
+  `module_load_failed`;
+- replace the string methods other resources call: with escrow on, `("x"):upper()` resolves in a
+  private copy and `getmetatable("")` answers `false`.
+
+Those two changes (`string.dump`, the string metatable) apply to every resource of a server that
+turns escrow on. The conformance probe and the kits pass with them (`escrow.enabled_keeps_conformance`).
+
+None of this is about the operator. The operator is not limited to writing resources.
+
+### Escrow limits
+
+- **Not run on a Rust server.** The bridge tests run on CoreCLR. Under Unity's Mono these are
+  inferences: `DllImport("scriptgo")` resolves to the library loaded by full path; a `SafeHandle`
+  passes as an argument; `Marshal.GetFunctionPointerForDelegate` gives back the native address of
+  a Lua C function (used to find the Lua library the VM runs on; if it does not, the bridge falls
+  back to the `lua54` it loaded by path, or refuses with `native_missing`).
+- **Windows x64 only so far.** `libscriptgo.so` has never been built (`sdk/native/README.md`), so
+  nothing here has run on Linux, where most Rust servers are. `sg_identity_*` on POSIX, the
+  library's SONAME and `dladdr` are untested.
+- The identity is sealed for the account the server runs as. Running the server under another
+  account, or as a service after a first start from a console session, gives `unbound` until the
+  licence is bound again.
+- Timing uses the server's clock against the absolute times the key service sends. Keep the clock
+  synchronised. An answer that is still valid never stops a resource, whatever the clocks say.
+- Revocation needs the real key service. An operator who points `escrow.master` at a service that
+  replays an old answer keeps a resource running. That is part of the ceiling above.
+- A Lua error in an encrypted script reports what Lua reports: the file's path, a line number and
+  the message, and for a syntax error the token it stopped near. The source is never logged.
+- Only scripts are loaded from the payload. An encrypted file that is not Lua (a data file) cannot
+  be read by the resource: `ScriptGo.resource.readFile` gives its stub or nothing.
+- The key service's answer comes through the framework's web request, as the token goes out:
+  whatever can read the server's HTTP traffic in process sees both. Neither is the content key.
+- The native library stays loaded until the server restarts, like `lua54`.
+
 ## Verify
 
 ```bash
@@ -94,10 +318,18 @@ limit is 20 minutes. Without a server folder the run is reported as skipped, nev
 
 ## What has run
 
-- `dotnet run --project sdk/adapters/rust/tests -c Release`: 20 bridge tests in a **plain .NET 10
+- `dotnet run --project sdk/adapters/rust/tests -c Release`: 45 bridge tests in a **plain .NET 10
   process**. The services are fakes; the KeraLua Lua 5.4.8 VM, the portable core, this glue, the
   conformance probe and the official kits are the real ones. On that host, `sg_probe` passes 25/25
   SGCHECKs. This is not a Rust server and does not count as verification.
+- 25 of the 45 are escrow tests. 17 of those use the real native library (`scriptgo.dll`, Windows
+  x64, built from `sdk/native`) and are **skipped, with a message**, when it is not found: set
+  `SCRIPTGO_NATIVE_DIR`, or copy the library to `sdk/adapters/rust/native/<rid>/` (gitignored). The
+  key service, the clock and the files are fakes there too. One of them runs a bundle packed by the
+  TypeScript packer (the cross-language vector of `sdk/dotnet`), so the packer, the native library
+  and this bridge agree on the format. The other 8 need no native library.
+- `node sdk/adapters/rust/build.mjs --native <build of sdk/native>`: `dist/rust/` with
+  `scriptgo.dll` next to `lua54.dll`. No `libscriptgo.so` exists to ship yet.
 - `node sdk/adapters/rust/compile-check.mjs`: the plugin compiles with Roslyn, `-nostdlib`, C# 7.3
   against Rust's `RustDedicated_Data/Managed` (public branch). It compiles once with
   Oxide.Rust 2.0.7900's assemblies on top, and once with Carbon 2.0.264's.
@@ -113,3 +345,4 @@ limit is 20 minutes. Without a server folder the run is reported as skipped, nev
   hosts give a new id each time.
 - Replacing `ScriptGo.Bridge.dll` or `KeraLua.dll` needs a server restart; reloading the plugin does
   not unload them.
+- Escrow has its own list: "Escrow limits".
