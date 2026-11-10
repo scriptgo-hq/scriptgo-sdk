@@ -23,6 +23,14 @@ public sealed class EscrowOpenOptions
     /// <summary>The offline grace to assume after the lease when the key service gives no
     /// <c>offlineGraceUntil</c>. Default none: grace is the license server's decision, not the host's.</summary>
     public TimeSpan DefaultOfflineGrace { get; init; } = TimeSpan.Zero;
+
+    /// <summary>
+    /// Which clear files may differ from the signed release. Null (the default): none, any edit is
+    /// refused. A host that lets operators edit the files a creator left clear (a config) returns
+    /// true for those paths; it should still return false for whatever decides what code runs (the
+    /// resource manifest). Called with the resource-relative path of each missing or modified file.
+    /// </summary>
+    public Func<string, bool>? AllowEditedClearFile { get; init; }
 }
 
 public static class EscrowSession
@@ -50,41 +58,123 @@ public static class EscrowSession
         EscrowOpenOptions? options = null,
         CancellationToken cancellation = default)
     {
-        ArgumentNullException.ThrowIfNull(identity);
-        ArgumentNullException.ThrowIfNull(keyService);
-        options ??= new EscrowOpenOptions();
-
         EscrowBundle parsed;
         try { parsed = EscrowBundle.Read(bundle); }
         catch (InvalidDataException e) { throw new EscrowException(EscrowFailure.InvalidBundle, "invalid_bundle:" + e.Message, e); }
+        return await OpenAsync(parsed, identity, keyService, trustedSignerPublicKey, options, cancellation).ConfigureAwait(false);
+    }
 
-        var (ok, reason) = parsed.Verify(trustedSignerPublicKey, identity.Backend);
-        if (!ok) throw new EscrowException(EscrowFailure.Signature, "signature:" + reason);
-
-        var tampered = parsed.FirstTamperedClearFile();
-        if (tampered is not null)
-            throw new EscrowException(EscrowFailure.DecryptFailed, $"decrypt_failed:clear file {EscrowPaths.Printable(tampered)} is missing or tampered.");
+    /// <summary>
+    /// Opens a release already parsed by <see cref="EscrowBundle.Read"/> or
+    /// <see cref="EscrowBundle.ReadFolder"/> (a release installed, still encrypted, as a folder).
+    /// The same order as the other overloads: signature, clear files, then the key request.
+    /// A host with a main loop that must not wait on the network uses <see cref="Open"/> instead.
+    /// </summary>
+    /// <exception cref="EscrowException">As the other overloads; also <c>refused:release_mismatch</c>
+    /// when the key service names another release than the one opened, and <c>signature:</c> when,
+    /// with no signer pinned, the manifest's signer is not the one the key service names.</exception>
+    public static async Task<EscrowContent> OpenAsync(
+        EscrowBundle bundle,
+        EscrowIdentity identity,
+        IEscrowKeyService keyService,
+        string? trustedSignerPublicKey,
+        EscrowOpenOptions? options = null,
+        CancellationToken cancellation = default)
+    {
+        ArgumentNullException.ThrowIfNull(bundle);
+        ArgumentNullException.ThrowIfNull(identity);
+        ArgumentNullException.ThrowIfNull(keyService);
+        options ??= new EscrowOpenOptions();
+        Precheck(bundle, identity, trustedSignerPublicKey, options);
 
         EscrowKeyResult grant;
-        try { grant = await keyService.RequestKeyAsync(parsed.Manifest, identity, cancellation).ConfigureAwait(false); }
+        try { grant = await keyService.RequestKeyAsync(bundle.Manifest, identity, cancellation).ConfigureAwait(false); }
         catch (HttpRequestException e) { throw new EscrowException(EscrowFailure.KeyServiceUnreachable, "key_service_unreachable:" + e.Message, e); }
         catch (TaskCanceledException e) when (!cancellation.IsCancellationRequested) { throw new EscrowException(EscrowFailure.KeyServiceUnreachable, "key_service_unreachable:" + e.Message, e); }
+        return Finish(bundle, identity, grant, keyService, trustedSignerPublicKey, options);
+    }
+
+    /// <summary>
+    /// Opens a release with a key answer the host already holds, without any request: for a host
+    /// with a main loop that must not wait on the network. Ask for the key in the background
+    /// (<see cref="IEscrowKeyService.RequestKeyAsync"/>), keep the valid answer (in memory only; see
+    /// <see cref="EscrowKeyCache"/>), then call this on the thread that owns the Lua state. The same
+    /// checks as <see cref="OpenAsync(EscrowBundle, EscrowIdentity, IEscrowKeyService, string?, EscrowOpenOptions?, CancellationToken)"/>
+    /// run here, in the same order. <paramref name="keyService"/> is used for renewals only.
+    /// <para>An answer past its <c>expiresAt</c> but inside its <c>offlineGraceUntil</c> opens too:
+    /// that is a start during an outage, on the grace of the last valid answer; the content then
+    /// reports <see cref="EscrowLeaseState.Grace"/> and renewal keeps asking. An answer past its
+    /// grace is refused with <c>revoked:</c>.</para>
+    /// </summary>
+    public static EscrowContent Open(
+        EscrowBundle bundle,
+        EscrowIdentity identity,
+        EscrowKeyResult answer,
+        IEscrowKeyService keyService,
+        string? trustedSignerPublicKey,
+        EscrowOpenOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(bundle);
+        ArgumentNullException.ThrowIfNull(identity);
+        ArgumentNullException.ThrowIfNull(answer);
+        ArgumentNullException.ThrowIfNull(keyService);
+        options ??= new EscrowOpenOptions();
+        Precheck(bundle, identity, trustedSignerPublicKey, options);
+        if (answer.Valid && answer.OfflineGraceUntil is { } grace && answer.ExpiresAt is { } expires &&
+            options.TimeProvider.GetUtcNow() >= (grace > expires ? grace : expires))
+            throw new EscrowException(EscrowFailure.Revoked, "revoked:offline_grace_exhausted:the key answer is past its offline grace");
+        return Finish(bundle, identity, answer, keyService, trustedSignerPublicKey, options);
+    }
+
+    /// <summary>Everything checked before a key is asked for or used: the signature, then the clear
+    /// files. A bundle that fails here never causes a key request.</summary>
+    private static void Precheck(EscrowBundle bundle, EscrowIdentity identity, string? trustedSignerPublicKey, EscrowOpenOptions options)
+    {
+        var (ok, reason) = bundle.Verify(trustedSignerPublicKey, identity.Backend);
+        if (!ok) throw new EscrowException(EscrowFailure.Signature, "signature:" + reason);
+
+        foreach (var edited in bundle.EditedClearFiles())
+        {
+            if (options.AllowEditedClearFile?.Invoke(edited) == true) continue;
+            throw new EscrowException(EscrowFailure.DecryptFailed, $"decrypt_failed:clear file {EscrowPaths.Printable(edited)} is missing or tampered.");
+        }
+    }
+
+    private static EscrowContent Finish(EscrowBundle bundle, EscrowIdentity identity, EscrowKeyResult grant,
+        IEscrowKeyService keyService, string? trustedSignerPublicKey, EscrowOpenOptions options)
+    {
         if (!grant.Valid || grant.WrappedKey is null)
         {
             throw grant.TransportError
                 ? new EscrowException(EscrowFailure.KeyServiceUnreachable, "key_service_unreachable:" + (grant.Reason ?? "no_answer"))
                 : new EscrowException(EscrowFailure.Refused, "refused:" + (grant.Reason ?? "no_key"));
         }
+        if (CheckGrant(grant, bundle.Manifest, trustedSignerPublicKey) is { } mismatch) throw mismatch;
 
         IContentStore store = identity.Backend == EscrowBackend.Native
-            ? NativeContentStore.Open(identity, parsed, grant.WrappedKey)
-            : OpenManaged(identity, parsed, grant.WrappedKey);
-        try { return new EscrowContent(parsed, store, identity, keyService, grant, options); }
+            ? NativeContentStore.Open(identity, bundle, grant.WrappedKey)
+            : OpenManaged(identity, bundle, grant.WrappedKey);
+        try { return new EscrowContent(bundle, store, identity, keyService, grant, options, trustedSignerPublicKey); }
         catch
         {
             store.Dispose();
             throw;
         }
+    }
+
+    /// <summary>What a valid answer must still satisfy before its key is used: it is for the release
+    /// that was asked for, and, when the host pinned no signer, the release is signed by the key the
+    /// service names for this licence. An answer that carries neither field passes (a key service
+    /// that does not name them, a test double): the unwrap then decides, since a key is wrapped with
+    /// the release identity as associated data.</summary>
+    internal static EscrowException? CheckGrant(EscrowKeyResult grant, EscrowManifest manifest, string? trustedSignerPublicKey)
+    {
+        if (grant.Aad is not null && !string.Equals(grant.Aad, manifest.Aad, StringComparison.Ordinal))
+            return new EscrowException(EscrowFailure.Refused, "refused:release_mismatch");
+        if (trustedSignerPublicKey is null && grant.SignerPublicKey is not null &&
+            !string.Equals(grant.SignerPublicKey, manifest.SignerPublicKey, StringComparison.Ordinal))
+            return new EscrowException(EscrowFailure.Signature, "signature:the release signer is not the one the key service names for this licence");
+        return null;
     }
 
     /// <inheritdoc cref="OpenAsync(ReadOnlyMemory{byte}, EscrowIdentity, IEscrowKeyService, string?, EscrowOpenOptions?, CancellationToken)"/>

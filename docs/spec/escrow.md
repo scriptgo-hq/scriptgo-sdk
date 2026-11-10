@@ -62,8 +62,9 @@ Request: one of `licenseKey`/`deploymentToken`, `package`, `version?`, `environm
 `adapterVersion?`, `serverPublicKey?`. Gated on the verify checks plus binding (the deployment must
 carry a server public key; registered on first use, anti-swap after) and that the release is
 escrowed. Success → `{ valid:true, wrappedKey, aad, signerPublicKey, deliveryWatermark,
-offlineGraceUntil, expiresAt }`. Definitive refusal → `{ valid:false, reason }` (reasons: the verify
-reasons plus `unbound`, `not_escrowed`). A 4xx/5xx means the API could not answer and the loader
+offlineGraceUntil, expiresAt }`. Definitive refusal → `{ valid:false, reason, final }` (reasons: the verify
+reasons plus `unbound`, `not_escrowed`; `final` is true for `revoked`, `refunded`, `expired` and
+`deactivated`, see "The lease"). A 4xx/5xx means the API could not answer and the loader
 applies offline grace. Rate-limited by hashed key, audited; the content key is never cached at rest.
 
 ## Binding and revocation
@@ -175,9 +176,16 @@ last instant the resource may run without a fresh valid answer.
 - A loader asks again before `expiresAt` (the .NET loader: a third of the lease ahead, between 1
   second and 5 minutes; never more often than once a second).
 - **Granted:** the lease is replaced by the new answer.
-- **Definitive refusal** (`{ valid:false, reason }`) or **no answer** (network error, 4xx/5xx): the
-  lease is not extended, the resource keeps running, and the loader keeps asking. A later grant
-  restores the lease.
+- **Final refusal** (`{ valid:false, reason, final:true }`: the licence is revoked, refunded or
+  expired, or the deployment was deactivated): the right to run is over. A loader that reads the
+  field tells the host to stop the resource **at once** and wipes the decrypted files; the reason
+  is `refused:<reason>`. Offline grace is for outages, not for a "no". `ScriptGo.Escrow` (and so
+  the OPEN//77 adapter) does this. The reference CLI loader, the Rust bridge and the Lua host's
+  licence guard were written before the field existed: they treat it as any refusal and stop at
+  the end of grace.
+- **Other refusal** (`final:false`: a binding, a limit, an environment, a release under review) or
+  **no answer** (network error, 4xx/5xx): the lease is not extended, the resource keeps running,
+  and the loader keeps asking. A later grant restores the lease.
 - **At `offlineGraceUntil` without a grant:** the loader tells the host to stop the resource, then
   wipes the decrypted files. The reason is `refused:<reason>` after a refusal and
   `offline_grace_exhausted:...` after an outage. No file is served afterwards.
@@ -301,6 +309,12 @@ honest migration: audited, at most three per deployment per 24 hours (429 `reset
   stopped at the end of grace, 4 master unreachable at start.
 - **OPEN//77 install** (`scriptgo escrow install --target open77`): writes the bundle's signed clear
   files, `escrow.json`, `payload.enc` and one-line stubs; decrypts nothing and generates nothing.
+- **A folder installed that way, in .NET** (`ScriptGo.Escrow` 0.2.0): `EscrowBundle.ReadFolder`
+  validates the manifest strictly (shape, safe paths, no file listed twice, and that the canonical
+  JSON is reproducible exactly) and checks `payload.enc` against the signed size and hash before a
+  key is asked for; `EscrowSession.Open` opens with a key answer the host already holds, so a host
+  with a main loop asks in the background and never waits. The OPEN//77 server feature is an
+  adapter over exactly these calls (ADR-0035).
 
 ### Traceability
 

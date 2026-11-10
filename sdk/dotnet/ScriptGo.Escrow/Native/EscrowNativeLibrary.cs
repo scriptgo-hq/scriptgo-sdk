@@ -17,9 +17,27 @@ using ScriptGo.Escrow.Native;
 
 namespace ScriptGo.Escrow;
 
+/// <summary>Why the native backend can or cannot be used, as a value a host can branch on.</summary>
+public enum EscrowNativeStatus
+{
+    /// <summary>Loaded, of the expected ABI, and able to run on this CPU.</summary>
+    Available,
+    /// <summary>The library file was not found, or is not a library for this platform.</summary>
+    Missing,
+    /// <summary>A library was found but it is of another ABI than this package needs.</summary>
+    WrongAbi,
+    /// <summary>The library loaded but cannot work on this machine (no hardware AES, for instance).</summary>
+    Unsupported,
+}
+
 /// <summary>State of the native escrow library (libscriptgo) in this process.</summary>
 public static class EscrowNativeLibrary
 {
+    private static EscrowNativeStatus _status = EscrowNativeStatus.Available;
+
+    /// <summary>The same answer as <see cref="IsAvailable"/>, with the kind of obstacle when there is one.</summary>
+    public static EscrowNativeStatus Status { get { Probe(); return _status; } }
+
     private static readonly object Gate = new();
     private static string? _explicitPath;
     private static string? _loadedFrom;
@@ -92,16 +110,18 @@ public static class EscrowNativeLibrary
                 if (abi != EscrowNative.ExpectedAbi)
                 {
                     _error = $"{FileName} has ABI {abi}, this package needs ABI {EscrowNative.ExpectedAbi}. Use the library that ships with this version of ScriptGo.Escrow.";
+                    _status = EscrowNativeStatus.WrongAbi;
                 }
                 else
                 {
                     var init = EscrowNative.sg_init();
-                    if (init != EscrowNative.Ok) _error = EscrowNative.ErrorText(init);
+                    if (init != EscrowNative.Ok) { _error = EscrowNative.ErrorText(init); _status = EscrowNativeStatus.Unsupported; }
                     else _version = Marshal.PtrToStringUTF8(EscrowNative.sg_version_string());
                 }
             }
             catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
             {
+                _status = EscrowNativeStatus.Missing;
                 _error = $"{FileName} was not found for {RuntimeIdentifier} ({e.GetType().Name}). "
                     + $"It ships in the ScriptGo.Escrow package under runtimes/{RuntimeIdentifier}/native/, or is built from sdk/native "
                     + "(build.ps1 on Windows). To run without it, opt in to EscrowBackend.Managed, which decrypts in managed memory and is weaker against memory inspection.";

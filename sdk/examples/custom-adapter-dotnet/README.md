@@ -68,7 +68,7 @@ Inside this repository the project references `ScriptGo.Escrow` by path. In your
 
 1. Build the packages: `pwsh -ExecutionPolicy Bypass -File sdk/native/build.ps1`, then
    `pwsh -ExecutionPolicy Bypass -File sdk/dotnet/pack.ps1`. They land in `sdk/dotnet/artifacts/`.
-2. Put `ScriptGo.Escrow.0.1.0.nupkg` on a feed your build reads (a folder is enough):
+2. Put `ScriptGo.Escrow.0.2.0.nupkg` on a feed your build reads (a folder is enough):
 
    ```xml
    <!-- nuget.config -->
@@ -79,7 +79,7 @@ Inside this repository the project references `ScriptGo.Escrow` by path. In your
    </configuration>
    ```
 
-3. Reference it: `<PackageReference Include="ScriptGo.Escrow" Version="0.1.0" />`.
+3. Reference it: `<PackageReference Include="ScriptGo.Escrow" Version="0.2.0" />`.
 
 The native library comes with the package (`runtimes/win-x64/native/scriptgo.dll`) and is copied to
 your output by the build. Nothing else to install. This was checked with a project outside this

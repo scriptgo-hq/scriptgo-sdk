@@ -207,6 +207,13 @@ export type KeyReleaseBody = z.infer<typeof KeyReleaseBody>;
 export const KeyReleaseResult = z.object({
   valid: z.boolean(),
   reason: KeyReleaseFailureReason.nullable(),
+  /**
+   * True on a refusal that ends the right to run for good (revoked, refunded, expired,
+   * deactivated): a loader stops the running resource at once instead of running on to the end of
+   * its offline grace. False on a grant and on a refusal an operator can fix (a binding, a limit,
+   * an environment), which keeps the grace. Offline grace is for outages, not for a "no".
+   */
+  final: z.boolean(),
   /** The content key wrapped to the bound server; null on refusal. Short-lived, never cached at rest. */
   wrappedKey: WrappedKey.nullable(),
   /** Release identity the ciphertext and the wrapped key are bound to (`${package}@${version}`). */

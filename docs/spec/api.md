@@ -375,8 +375,11 @@ POST /v1/licenses/verify     { licenseKey | deploymentToken, package, environmen
                                      activationStatus: ActivationStatus | null, expiresAt, offlineGraceUntil,
                                      environments: string[], token: string }   // ed25519-signed, short-lived
 POST /v1/licenses/key        { licenseKey | deploymentToken, package, version?, environment, adapterVersion, serverPublicKey? }
-                             → 200 { valid, reason: KeyReleaseFailureReason | null, wrappedKey: {epk,nonce,wrapped} | null,
+                             → 200 { valid, reason: KeyReleaseFailureReason | null, final: boolean,
+                                     wrappedKey: {epk,nonce,wrapped} | null,
                                      aad, signerPublicKey, deliveryWatermark, offlineGraceUntil, expiresAt }
+                               // final: true on revoked | refunded | expired | deactivated (the right to run is
+                               // over: a loader stops at once); false otherwise (the offline grace applies).
                                // escrow: content key wrapped to the bound server. Gated like verify, plus binding +
                                // escrowed release. Reasons add unbound, server_key_mismatch, not_escrowed.
                                // Cache-Control: no-store. 4xx/5xx → loader offline grace. 300/min per IP and
