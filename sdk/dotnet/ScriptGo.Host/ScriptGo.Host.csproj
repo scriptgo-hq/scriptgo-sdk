@@ -5,7 +5,7 @@
     <PackageId>ScriptGo.Host</PackageId>
     <PackageTags>scriptgo;lua;javascript;typescript;sandbox;game-server;modding</PackageTags>
     <!-- Placeholder until the owner states the SDK licence; see LEGAL_DEPENDENCIES.md. -->
-    <PackageLicenseExpression>LicenseRef-ScriptGo</PackageLicenseExpression>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <IsPackable>true</IsPackable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

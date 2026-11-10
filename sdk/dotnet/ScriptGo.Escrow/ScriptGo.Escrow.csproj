@@ -5,7 +5,7 @@
     <Description>SCRIPT//GO escrow for any .NET host: verify a signed, encrypted script release, get its key released to this server only, decrypt it in native memory (libscriptgo) and load Lua chunks into your own VM without the plaintext entering the managed heap. Deterrence, traceability and revocation; not a guarantee against the operator of the host. No dependency on the SCRIPT//GO sandbox.</Description>
     <PackageTags>scriptgo;escrow;lua;licensing;game-server;modding</PackageTags>
     <!-- Placeholder until the owner states the SDK licence; see LEGAL_DEPENDENCIES.md. -->
-    <PackageLicenseExpression>LicenseRef-ScriptGo</PackageLicenseExpression>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591;CS1573;NU5124</NoWarn>

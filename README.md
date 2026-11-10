@@ -75,7 +75,7 @@ recover what their own process runs; SCRIPT//GO never claims otherwise.
 
 ## Licence
 
-All rights reserved for now: the SDK's licence is being decided, and this repository is private
-until then.
+[MIT](LICENSE). Third-party components keep their own licences: libsodium and miniz in
+[`sdk/native/THIRD-PARTY-NOTICES.txt`](sdk/native/THIRD-PARTY-NOTICES.txt).
 
 Game, engine and provider names are trademarks of their owners; no endorsement is implied.
