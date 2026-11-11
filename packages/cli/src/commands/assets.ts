@@ -1,7 +1,10 @@
 // scriptgo assets fingerprint <release.zip|folder> [--trusted-signer <key>]
 // scriptgo assets seal <folder|preload.zip> --package <creator//name> --version <v> --release <id>
 //                      --deployment <id> --out <file.sgae> [--chunk-bytes <n>]
-// scriptgo assets open <file.sgae> --key <file.sgae.key.json> [--out <folder>] [--trusted-signer <key>]
+// scriptgo assets open <file.sgae|preload.zip> --key <file.sgae.key.json> [--out <folder>] [--trusted-signer <key>]
+//
+// `open` also takes an escrowed OPEN//77 preload (the .zip of a deployment's copy, holding one
+// `archive/pc/mod/<stem>.sgae`): it reads the container inside it.
 //
 // fingerprint  reads the per-buyer fingerprints of a downloaded release (docs/spec/assets.md,
 //              "Per-buyer builds"): the release's own, and the one inside each container. It never
@@ -18,6 +21,7 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import {
   AssetContainerReader,
   assetKeyId,
+  escrowedPreloadContainer,
   findFingerprints,
   readAssetContainer,
   readZip,
@@ -33,7 +37,7 @@ export const summary = "Assets: read a copy's per-buyer fingerprint; seal or ope
 const USAGE = [
   "scriptgo assets fingerprint <release.zip|folder> [--trusted-signer <key>]",
   "scriptgo assets seal <folder|preload.zip> --package <creator//name> --version <v> --release <id> --deployment <id> --out <file.sgae> [--chunk-bytes <n>]",
-  "scriptgo assets open <file.sgae> --key <file.sgae.key.json> [--out <folder>] [--trusted-signer <key>]",
+  "scriptgo assets open <file.sgae|preload.zip> --key <file.sgae.key.json> [--out <folder>] [--trusted-signer <key>]",
 ].join("\n");
 
 /** Every file under a folder, relative with `/` (dot folders included: they are part of a copy). */
@@ -124,7 +128,14 @@ function open(file: string, a: ReturnType<typeof parseArgs>): number {
     return 2;
   }
   const key = Buffer.from((JSON.parse(readFileSync(resolve(a.flags.key), "utf8")) as { contentKey: string }).contentKey, "base64");
-  const reader = new AssetContainerReader(readFileSync(file), key, a.flags["trusted-signer"] ? { trustedSigner: a.flags["trusted-signer"] } : {});
+  const bytes = readFileSync(file);
+  // An escrowed OPEN//77 preload is a zip ("PK") holding one container.
+  const container = bytes.subarray(0, 2).toString("latin1") === "PK" ? escrowedPreloadContainer(bytes)?.container : bytes;
+  if (!container) {
+    console.error(`${file}: a zip that is not an escrowed preload (exactly one .sgae entry)`);
+    return 1;
+  }
+  const reader = new AssetContainerReader(container, key, a.flags["trusted-signer"] ? { trustedSigner: a.flags["trusted-signer"] } : {});
   key.fill(0);
   try {
     const h = reader.header;

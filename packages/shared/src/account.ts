@@ -198,6 +198,13 @@ export const KeyReleaseBody = z
     /** Optional: the server's current X25519 public key. When the deployment registered one, it must
      * match (anti-swap); when it registered none, this one is bound on first use. */
     serverPublicKey: PublicKeyB64Url.nullable().default(null),
+    /**
+     * `code` (default): the content key of a protected release's server code (escrow.md).
+     * `assets`: the content key of this deployment's copy of a release whose OPEN//77 preloads are
+     * escrowed (assets.md, "Asset escrow"), wrapped to the bound server with the server aad; the
+     * server re-wraps it to each player's session. Needs a deployment token.
+     */
+    kind: z.enum(["code", "assets"]).default("code"),
   })
   .refine((b) => Boolean(b.licenseKey) !== Boolean(b.deploymentToken), {
     message: "Send exactly one of licenseKey or deploymentToken.",
@@ -226,6 +233,13 @@ export const KeyReleaseResult = z.object({
   offlineGraceUntil: Timestamp.nullable(),
   /** When this wrapped key stops being accepted; the loader re-fetches before it. */
   expiresAt: Timestamp.nullable(),
+  /**
+   * `kind: "assets"` only (absent for code): the id of the content key (`keyId` of every container
+   * of this deployment's copy), and the version the key belongs to. A server checks the key it
+   * unwraps has this id before it hands it to any player.
+   */
+  keyId: z.string().nullable().optional(),
+  version: z.string().nullable().optional(),
 });
 export type KeyReleaseResult = z.infer<typeof KeyReleaseResult>;
 

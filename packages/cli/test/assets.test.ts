@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unzipSync, zipSync } from "fflate";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { buildFingerprinted } from "@scriptgo/escrow";
+import { randomBytes } from "node:crypto";
+import { buildFingerprinted, escrowPreload } from "@scriptgo/escrow";
 import { fingerprintEntryPath, parseManifest } from "@scriptgo/manifest";
 import { run as assetsCommand } from "../src/commands/assets.ts";
 import { packForOpen77, run as packCommand, scriptgoArchive } from "../src/commands/pack.ts";
@@ -342,5 +343,22 @@ describe("asset escrow tooling", () => {
     expect(wrong.code).toBe(1);
     expect(wrong.text).toMatch(/wrong_key/);
     expect(readdirSync(dest).length).toBeGreaterThan(0);
+  });
+
+  it("open reads the container of an escrowed OPEN//77 preload (the zip a deployment's copy carries)", async () => {
+    const key = randomBytes(32);
+    const zipped = escrowPreload({
+      preload: preload(), entry: "archive/pc/mod/market.sgae", package: "kestrel//market", version: "1.0.0", release: "rel_1",
+      deployment: "dep_1", contentKey: key, signerSeed: Buffer.alloc(32, 9), fingerprint: null, chunkBytes: 4096,
+    });
+    expect(Object.keys(unzipSync(zipped))).toEqual(["archive/pc/mod/market.sgae"]);
+    expect(zipped.includes(RDAR)).toBe(false);
+    const file = join(tmp, `escrowed-${n++}.zip`);
+    writeFileSync(file, zipped);
+    writeFileSync(`${file}.key.json`, JSON.stringify({ contentKey: key.toString("base64") }));
+    const dest = join(tmp, `escrowed-out-${n++}`);
+    const opened = await capture(() => assetsCommand(["open", file, "--key", `${file}.key.json`, "--out", dest]));
+    expect(opened.code).toBe(0);
+    expect(readFileSync(join(dest, "archive", "pc", "mod", "market.archive")).equals(RDAR)).toBe(true);
   });
 });

@@ -56,6 +56,15 @@ export const ReleaseAssetsInfo = z.object({
   rightsCase: AssetRightsCase.nullable(),
   /** How each download is made traceable. */
   fingerprint: z.literal("scriptgo-asset-fingerprint/1"),
+  /**
+   * Asset escrow (assets.md, "Asset escrow"), or null: the OPEN//77 preloads (paths in the
+   * resource) delivered sealed per deployment. Their key goes to the deployment's bound server only,
+   * which hands it to each player's session. Absent on releases inspected before escrow existed.
+   */
+  escrow: z
+    .object({ format: z.literal("scriptgo-asset-escrow/1"), environment: z.literal("open77"), containers: z.array(z.string()) })
+    .nullable()
+    .optional(),
   /** SDK version of the inspection that accepted the release. */
   inspectedWith: z.string(),
 });
