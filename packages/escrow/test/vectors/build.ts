@@ -9,8 +9,10 @@ import {
   buildFingerprinted,
   deriveAssetContentKey,
   ed25519FromSeed,
+  escrowedPreloadTransform,
   sealAssetContainer,
   wrapAssetKeyForClient,
+  wrapContentKey,
   type X25519KeyPair,
 } from "../../src/index.ts";
 
@@ -31,6 +33,8 @@ export const MATERIAL = {
   releaseSecret: Buffer.alloc(32, 0x66),
   client: fixedX25519("a8abababababababababababababababababababababababababababababab6b"),
   ephemeral: fixedX25519("c8cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd4d"),
+  server: fixedX25519("98999999999999999999999999999999999999999999999999999999999999d9"),
+  serverEphemeral: fixedX25519("e8efefefefefefefefefefefefefefefefefefefefefefefefefefefefefef6f"),
 };
 
 const sha = (b: Uint8Array): string => createHash("sha256").update(b).digest("hex");
@@ -87,6 +91,20 @@ export function assetVectors(): Record<string, unknown> {
     contentKey, signerSeed: MATERIAL.assetSignerSeed, fingerprint: build.marker, chunkBytes: 4096,
   });
   const keyId = assetKeyId(contentKey);
+  const serverWrap = wrapContentKey(contentKey, MATERIAL.server.publicKey, assetServerAad(identity.package, identity.version, identity.deployment), { ephemeral: MATERIAL.serverEphemeral, nonce: Buffer.alloc(12, 0x5a) });
+  // The same copy with its OPEN//77 preload escrowed for the deployment (docs/spec/assets.md, "OPEN//77").
+  const escrowed = buildFingerprinted({
+    zip,
+    root: "night_market/",
+    containers: [{ path: "night_market/dist/night_market.zip", entry: OPEN77_PRELOAD_ENTRY }],
+    identity,
+    secret: MATERIAL.fingerprintSecret,
+    signerSeed: MATERIAL.fingerprintSignerSeed,
+    transform: escrowedPreloadTransform({
+      identity, releaseSecret: MATERIAL.releaseSecret, fingerprintSecret: MATERIAL.fingerprintSecret,
+      signerSeed: MATERIAL.fingerprintSignerSeed, escrowed: ["night_market/dist/night_market.zip"], chunkBytes: 4096,
+    }),
+  });
   const clientWrap = wrapAssetKeyForClient(contentKey, MATERIAL.client.publicKey, assetClientAad(identity.package, identity.version, keyId), { ephemeral: MATERIAL.ephemeral, nonce: Buffer.alloc(12, 0x77) });
 
   return {
@@ -113,6 +131,23 @@ export function assetVectors(): Record<string, unknown> {
       containerBase64: container.toString("base64"),
       containerSha256: sha(container),
       serverAad: assetServerAad(identity.package, identity.version, identity.deployment).toString("utf8"),
+      server: {
+        privateKey: MATERIAL.server.privateKey.toString("base64url"),
+        publicKey: MATERIAL.server.publicKey.toString("base64url"),
+        aad: assetServerAad(identity.package, identity.version, identity.deployment).toString("utf8"),
+        wrapped: serverWrap,
+      },
+      escrowedCopy: {
+        signerPublicKey: ed25519FromSeed(MATERIAL.fingerprintSignerSeed).publicKey.toString("base64url"),
+        zipBase64: escrowed.zip.toString("base64"),
+        sha256: escrowed.sha256,
+        containers: escrowed.containers,
+        preloadEntry: "archive/pc/mod/night_market.sgae",
+        preloadFiles: [
+          { path: "archive/pc/mod/night_market.archive", sha256: sha(Buffer.concat([Buffer.from("RDAR", "ascii"), Buffer.alloc(60, 7)])) },
+          { path: "archive/pc/mod/night_market.archive.xl", sha256: sha(Buffer.from("streaming:\n  sectors: []\n", "utf8")) },
+        ],
+      },
       client: {
         privateKey: MATERIAL.client.privateKey.toString("base64url"),
         publicKey: MATERIAL.client.publicKey.toString("base64url"),
@@ -120,6 +155,8 @@ export function assetVectors(): Record<string, unknown> {
         wrapNonce: Buffer.alloc(12, 0x77).toString("base64url"),
         aad: assetClientAad(identity.package, identity.version, keyId).toString("utf8"),
         wrapped: clientWrap,
+        // Another deployment's key, wrapped the same way: opens the wrap, must not open the container.
+        otherWrapped: wrapAssetKeyForClient(deriveAssetContentKey(MATERIAL.releaseSecret, "dep_8"), MATERIAL.client.publicKey, assetClientAad(identity.package, identity.version, keyId), { ephemeral: MATERIAL.ephemeral, nonce: Buffer.alloc(12, 0x78) }),
       },
     },
   };

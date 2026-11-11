@@ -26,6 +26,8 @@ import {
   type WrappedKey,
   type X25519KeyPair,
 } from "./crypto.ts";
+import { appendStoredEntry, FINGERPRINT_SUFFIX, fingerprintMarker, isFingerprintEntryName, type FingerprintIdentity } from "./fingerprint.ts";
+import { readZip, readZipEntry } from "./zip.ts";
 
 export const ASSET_ESCROW_FORMAT = "scriptgo-asset-escrow/1";
 export const ASSET_ESCROW_CIPHER = "AES-256-GCM-STREAM";
@@ -367,4 +369,116 @@ export function unwrapAssetKeyOnClient(wrapped: WrappedKey, clientPrivate: Buffe
   const epk = unb64(wrapped.epk);
   const shared = x25519Shared(clientPrivate, epk);
   return aeadDecrypt(clientKek(shared, epk, clientPublic), unb64(wrapped.nonce), unb64(wrapped.wrapped), aad);
+}
+
+// --------------------------------------------------------------------------- OPEN//77 escrowed preloads
+
+/** Extension of an asset-escrow container file. */
+export const ASSET_ESCROW_EXTENSION = ".sgae";
+
+/**
+ * Where an escrowed OPEN//77 preload holds its container: next to the fingerprint record, under
+ * `archive/pc/mod/` (an inert file for OPEN//77's mod-root policy and its launcher; the game mounts
+ * `.archive` files only). Derived from the container's fingerprint entry path, so both name the same
+ * stem: `archive/pc/mod/<stem>.scriptgo-fingerprint.json` -> `archive/pc/mod/<stem>.sgae`.
+ */
+export function escrowedPreloadEntry(fingerprintEntry: string): string {
+  if (!fingerprintEntry.endsWith(FINGERPRINT_SUFFIX) || fingerprintEntry.includes("/.scriptgo/")) throw new Error(`${fingerprintEntry}: not an OPEN//77 preload fingerprint entry`);
+  return fingerprintEntry.slice(0, -FINGERPRINT_SUFFIX.length) + ASSET_ESCROW_EXTENSION;
+}
+
+/** An empty zip: the end-of-central-directory record alone. */
+function emptyZip(): Buffer {
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  return end;
+}
+
+/**
+ * The escrowed form of one OPEN//77 preload package (docs/spec/assets.md, "OPEN//77"): a zip with a
+ * single stored entry, `entry` (from `escrowedPreloadEntry`), holding every file of the preload in
+ * one `scriptgo-asset-escrow/1` container, at the paths they have in the preload. The preload's path
+ * in the release does not change, so the resource manifest (`preload_mod`) does not either.
+ *
+ * Deterministic: the same preload, identity, key and signer give the same bytes.
+ */
+export function escrowPreload(opts: {
+  preload: Uint8Array;
+  entry: string;
+  package: string;
+  version: string;
+  release: string;
+  deployment: string;
+  contentKey: Buffer;
+  signerSeed: Buffer;
+  fingerprint: string | null;
+  chunkBytes?: number;
+}): Buffer {
+  const src = Buffer.from(opts.preload.buffer, opts.preload.byteOffset, opts.preload.byteLength);
+  const archive = readZip(src);
+  const files = new Map<string, Buffer>();
+  for (const e of archive.entries) {
+    if (e.isDirectory) continue;
+    if (isFingerprintEntryName(e.name) || e.name.toLowerCase().endsWith(ASSET_ESCROW_EXTENSION)) throw new AssetEscrowError("already_escrowed", `${e.name}: the preload is already fingerprinted or escrowed`);
+    files.set(e.name, readZipEntry(src, e));
+  }
+  if (files.size === 0) throw new AssetEscrowError("empty", "the preload holds no file");
+  const container = sealAssetContainer({
+    files,
+    package: opts.package,
+    version: opts.version,
+    release: opts.release,
+    deployment: opts.deployment,
+    contentKey: opts.contentKey,
+    signerSeed: opts.signerSeed,
+    fingerprint: opts.fingerprint,
+    chunkBytes: opts.chunkBytes,
+  });
+  return appendStoredEntry(emptyZip(), opts.entry, container);
+}
+
+/**
+ * The `transform` of `buildFingerprinted` for a release whose OPEN//77 preloads are escrowed: each
+ * container in `escrowed` (path in the release archive) becomes its escrowed form, sealed with the
+ * content key of the copy's deployment and carrying the copy's fingerprint marker in its header.
+ * The platform signs the containers with its fingerprint signer.
+ */
+export function escrowedPreloadTransform(opts: {
+  identity: FingerprintIdentity;
+  releaseSecret: Buffer;
+  fingerprintSecret: Buffer;
+  signerSeed: Buffer;
+  escrowed: Iterable<string>;
+  chunkBytes?: number;
+}): (container: { path: string; entry: string; data: Buffer }) => Buffer {
+  const escrowed = new Set(opts.escrowed);
+  const marker = fingerprintMarker(opts.identity, opts.fingerprintSecret);
+  return ({ path, entry, data }) => {
+    if (!escrowed.has(path)) return data;
+    const contentKey = deriveAssetContentKey(opts.releaseSecret, opts.identity.deployment);
+    try {
+      return escrowPreload({
+        preload: data,
+        entry: escrowedPreloadEntry(entry),
+        package: opts.identity.package,
+        version: opts.identity.version,
+        release: opts.identity.release,
+        deployment: opts.identity.deployment,
+        contentKey,
+        signerSeed: opts.signerSeed,
+        fingerprint: marker,
+        chunkBytes: opts.chunkBytes,
+      });
+    } finally {
+      contentKey.fill(0);
+    }
+  };
+}
+
+/** The container inside an escrowed preload, or null when the zip is not one. */
+export function escrowedPreloadContainer(preload: Uint8Array): { entry: string; container: Buffer } | null {
+  const src = Buffer.from(preload.buffer, preload.byteOffset, preload.byteLength);
+  const found = readZip(src).entries.filter((e) => !e.isDirectory && e.name.toLowerCase().endsWith(ASSET_ESCROW_EXTENSION));
+  if (found.length !== 1) return null;
+  return { entry: found[0]!.name, container: readZipEntry(src, found[0]!) };
 }

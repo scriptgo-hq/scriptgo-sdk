@@ -132,11 +132,15 @@ function wrapKeyEncryptionKey(shared: Buffer, epk: Buffer, serverPub: Buffer): B
   return Buffer.from(hkdfSync("sha256", shared, salt, WRAP_INFO, 32));
 }
 
-export function wrapContentKey(contentKey: Buffer, serverPublicRaw: Buffer, aad: Buffer): WrappedKey {
-  const eph = generateX25519KeyPair();
+export function wrapContentKey(
+  contentKey: Buffer, serverPublicRaw: Buffer, aad: Buffer,
+  /** Fixed only in test vectors: by default a fresh ephemeral key and a random nonce per wrap. */
+  fixed: { ephemeral?: X25519KeyPair; nonce?: Buffer<ArrayBuffer> } = {},
+): WrappedKey {
+  const eph = fixed.ephemeral ?? generateX25519KeyPair();
   const shared = x25519Shared(eph.privateKey, serverPublicRaw);
   const kek = wrapKeyEncryptionKey(shared, eph.publicKey, serverPublicRaw);
-  const { nonce, ciphertext } = aeadEncrypt(kek, contentKey, aad);
+  const { nonce, ciphertext } = fixed.nonce ? aeadEncrypt(kek, contentKey, aad, fixed.nonce) : aeadEncrypt(kek, contentKey, aad);
   return { epk: eph.publicKey.toString("base64url"), nonce: nonce.toString("base64url"), wrapped: ciphertext.toString("base64url") };
 }
 
