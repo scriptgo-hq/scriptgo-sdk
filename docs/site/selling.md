@@ -53,10 +53,12 @@ feature of the script the operator wrote for their own server.
 
 1. **The player** buys the pass on **the operator's Tebex store**.
 2. **SCRIPT//GO** receives the verified payment event and records the perk for that player.
-3. **The SDK on the server** asks SCRIPT//GO whether the player holds the perk.
+3. **The SDK on the server** hears it from SCRIPT//GO within about 30 seconds. It asks; nothing is
+   pushed to the server.
 4. **The operator's script** unlocks the feature.
 
-The perk renews with the subscription. When the subscription ends, the perk ends with it.
+The perk renews with the subscription. A cancelled one lasts until the paid period ends; a refund
+or a chargeback removes it at once.
 
 The operator sets it up in [Dashboard → Perks](/dashboard/perks): the perks on sale, then the
 servers linked to the account under **Servers**. Each link has a `sg_srv_` token, shown once, that
@@ -71,15 +73,44 @@ it.
 
 Anyone can open a SCRIPT//GO shop, on their own Tebex store. Free packages need no store at all.
 
-1. Create the package in your own Tebex store.
-2. Connect the store in [Dashboard → Stores](/dashboard/stores): paste the webhook secret and the
-   public token. Both are stored sealed and never shown again.
-3. Add the webhook endpoint the page shows to your Tebex store.
-4. Map each paid offer to its Tebex package id.
+1. Create the package in your own Tebex store. A monthly offer needs a recurring package.
+2. Connect the store in [Dashboard → Stores](/dashboard/stores): paste the webhook secret (Tebex →
+   Developers → Webhooks) and the public token (Tebex → Integrations → Headless API). Both are
+   stored sealed and never shown again.
+3. Copy the webhook address from the store card,
+   `https://api.scriptgo.dev/v1/webhooks/tebex/<store id>`, and add it in Tebex → Developers →
+   Webhooks → Endpoints. Select the payment and recurring payment events (listed below).
+4. Map each paid offer and each perk to its Tebex package id.
+
+You do this once per store. One address serves every script and every perk you sell there; there
+is no address per product.
 
 The shop works as soon as its Tebex configuration is complete. The one thing still off is real
 checkout, platform-wide, until Tebex approves it in writing. The Tebex connector has not run
 against a live store yet.
+
+### What Tebex sends, and what SCRIPT//GO does with it
+
+Tebex sends that address the events you selected, for **every** sale of the store.
+
+- **Each request is checked.** Its signature must match your store's webhook secret; in
+  production it must also come from one of Tebex's two published sender addresses. A request that
+  fails is refused.
+- **Only SCRIPT//GO's own sales count.** A buyer who starts from SCRIPT//GO gets a Tebex basket
+  that carries a SCRIPT//GO checkout reference, and the event brings it back. SCRIPT//GO then checks
+  the amount, the currency and the package before it issues a licence or grants a perk.
+- **Other sales are left alone.** A sale made on the same store outside SCRIPT//GO carries no
+  reference, so SCRIPT//GO does nothing with it.
+
+Events used: `payment.completed`, `payment.declined`, `payment.refunded`,
+`payment.dispute.opened`, `payment.dispute.won`, `payment.dispute.lost`,
+`payment.dispute.closed`, `recurring-payment.started`, `recurring-payment.renewed`,
+`recurring-payment.ended`, `recurring-payment.cancellation.requested`,
+`recurring-payment.cancellation.aborted`, and `validation.webhook`, which Tebex sends when the
+address is added. Other events are ignored.
+
+Game servers never hear from Tebex. They learn about purchases from SCRIPT//GO, through the SDK:
+see [Player perks](/docs/perks#how-it-works-in-short).
 
 ## The rules
 

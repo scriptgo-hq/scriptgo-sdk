@@ -56,3 +56,10 @@ resource's server shim, and that Lua calls SCRIPT//GO over the HTTP the operator
 `devLocalAuth` server gives its players no identifier, so they have no perk there. The cache is the
 key `scriptgo.perks` of the resource's kvp. Each resource that uses perks pulls the event queue on
 its own.
+
+The server opens no port and receives nothing pushed: it pulls the queue every 30 seconds
+(`scriptgo_perks_poll_seconds`) over the outgoing HTTPS allowed above, so a reward can arrive up to
+that long after the payment. `onPlayerConnected` gives the player id as a string: pass
+`tonumber(id)` to `ScriptGo.perks`, which reads a string as an identifier. To pull once for all
+your resources, let one resource relay `granted` and `removed` with `TriggerEvent`: the example is
+in `docs/spec/perks.md`, section "Several resources on one server".
