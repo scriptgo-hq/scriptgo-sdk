@@ -165,6 +165,15 @@ return function(scriptgo, opts)
             end
             return "beammp-guest:" .. name:lower():gsub("[^%w_%-]", "_")
         end,
+        -- The player's address, for player match only (docs/spec/player-match.md): the core hashes it
+        -- and never sends or logs it. Not visible to scripts. Presence is not switched on here
+        -- (BeamMP's Lua has no HMAC), so nothing reads it yet.
+        address = function(id)
+            local pid = beamId(id)
+            if not pid then return nil end
+            local ids = MP.GetPlayerIdentifiers(pid)
+            return type(ids) == "table" and type(ids.ip) == "string" and ids.ip or nil
+        end,
     }
 
     -- Permissions: BeamMP has no server-side roles, so grants come from scriptgo.json, keyed by

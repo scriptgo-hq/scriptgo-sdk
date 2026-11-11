@@ -582,7 +582,7 @@ namespace Oxide.Plugins
             }
         }
 
-        private sealed class RustPlayers : global::ScriptGo.Bridge.IHostPlayers
+        private sealed class RustPlayers : global::ScriptGo.Bridge.IHostPlayers, global::ScriptGo.Bridge.IHostPlayerAddresses
         {
             private readonly ScriptGo _p;
             public RustPlayers(ScriptGo p) { _p = p; }
@@ -602,6 +602,14 @@ namespace Oxide.Plugins
             {
                 var player = _p.PlayerById(id);
                 return player == null ? null : "steam:" + player.UserIDString;
+            }
+
+            // "ip:port" of the player's connection, for player match only (the bridge's core hashes it).
+            public string Address(int id)
+            {
+                var player = _p.PlayerById(id);
+                if (player == null || player.net == null || player.net.connection == null) return null;
+                return player.net.connection.ipaddress;
             }
         }
 

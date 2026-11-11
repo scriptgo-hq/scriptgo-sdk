@@ -36,7 +36,7 @@ local resourceName = GetCurrentResourceName()
 local J = rawget(_G, "json")
 local unpackArgs = rawget(table, "unpack") or rawget(_G, "unpack")
 
-local ALL = { "events", "logging", "storage", "players", "permissions", "commands", "config", "ui", "http", "licensing", "perks" }
+local ALL = { "events", "logging", "storage", "players", "permissions", "commands", "config", "ui", "http", "licensing", "perks", "presence" }
 
 -- What this side of a FiveM resource can call. players, permissions, config and http are server
 -- side, as on every SCRIPT//GO host; ui is a chat message on both sides; licensing is never on.
@@ -46,6 +46,8 @@ local CAPS = {
     licensing = false,
     -- Player perks: the shim does not carry the core's perks module.
     perks = false,
+    -- Player match: nor the presence module (and FiveM's Lua has no HMAC).
+    presence = false,
 }
 
 local function unavailable(cap)
@@ -281,6 +283,17 @@ if isServer then
         end,
     }
 
+    -- The host function player match needs (docs/spec/player-match.md, "What each adapter adds"):
+    -- the address a player connects from, "ip:port" from GetPlayerEndpoint. It is kept out of
+    -- ScriptGo.players on purpose: scripts never see addresses. This shim does not carry the core's
+    -- presence module (nor perks, nor an HMAC), so nothing calls it yet.
+    local function playerAddress(id) -- luacheck: ignore (wired when the shim carries presence)
+        if not validPlayer(id) then return nil end
+        local endpoint = GetPlayerEndpoint(tostring(id))
+        if type(endpoint) ~= "string" or endpoint == "" then return nil end
+        return endpoint
+    end
+
     -- ACE permissions: `add_ace group.admin <privilege> allow` in server.cfg.
     SG.permissions = {
         has = function(playerId, privilege)
@@ -365,6 +378,7 @@ SG.perks = {
     has = refuse("perks"), list = refuse("perks"), refresh = refuse("perks"), purchaseLink = refuse("perks"),
     catalog = refuse("perks"), on = refuse("perks"), off = refuse("perks"), status = refuse("perks"),
 }
+SG.presence = { status = refuse("presence"), link = refuse("presence"), linkMessage = refuse("presence") }
 
 -- OPEN//77-compatible names for the portable subset, as on every SCRIPT//GO host.
 SG.notifications = {

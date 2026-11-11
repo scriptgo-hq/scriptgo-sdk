@@ -136,6 +136,13 @@ return function(scriptgo, opts)
             if ply then api.remember(ply) end
             return identifiers[id]
         end,
+        -- The player's address ("ip:port"), for player match only (docs/spec/player-match.md): the
+        -- core hashes it and never sends or logs it. Not visible to scripts. Presence is not switched
+        -- on here (GLua has no HMAC), so nothing reads it yet.
+        address = function(id)
+            local ply = byId(id)
+            return ply and ply:IPAddress() or nil
+        end,
     }
 
     -- Permissions -------------------------------------------------------------------------------------

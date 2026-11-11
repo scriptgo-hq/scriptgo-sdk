@@ -8,7 +8,8 @@
 --
 -- A run script is a text file of steps, one per line ('#' comments):
 --   wait 250                     advance time (simulated unless --realtime)
---   join 2 Bob | drop 2 quit     players
+--   join 2 Bob | drop 2 quit     players; `join 2 Bob @203.0.113.7` gives a simulated address
+--                                (player match tests: use documentation addresses only)
 --   cmd 2 /give medkit 1         a player's chat command;  console stop_server  a console command
 --   call res export [json args]  call a server export, print the result
 --   expect-log <lua pattern>     fail unless a log line matches;  expect-notify <pattern> likewise
@@ -144,7 +145,7 @@ local function run()
     for name, state in pairs(results) do
         if state ~= "started" then failed = failed + 1; adapter.log("error", "host", name .. ": " .. tostring(state)) end
     end
-    host:playerJoin(1, cfg.player or "Player")
+    host:playerJoin(1, cfg.player or "Player", cfg.playerAddress)
 
     local function advance(ms)
         if flags.realtime then
@@ -172,7 +173,9 @@ local function run()
             advance(tonumber(rest) or 0)
         elseif verb == "join" then
             local id, name = rest:match("^(%d+)%s*(.*)$")
-            host:playerJoin(tonumber(id), name ~= "" and name or nil); advance(0)
+            local address
+            name, address = name:match("^(.-)%s*@(%S+)$") or name, name:match("@(%S+)$")
+            host:playerJoin(tonumber(id), name ~= "" and name or nil, address); advance(0)
         elseif verb == "drop" then
             local id, reason = rest:match("^(%d+)%s*(.*)$")
             host:playerDrop(tonumber(id), reason ~= "" and reason or nil); advance(0)
@@ -290,6 +293,7 @@ end
 -- verify ---------------------------------------------------------------------------------------------
 -- Machine-checkable compatibility evidence for the standalone environment: manifest, start,
 -- declared exports, capability matrix, and the resource's own tests.
+local cfgPlayerAddress
 local function verify()
     local root = normalize(positional[1] or die("verify: give a resource folder"))
     local started = os.clock()
@@ -311,12 +315,19 @@ local function verify()
         -- Simulated players and clock, but with --config the real config and HTTP (curl) of the
         -- standalone adapter, so a resource can be verified against a live (or stub) API.
         local adapter = scriptgo.testing.memoryAdapter({ environment = env })
+        -- The verifier's simulated address (config "verifierAddress"), for a player-match probe.
+        cfgPlayerAddress = nil
         adapter.adapterVersion = scriptgo.VERSION
         if flags.config then
-            local real = makeAdapter(scriptgo, { config = loadConfig(), quiet = true })
+            local cfgTable = loadConfig()
+            cfgPlayerAddress = cfgTable.verifierAddress
+            local real = makeAdapter(scriptgo, { config = cfgTable, quiet = true })
             adapter.config, adapter.http = real.config, real.http
             adapter.capabilities.http = real.capabilities.http ~= false
             adapter.capabilities.licensing = real.capabilities.licensing ~= false
+            adapter.capabilities.perks = real.capabilities.perks ~= false
+            adapter.capabilities.presence = real.capabilities.presence ~= false
+            adapter.crypto = real.crypto
         end
         local h = scriptgo.testing.harness({ adapter = adapter, environment = env })
         local ok, err = addWithDeps(h.host, root)
@@ -338,7 +349,7 @@ local function verify()
                     if wname then wok, wwhy = h:start(wname) end
                     check("readme_example", wok == true, wok and (wname .. " started") or tostring(wwhy))
                 end
-                h:join(2, "Verifier")
+                h:join(2, "Verifier", cfgPlayerAddress)
                 -- Simulated time: long enough for start-up threads and self-checks (SGCHECK lines).
                 h:tick(tonumber(flags.settle) or 2000)
                 h:drop(2, "verify_done")

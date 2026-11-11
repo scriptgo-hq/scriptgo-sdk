@@ -104,6 +104,14 @@ return function(scriptgo, opts)
             if not name then return nil end
             return "luanti:" .. name
         end,
+        -- The player's address, for player match only (docs/spec/player-match.md): the core hashes it
+        -- and never sends or logs it. Not visible to scripts. Presence is not switched on here (Luanti
+        -- has no HMAC), so nothing reads it yet.
+        address = function(id)
+            local name = nameById[id]
+            if not online(name) then return nil end
+            return core.get_player_ip(name)
+        end,
     }
 
     -- Permissions: the `server` and `scriptgo_admin` privileges grant everything; otherwise the

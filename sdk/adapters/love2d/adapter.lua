@@ -59,6 +59,8 @@ return function(scriptgo, opts)
     for _, c in ipairs(scriptgo.capabilities.ALL) do adapter.capabilities[c] = true end
     -- Player perks are not switched on here (one local player, no account to tie a purchase to); the registry says the same (capabilities.lua).
     adapter.capabilities.perks = false
+    -- Player match follows perks (nobody to match, or no HTTP): off as well.
+    adapter.capabilities.presence = false
 
     local logLevel = { debug = 0, info = 1, warn = 2, error = 3 }
     local minLevel = logLevel[opts.logLevel or "info"] or 1

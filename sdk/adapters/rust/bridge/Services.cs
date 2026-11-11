@@ -49,6 +49,16 @@ namespace ScriptGo.Bridge
         string Identifier(int id);
     }
 
+    /// <summary>
+    /// Optional, next to <see cref="IHostPlayers"/>: the address a connected player plays from
+    /// ("ip" or "ip:port"), or null. Only player match reads it (docs/spec/player-match.md): the core
+    /// turns it into a keyed fingerprint and never sends, stores or logs it. Scripts never see it.
+    /// </summary>
+    public interface IHostPlayerAddresses
+    {
+        string Address(int id);
+    }
+
     public interface IHostPermissions
     {
         /// <summary>Does a player hold a host privilege? The console (0) is answered by the core itself.</summary>

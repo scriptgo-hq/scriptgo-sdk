@@ -68,6 +68,8 @@ return function(scriptgo, opts)
     for _, c in ipairs(scriptgo.capabilities.ALL) do adapter.capabilities[c] = true end
     -- Player perks are not switched on here (no HTTP); the registry says the same (capabilities.lua).
     adapter.capabilities.perks = false
+    -- Player match follows perks (nobody to match, or no HTTP): off as well.
+    adapter.capabilities.presence = false
     -- No HTTP: Godot's HTTPRequest is a scene node driven by signals, and nothing in this adapter
     -- performs a request yet. Licensing needs HTTP, so it is off too.
     adapter.capabilities.http = false

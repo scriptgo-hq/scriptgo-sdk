@@ -235,3 +235,117 @@ do
     }
 end
 -- @end
+
+-- @capability presence
+-- Player match (docs/spec/player-match.md): ties a buyer on a shop to a player of this server.
+--
+-- The logic is the portable core's module (sdk/lua/scriptgo/presence.lua), included below by
+-- `scriptgo pack` word for word. This section hands it what OPEN//77 has:
+--   - the /link command (convar `scriptgo_link_command`, default "link"; "off" removes it). The
+--     player types the code their browser shows; the server confirms it to SCRIPT//GO for the player
+--     OPEN//77 authenticated (Open77.players.identifier). Needs `scriptgo_server_token`.
+--   - presence reporting, opt-in (convar `scriptgo_presence`, default off): connected players'
+--     keyed address fingerprints. It reads Open77.players.endpoint (permission
+--     `players.identity.sensitive`, which `scriptgo pack` adds for this capability), and needs an
+--     HMAC-SHA256 from the host. OPEN//77 build 2.50.0+op77.208 has no HMAC native, so presence
+--     says "presence unavailable: no HMAC on this host" and never reads an address; /link works.
+-- Declare this capability in ONE resource per server: each packed resource registers its own /link.
+do
+    local Core = (function(...)
+-- @include ../../lua/scriptgo/presence.lua
+    end)()
+    local client
+
+    local function presence()
+        if client then return client end
+        client = Core.new({
+            request = function(req, done)
+                local ok, reason = Open77.http.request(req.url, function(status, body, headers, err)
+                    done({ status = status or 0, body = body or "", error = err })
+                end, req.method or "GET", req.body, req.headers)
+                if ok == false then done({ status = 0, body = "", error = reason }) end
+            end,
+            await = function(register)
+                local p = promise.new()
+                register(function(a, b) p:resolve({ a, b }) end)
+                local r = Citizen.Await(p)
+                if type(r) ~= "table" then return false, "await_failed" end
+                return r[1], r[2]
+            end,
+            identifier = function(id)
+                if validPlayer(id) then return Open77.players.identifier(id) end
+                return nil
+            end,
+            name = function(id)
+                if validPlayer(id) then return GetPlayerName(id) end
+                return nil
+            end,
+            -- "ip:port" or "[v6]:port"; the core drops the port and hashes the rest. Read only when
+            -- presence is on and an HMAC exists (never on a build without one).
+            address = function(id)
+                if not validPlayer(id) then return nil end
+                local endpoint = Open77.players.endpoint(id)
+                if type(endpoint) ~= "string" then return nil end
+                return endpoint
+            end,
+            players = function() return GetPlayers() end,
+            -- No HMAC native in OPEN//77 build 2.50.0+op77.208: presence reporting stays off. When
+            -- OPEN//77 gains a vetted HMAC-SHA256, it is wired here.
+            hmacSha256 = nil,
+            now = function() return Open77.time.unix() end,
+            json = { encode = J.encode, decode = J.decode },
+            config = function(key)
+                local v = GetConvar(key, "")
+                if v == nil or v == "" then return nil end
+                return v
+            end,
+            log = function(level, message)
+                local write = Open77.log[level] or Open77.log.info
+                write("ScriptGo.presence: " .. tostring(message))
+            end,
+            environment = "open77",
+            adapterVersion = SG.runtime.adapterVersion(),
+        })
+        CreateThread(function()
+            while true do
+                client.tick()
+                Wait(1000)
+            end
+        end)
+        return client
+    end
+
+    -- The server learns about joins and leaves from the host's own events.
+    AddEventHandler("playerJoining", function()
+        local id = tonumber(source)
+        if id then presence().joined(id) end
+    end)
+    AddEventHandler("playerDropped", function()
+        local id = tonumber(source)
+        if id then presence().left(id) end
+    end)
+    AddEventHandler("onResourceStart", function(name)
+        if name ~= resourceName then return end
+        local p = presence()
+        local command = p.command()
+        if not command then return end
+        local ok, err = pcall(RegisterCommand, command, function(src, args)
+            if src == 0 then
+                Open77.log.info("ScriptGo.presence: /" .. command .. " is typed by a player in game, with the code their browser shows")
+                return
+            end
+            p.linkAsync(src, args and args[1], function(linked, reason)
+                Open77.chat.send(src, { author = "SCRIPT//GO", text = p.linkMessage(linked, reason) })
+            end)
+        end, false)
+        if not ok then Open77.log.warn("ScriptGo.presence: /" .. command .. " is not registered here (" .. tostring(err) .. "): another resource has it") end
+    end)
+
+    O.caps.presence = true
+    SG.presence = {
+        status = function() return presence().status() end,
+        link = function(player, code) return presence().link(player, code) end,
+        linkMessage = function(ok, reason) return presence().linkMessage(ok, reason) end,
+    }
+end
+-- @end
