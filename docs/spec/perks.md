@@ -209,7 +209,7 @@ POST /v1/perks/purchase-link
 disabled offer), `409 already_held`.
 
 The link is signed by the API: a compact JWS (EdDSA) whose payload binds the operator, the perk, the
-**player identifier** and the server link, with an expiry (`PERK_PURCHASE_LINK_TTL_SECONDS`, 900).
+**player identifier** and the server link, with an expiry (`PERK_PURCHASE_LINK_TTL_SECONDS`, 86400: 24 hours).
 The buyer is tied to their identifier without typing a name, and a link cannot be turned into one for
 another player. The signing key is its own ed25519 key, derived from the server secret for this one
 purpose; a token signed with the license-token key or the release key is refused. A link stops
