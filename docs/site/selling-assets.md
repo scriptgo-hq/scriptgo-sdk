@@ -17,7 +17,8 @@ the files inside an archive. Code goes in scripts.
 
 Whether you may sell a given asset is up to you and the game's terms. A model you made from scratch,
 an edit of the game's own files and a file taken from the game are different cases. Say which case
-yours is on the package page. SCRIPT//GO acts on reports.
+yours is when you publish (`scriptgo publish --asset-rights original|game-edits|game-extracted`, or
+the release page): operators see it on the package page. SCRIPT//GO acts on reports.
 
 ## Declare them
 

@@ -13,3 +13,4 @@ export * from "./account.ts";
 export * from "./admin.ts";
 export * from "./readiness.ts";
 export * from "./perks.ts";
+export * from "./assets.ts";

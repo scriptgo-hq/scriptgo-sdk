@@ -189,6 +189,10 @@ scriptgo publish --owns-code
 5. With `--owns-code`, declares your rights to the code and publishes. Add
    `--targets-proprietary-game` when the code targets or includes content from a proprietary game.
 
+A release with assets also needs `--asset-rights original|game-edits|game-extracted`: whether you
+made them, edited a game's own files, or included files taken from a game. Buyers see it on the
+package page.
+
 Without `--owns-code` the release stays validated but unpublished; you can finish it from your
 dashboard. `--dry-run` only packs. A published version is immutable: to fix `1.5.0`, publish
 `1.5.1`.

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Money, PageQuery, Timestamp, PackageName, Username } from "./common.ts";
+import { AssetRightsCase, ReleaseAssetsInfo } from "./assets.ts";
 import {
   AdapterState,
   CapabilitySupport,
@@ -150,6 +151,8 @@ export const RightsDeclaration = z.object({
   targetsProprietaryGame: z.boolean(),
   thirdPartyAssets: z.array(ThirdPartyAsset),
   dependencies: z.array(z.object({ name: z.string(), license: z.string() })),
+  /** The seller's statement for a release with assets (AssetRightsCase), null otherwise. */
+  assetRights: AssetRightsCase.nullable().default(null),
 });
 export type RightsDeclaration = z.infer<typeof RightsDeclaration>;
 
@@ -203,6 +206,8 @@ export const PackageVersion = z.object({
   escrow: ReleaseEscrowInfo.nullable().default(null),
   /** The registry's signature on this release; null only for releases published before signing. */
   signature: ReleaseSignature.nullable().default(null),
+  /** Client-delivered assets of the release (docs/spec/assets.md); null when it carries none. */
+  assets: ReleaseAssetsInfo.nullable().default(null),
 });
 export type PackageVersion = z.infer<typeof PackageVersion>;
 
@@ -337,6 +342,8 @@ export const Release = z.object({
   restricted: z.boolean(),
   escrow: ReleaseEscrowInfo.nullable().default(null),
   signature: ReleaseSignature.nullable().default(null),
+  /** Client-delivered assets of the release (docs/spec/assets.md); null when it carries none. */
+  assets: ReleaseAssetsInfo.nullable().default(null),
 });
 export type Release = z.infer<typeof Release>;
 
@@ -406,6 +413,8 @@ export const RightsBody = z.object({
   ownsCode: z.boolean(),
   targetsProprietaryGame: z.boolean(),
   thirdPartyAssets: z.array(ThirdPartyAsset).max(500).default([]),
+  /** For a release with assets: which case applies (required to publish one; ignored otherwise). */
+  assetRights: AssetRightsCase.nullable().default(null),
 });
 export type RightsBody = z.infer<typeof RightsBody>;
 
