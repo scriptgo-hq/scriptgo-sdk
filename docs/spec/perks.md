@@ -9,9 +9,34 @@ learns it from SCRIPT//GO; the operator's own script applies the perk (ADR-0038)
 - The game server never talks to the payment provider: it asks SCRIPT//GO.
 - SCRIPT//GO does not review offers before sale and acts on reports (ADR-0037).
 
-This page is the contract: the data, the HTTP protocol a game server speaks, the purchase link, the
-script API, and what an adapter author has to supply. Everything here runs against the mock provider
-in the tests; no live Tebex store has been used.
+This page starts with the flow in plain words, then gives the contract: the data, the HTTP protocol
+a game server speaks, the purchase link, the script API, and what an adapter author has to supply.
+Everything here runs against the mock provider in the tests; no live Tebex store has been used.
+
+## How it works, in short
+
+Once, on the site:
+
+1. Connect your Tebex store and paste its webhook address in Tebex. One address per store covers
+   every sale of that store. See "Open a shop" on the Selling page (`docs/site/selling.md`).
+2. Create the perk (Dashboard → Perks) and give it the id of its Tebex package.
+3. Link your server (Dashboard → Perks → Servers) and put its `sg_srv_` token in the server's
+   settings.
+
+Then, for each sale:
+
+1. The player opens the link your script gave them and pays on your Tebex store.
+2. Tebex tells SCRIPT//GO. SCRIPT//GO checks the payment (amount, currency, package) and records the
+   perk for that player.
+3. Your server asks SCRIPT//GO for news every 30 seconds and hears about it.
+4. Your script's `granted` handler runs, and it gives the reward.
+
+So a reward can arrive up to 30 seconds after the payment. The server never hears from Tebex,
+receives nothing pushed and opens no port: it only needs outgoing HTTPS to the SCRIPT//GO API host,
+which the operator allows.
+
+A monthly perk renews with the subscription. A cancelled one stays until the paid month ends, then
+goes. A refund or a lost chargeback removes it at once.
 
 ## Parties and data
 
@@ -223,6 +248,9 @@ ScriptGo.perks.on("removed", function(player, key, info) end)
 local url, expiresAt = ScriptGo.perks.purchaseLink(player, "vip")
 ```
 
+A `player` that is a string is read as an identifier. On OPEN//77, `onPlayerConnected` gives the
+player id as a string: pass `tonumber(player)`, or use `playerJoining`, whose `source` is a number.
+
 | Call | Answer |
 |---|---|
 | `has(player, key)` | `true, { expiresAt, status, source }` (`source` is `"api"` or `"cache"`), or `false, reason`: `not_held`, `not_linked`, `unreachable` (nothing cached and no API), `unknown_player`, `invalid_player`, `invalid_perk`. Waits for the API: call it from a thread |
@@ -239,7 +267,8 @@ Host settings: `scriptgo_api`, `scriptgo_server_token` (the `sg_srv_` token), an
 ### The cache, and its two bounds
 
 What the API said about a player is kept in memory, and in the host's storage where there is one,
-so that a server that loses the API does not strip its players at once. Two bounds, never passed:
+so that neither a restart nor a short API outage strips players of their perks. Two bounds, never
+passed:
 
 1. a perk is not trusted after its **period end** (`expiresAt`);
 2. nor after the **offline grace** of the answer that brought it (`offlineGraceUntil`, never later
@@ -258,6 +287,64 @@ goes to the API.
 Where the cache is kept: the adapter's storage under the key `scriptgo.perks` (standalone: a JSON
 file; Rust: the plugin's data files; OPEN//77: the resource's kvp, while it fits in 64 KiB); the
 .NET kit keeps it in memory only. The link token is never written to it.
+
+## Several resources on one server
+
+On OPEN//77 the SDK is packed into each resource, so **each resource that uses `ScriptGo.perks`
+pulls the event queue on its own**, every 30 seconds, from its first use. Each keeps its own cursor,
+so no resource takes another's events. That is harmless: a few small requests every 30 seconds per
+resource. (A host built on the portable core has one perks client for the whole host.)
+
+To pull once instead, make **one** resource that uses `ScriptGo.perks` and passes the news on to
+your other resources with the host's own events. Scripts you bought from other creators still pull
+on their own; leave them be.
+
+On OPEN//77, `TriggerEvent` on the server reaches every running resource that handles the name,
+arguments copied by value. The relay, with `capabilities { "perks", "players" }` in its manifest:
+
+```lua
+-- perks_relay/server/main.lua: the one resource that talks to SCRIPT//GO.
+-- player is the connected player's id, or nil when they are not on this server.
+ScriptGo.perks.on("granted", function(player, key, info)
+    TriggerEvent("myserver:perkGranted", player, key, info)
+end)
+ScriptGo.perks.on("removed", function(player, key, info)
+    TriggerEvent("myserver:perkRemoved", player, key, info)
+end)
+
+-- Tell the others what a player already holds. list() waits for the API: run it in a thread.
+local function announce(player)
+    CreateThread(function()
+        for _, p in ipairs(ScriptGo.perks.list(player) or {}) do
+            TriggerEvent("myserver:perkGranted", player, p.key, { expiresAt = p.expiresAt, reason = "held" })
+        end
+    end)
+end
+
+AddEventHandler("playerJoining", function()
+    announce(source)   -- source is the joining player's id, a number
+end)
+
+-- A resource that starts after the players joined hears it too.
+AddEventHandler("onResourceStart", function()
+    for _, player in ipairs(ScriptGo.players.list()) do announce(player) end
+end)
+```
+
+Any other resource of yours, with no SCRIPT//GO capability at all:
+
+```lua
+AddEventHandler("myserver:perkGranted", function(player, key, info)
+    if player and key == "vip" then --[[ give the VIP garage slot ]] end
+end)
+AddEventHandler("myserver:perkRemoved", function(player, key, info)
+    if player and key == "vip" then --[[ take it back ]] end
+end)
+```
+
+A receiver can hear the same grant twice (a join, then a resource start): giving the reward twice
+must change nothing. Listen with `AddEventHandler`, not `RegisterNetEvent`: a game client can then
+not send these events. Any server resource can, so keep the names to your own resources.
 
 ## For an adapter author
 
