@@ -51,6 +51,7 @@ internal static partial class Program
             Test("verify.report_shape", ReportShape);
             RunEscrowTests();
             RunPerksTests();
+            RunPresenceTests();
         }
         finally
         {
