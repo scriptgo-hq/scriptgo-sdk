@@ -128,7 +128,7 @@ Part of the OpenID interaction (ADR on the OpenID provider): a second way to fin
 signing in with a SCRIPT//GO account.
 
 1. The page computes the browser's fingerprints with the current key: the address it sees, plus the
-   IPv4 address read from an IPv4-only host (`v4.api.scriptgo.dev`, A record only) when the first was
+   IPv4 address read from an IPv4-only host (`v4.scriptgo.dev`, A record only) when the first was
    IPv6. This needs the real client address: requests reaching the API through the website must carry
    it (the open item "the API sees Vercel's addresses" must be fixed first).
 2. Exactly one live presence entry matches: show its name and server, "Yes, that's me" or "Not me".
