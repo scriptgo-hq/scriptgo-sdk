@@ -61,6 +61,15 @@ mode (`scriptgo_verify`, `scriptgo_verify_seconds`, `scriptgo_verify_report` set
 that resource, lets it run, writes a report with the same schema as the other hosts, and shuts the
 server down.
 
+With `--stub-api` the container gets Docker's default network instead of none (still no port
+published) and reaches the CLI's loopback stub through `host.docker.internal` (Docker Desktop); the
+mod is listed in `secure.http_mods` and the resource gets the stub's URL and key in the world's
+`scriptgo.json`.
+
 Measured on 2026-11-09 with Luanti 5.18.0 (LuaJIT 2.1): `sg_probe` 25/25 self-checks, and
-`sg_eventbus`, `sg_permissions`, `sg_inventory` verified. No player joins a verify run, so the
-join, chat-command and chat-notification paths are covered by reading the code, not by a run yet.
+`sg_eventbus`, `sg_permissions`, `sg_inventory` verified. On 2026-11-11, the same again, and
+`sg_probe_net` with `--stub-api` verified (http GET, a 404 as an answer, `licensing.verify` valid and
+unknown, `activate`, verify by deployment token, `activate` refused; 5 licensing requests matched the
+API schemas, environment `luanti`, adapter `luanti-0.1.0`): the first licensing run on Luanti, on
+Docker Desktop for Windows. No player joins a verify run, so the join, chat-command and
+chat-notification paths are covered by reading the code, not by a run yet.

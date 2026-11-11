@@ -56,7 +56,7 @@ export interface RustVerifyOptions {
   timeoutMs: number;
   example?: ReadmeExample | null;
   /** Licensing API the resource talks to (the stub or a real one), and the checks verify.ts makes on it. */
-  api?: { url: string; licenseKey: string; requests: StubRequest[] };
+  api?: { url: string; licenseKey: string; serverToken?: string; requests: StubRequest[] };
   apiChecks?: (requests: StubRequest[], from: number, environment: string, adapterVersion: string) => RustCheck[];
 }
 
@@ -99,7 +99,7 @@ export function rustInstallFiles(framework: RustFramework): [string, string][] {
 /** The plugin config for a verify run (keys as plugin/ScriptGo.cs reads them). */
 export function rustVerifyConfig(opts: {
   resource: string; with?: string; reportPath: string; resourceFolder: string; seconds: number;
-  api?: { url: string; licenseKey: string };
+  api?: { url: string; licenseKey: string; serverToken?: string };
 }): Record<string, unknown> {
   return {
     tickIntervalSeconds: 0.02,
@@ -110,7 +110,7 @@ export function rustVerifyConfig(opts: {
     start: null,
     nativeLibraryFolder: null,
     debug: false,
-    convars: opts.api ? { scriptgo_api: opts.api.url } : {},
+    convars: opts.api ? { scriptgo_api: opts.api.url, ...(opts.api.serverToken ? { scriptgo_server_token: opts.api.serverToken } : {}) } : {},
     resources: opts.api ? { [opts.resource]: { api: opts.api.url, license_key: opts.api.licenseKey } } : {},
     verify: { resource: opts.resource, with: opts.with ?? null, reportPath: opts.reportPath, runSeconds: opts.seconds, quit: true },
   };

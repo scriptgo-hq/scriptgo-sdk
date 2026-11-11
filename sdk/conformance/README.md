@@ -31,6 +31,21 @@ that validates every request against the API's own schemas.
 scriptgo verify sdk/conformance/sg_probe_net --env all --stub-api --open77-server <Open77.Server.exe>
 ```
 
+## sg_probe_perks
+
+`sg_probe_perks` checks `ScriptGo.perks` against a SCRIPT//GO API (`docs/spec/perks.md`): a held
+perk answered by the API then from the cache, a perk not held, an invalid key, `list`, `catalog`,
+a purchase link and its `already_held` and `not_purchasable` refusals, a `granted` event pulled
+from the queue (with `player` nil: the buyer is not connected), and `status()` linked with a
+cursor. Players are given as identifier strings, so no player has to connect. It needs the host
+settings `scriptgo_api` and `scriptgo_server_token`, which `scriptgo verify --stub-api` provides
+with a loopback stub holding fixed data and checking every body against the API's own schemas
+(`packages/cli/src/lib/stub-perks.ts`).
+
+```bash
+scriptgo verify sdk/conformance/sg_probe_perks --env all --stub-api --open77-server <Open77.Server.exe>
+```
+
 ## sg_probe_ts
 
 The same checks as `sg_probe`, written in TypeScript (`server/probe.ts`), with the same check

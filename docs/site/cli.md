@@ -111,7 +111,8 @@ per Lua interpreter), `open77`, `luanti`, `love2d`, `godot`, `neovim`, `dotnet` 
 
 - `open77` packs the resource and starts a real OPEN//77 dedicated server given with
   `--open77-server` (or `OP77_SERVER_EXE`). Only the server half runs.
-- `luanti` runs the official Luanti server image in Docker, with no network.
+- `luanti` runs the official Luanti server image in Docker, with no network (with `--stub-api`,
+  Docker's default network so it can reach the local stub; no port is published).
 - `love2d` runs LÖVE headless (`lovec`) on `examples/love2d/demo`, ticked by real frames. The
   binary comes from `--love`, `SCRIPTGO_LOVE` or `tools/runtimes/love`.
 - `godot` runs Godot headless on `examples/godot/demo` with lua-gdextension, ticked by real
@@ -130,9 +131,10 @@ own (`ts` when it has TypeScript scripts). The `dotnet` reports are tagged per l
 (`dotnet-lua`, `dotnet-ts`); every other environment runs Lua only and skips another language.
 
 Without the server binary, Docker or the engine, that run is reported as skipped and writes no
-report. `--stub-api` starts a local stand-in for the licensing API and gives the resource its URL
-and a valid key (standalone, LÖVE, Neovim and OPEN//77 runs); `--api <url> --license-key <key>` uses a
-real API instead.
+report. `--stub-api` starts a local stand-in for the licensing and perks API and gives the resource
+its URL, a valid key and a server link token (`scriptgo_server_token`), on every run that has HTTP
+(standalone, LÖVE, Neovim, Luanti, OPEN//77, the .NET kit, Garry's Mod, Rust); `--api <url> --license-key <key>
+[--server-token <sg_srv_...>]` uses a real API instead.
 
 #### The README example runs too
 
