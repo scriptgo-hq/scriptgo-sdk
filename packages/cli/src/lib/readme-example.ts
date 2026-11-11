@@ -36,6 +36,7 @@ const CAPABILITY_HINTS: [RegExp, string][] = [
   [/\bScriptGo\.http\b/, "http"],
   [/\bScriptGo\.licensing\b/, "licensing"],
   [/\bScriptGo\.perks\b/, "perks"],
+  [/\bScriptGo\.presence\b/, "presence"],
 ];
 
 export function exampleCapabilities(code: string): string[] {

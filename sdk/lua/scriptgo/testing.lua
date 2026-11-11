@@ -41,6 +41,10 @@ function M.memoryAdapter(opts)
         logs = {},
         httpLog = {},
         wallTime = opts.wallTime,
+        -- Simulated players carry the address given to Harness:join (player match tests), and
+        -- opts.crypto = { hmacSha256 = fn } stands in for the host's vetted HMAC.
+        playerAddresses = true,
+        crypto = opts.crypto,
     }
     local set = opts.capabilities
     for _, c in ipairs(caps.ALL) do
@@ -155,8 +159,8 @@ function Harness:tick(ms)
     end
 end
 
-function Harness:join(id, name)
-    self.host:playerJoin(id, name)
+function Harness:join(id, name, address)
+    self.host:playerJoin(id, name, address)
     self:tick(0)
 end
 

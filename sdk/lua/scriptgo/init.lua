@@ -70,6 +70,7 @@ local M = {
     manifest = R("manifest"),
     capabilities = R("capabilities"),
     perks = R("perks"),
+    presence = R("presence"),
     host = host,
     testing = R("testing"),
 }
