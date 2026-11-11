@@ -77,6 +77,10 @@ share code through `dependencies` + exports.
 | `environment_script(s)` | `"<env>" "<path>"` or `"<env>" { ... }` | Scripts loaded only in that environment, after side scripts |
 | `test_script(s)` | path(s) | Test files run by `scriptgo test` in the standalone host |
 | `licensed` | boolean | The resource verifies a license at start (`ScriptGo.licensing`) |
+| `asset(s)` | glob(s) | Client-delivered assets, delivered on every environment that takes generic files ([assets.md](assets.md)) |
+| `environment_asset(s)` | `"<env>" "<path>"` or `"<env>" { ... }` | Assets in one environment's native form: an OPEN//77 preload package, FiveM `stream/` files, a BeamMP client mod, a Rust map, a Hytale asset pack |
+| `game_build(s)` | `"<env>" "<build>"` or `"<env>" { ... }` | Game builds the assets were made for (information, never a load gate) |
+| `data_file(s)` | `"<TYPE>" "<path>"` or `"<TYPE>" { ... }` | FiveM/RedM `data_file` lines naming asset files |
 
 ## `scriptgo.json`
 
@@ -87,8 +91,9 @@ the Lua DSL. Both parsers turn it into the same directive list, so every rule ab
 - Each member is one directive, its key the directive name (singular and plural forms as in the
   DSL; a key given twice in both forms accumulates, in member order).
 - A string, number or boolean is the directive's one argument; an array is a list of scalars. An
-  object is accepted only for `environment_script(s)`, mapping each environment to a path or a list
-  of paths. `null`, an object elsewhere, or a nested array or object inside a list is
+  object is accepted only for `environment_script(s)`, `environment_asset(s)` and `game_build(s)`,
+  mapping each environment to a value or a list, and for `data_file(s)`, mapping each data file
+  type to a path or a list of paths. `null`, an object elsewhere, or a nested array or object inside a list is
   `invalid_value`, as is a value of the wrong type (`"licensed": "yes"`).
 - `$schema` is ignored. Unknown members are kept and reported as `unknown_directive` warnings,
   like unknown DSL directives.

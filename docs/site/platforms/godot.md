@@ -76,6 +76,20 @@ Licence check and signed releases, once the adapter has HTTP. The adapter is scr
 
 See [Protect your work](/docs/protect-your-work) for what protection does and does not do.
 
+## Assets
+
+Maps, models, textures, sounds and other files players download. See [Selling assets](/docs/selling-assets).
+
+| | |
+|---|---|
+| Support | Bundled with the resource |
+| `assets` | files of the resource (resource.readFile) |
+| `environment_asset` | files of the resource |
+
+No game client downloads anything: assets are files of the resource.
+
+Asset escrow: The host can read containers itself, but its operator holds the key: at-rest encryption only.
+
 ## Limits
 
 - Needs the lua-gdextension addon, 0.7.0 for Godot 4.5 (it declares 4.4 as its minimum; the 0.8.x binaries are built for Godot 4.6 and refuse 4.5.2).

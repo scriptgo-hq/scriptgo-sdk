@@ -617,6 +617,46 @@ writes it. A resource name must designate one package; when several creators use
 first-party package wins, otherwise the run is refused with `409 ambiguous_package`. Unknown
 packages are `404 unknown_package`. Ingestion is idempotent on `runId`.
 
+## Assets (docs/spec/assets.md)
+
+A release may carry client-delivered assets (maps, models, textures, sounds). Licensed,
+fingerprinted, traceable: every download of a release with assets is a copy built for its licence
+(and deployment), and nothing in these routes is a key. Schemas: `packages/shared/src/assets.ts`.
+
+```
+POST /v1/creator/packages/:name/releases   (multipart, unchanged) — a release whose manifest declares assets is
+                                       streamed to storage (413 archive_too_large above the platform's cap, read from
+                                       Content-Length first), inspected entry by entry (data only, sizes, delivery rules)
+                                       and refused with every inspection error in its checks; a buyer's fingerprinted
+                                       copy is refused (asset_fingerprinted). Release.assets carries the report.
+POST /v1/creator/releases/:id/rights { ownsCode, targetsProprietaryGame, thirdPartyAssets, assetRights }
+                                       assetRights: "original" | "game_edits" | "game_extracted"; publishing a release
+                                       with assets needs it (a blocker, not a review).
+GET  /v1/packages/:creator/:name/versions/:version/download
+                                       for a release with assets: the caller's own copy. Licence holder (session or
+                                       token), X-ScriptGo-Deployment-Token or X-ScriptGo-License-Key, otherwise 403
+                                       license_required. The creator and staff get a copy fingerprinted to their own
+                                       account; staff may ask ?variant=original (audited). Headers: X-Sha256 (the copy),
+                                       X-ScriptGo-Artifact: plain, X-ScriptGo-Fingerprint: <marker>, the copy's signature
+                                       (payload adds release: { sha256 } and fingerprint), Cache-Control: private, no-store.
+POST /v1/creator/assets/lookup  { sha256 } | { record }   → AssetLookupResult   (own packages; account = null)
+POST /v1/assets/reports         CreateAssetReportBody     → 201 AssetReportRow  (signed in; goodFaith and accuracy
+                                       statements required; opens a compliance case)
+GET  /v1/admin/assets/reports?status=open|actioned|rejected|all  (staff) → AssetReportRow[]
+GET  /v1/admin/assets/reports/:id                         (staff) → AssetReportRow
+POST /v1/admin/assets/lookup    { sha256 } | { record }   (staff) → AssetLookupResult   (audited)
+POST /v1/admin/assets/reports/:id/resolve { deliveryId }  (staff) → AssetReportRow
+POST /v1/admin/assets/reports/:id/action  AssetReportActionBody (staff) → AssetReportRow
+                                       revoke_license / deactivate_deployment need a resolved copy (422 not_resolved);
+                                       restrict_release decides the linked case (notice and appeal); takedown_notice
+                                       records a notice a person sent to a third-party host; reject closes it.
+```
+
+Lookup by SHA-256 matches a whole copy or any container in it. Lookup by record checks its
+signature against the platform's fingerprint signers and recomputes its marker; a record whose
+signature or marker fails is reported as such and matches nothing. Every lookup and action is
+audited.
+
 ## Escrow (staff)
 
 ```

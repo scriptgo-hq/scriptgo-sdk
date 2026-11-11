@@ -117,7 +117,7 @@ export function luaErrors(consoleLog: string): string[] {
   return consoleLog.split(/\r?\n/).filter((l) => /^\[ERROR\]/.test(l.trim()));
 }
 
-interface Srcds {
+export interface Srcds {
   pid: number | null;
   error: string;
   alive(): boolean;
@@ -140,7 +140,7 @@ function pidAlive(pid: number): boolean {
  * when its standard input is a pipe or NUL, which is what Node gives a child; PowerShell's
  * Start-Process creates it with a real (hidden) console instead and prints its PID.
  */
-function startSrcds(exe: string, cwd: string, args: string[]): Srcds {
+export function startSrcds(exe: string, cwd: string, args: string[]): Srcds {
   if (process.platform === "win32") {
     const q = (s: string): string => `'${s.replace(/'/g, "''")}'`;
     const r = spawnSync("powershell", [

@@ -71,3 +71,12 @@ The JVM tests (`./mvnw verify`) are not that run: they drive the same verify mod
 services instead of Hytale, and only prove the bridge.
 
 [cobalt]: https://github.com/SquidDev/Cobalt
+
+## Assets
+
+A package can carry an asset pack (`environment_asset "hytale" "<pack>.zip"`: `manifest.json` with
+`"IncludesAssetPack": true` and no `Main`, `Common/`, `Server/`). `scriptgo pack <dir> --target
+hytale` copies it to `mods/`.
+
+Not run in the real runtime: no Hytale server loaded a pack built this way. See
+`docs/spec/assets.md`.

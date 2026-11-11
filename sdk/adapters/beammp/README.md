@@ -93,3 +93,11 @@ is not BeamMP, and a run on it never produces a verification report. It covers d
 verify report (sg_probe 25/25), the 25 ms tick, the id shift, chat and console commands,
 permissions, notifications, atomic storage, hot reload, shutdown, and `ScriptGo.http` plus
 licensing through background curl against the schema-checked stub API.
+
+## Assets
+
+`scriptgo pack <dir> --target beammp` copies each `environment_asset "beammp"` mod `.zip` to
+`Resources/Client/`, which BeamMP-Server sends to every player at join.
+
+Not run in the real runtime: BeamMP-Server needs an AuthKey, none was available. See
+`docs/spec/assets.md`.

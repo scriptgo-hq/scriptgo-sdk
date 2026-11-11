@@ -50,6 +50,19 @@ Code escrow is planned: a JVM plugin with a native library would hold the key. U
 
 See [Protect your work](/docs/protect-your-work) for what protection does and does not do.
 
+## Assets
+
+Maps, models, textures, sounds and other files players download. See [Selling assets](/docs/selling-assets).
+
+| | |
+|---|---|
+| Support | Partial |
+| `environment_asset` | an asset pack (.zip with manifest.json, Common/ and Server/) installed in the server's mods/ folder; the server sends its assets to players. Validated, not packed or run yet |
+
+Validated and packed (mods/); not loaded by a Hytale server yet.
+
+Asset escrow: Not feasible today: the official client.
+
 ## The platform's own rules
 
 The game's terms allow paid mods and plugins.

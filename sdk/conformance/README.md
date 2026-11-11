@@ -86,6 +86,26 @@ checks that the TypeScript half is refused with `language_unavailable`.
 scriptgo verify sdk/conformance/sg_xlang_lua --env dotnet --search sdk/conformance
 ```
 
+## sg_assets_probe
+
+An asset-only package (no scripts): a texture and a translation file for Luanti, a material and a
+sound for Garry's Mod (docs/spec/assets.md). `scriptgo verify` packs it as `scriptgo pack` does and
+loads it in the real server:
+
+- Luanti: the media mod in a throwaway game, in the official server image. The server logs one line
+  per file it announces to clients, `Server: <sha1> is <name>`; every file must appear with the SHA-1
+  of its bytes.
+- Garry's Mod: the content addon in a dedicated srcds folder. Its generated autorun finds each file
+  in the GAME file system, adds it to the download list with `resource.AddSingleFile` and prints the
+  count; every file must be found.
+
+No game client runs: the server side of delivery is proven, a client's download is not.
+
+```bash
+scriptgo verify sdk/conformance/sg_assets_probe --env luanti
+scriptgo verify sdk/conformance/sg_assets_probe --env garrysmod --gmod-server <srcds folder>
+```
+
 ## Codec vectors
 
 `vectors/codec.json` lists Lua and JavaScript expressions with the value (or refusal) each must

@@ -110,6 +110,20 @@ Licence check and signed releases. The host runs plain script, so its operator c
 
 See [Protect your work](/docs/protect-your-work) for what protection does and does not do.
 
+## Assets
+
+Maps, models, textures, sounds and other files players download. See [Selling assets](/docs/selling-assets).
+
+| | |
+|---|---|
+| Support | Bundled with the resource |
+| `assets` | files of the resource (resource.readFile) |
+| `environment_asset` | files of the resource |
+
+No game client downloads anything: assets are files of the resource.
+
+Asset escrow: The host can read containers itself, but its operator holds the key: at-rest encryption only.
+
 ## Limits
 
 - No rendering: `ui` falls back to console output.

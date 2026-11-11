@@ -94,6 +94,20 @@ No licence check in this adapter, so a package runs there without one. Releases 
 
 See [Protect your work](/docs/protect-your-work) for what protection does and does not do.
 
+## Assets
+
+Maps, models, textures, sounds and other files players download. See [Selling assets](/docs/selling-assets).
+
+| | |
+|---|---|
+| Support | Bundled with the resource |
+| `assets` | files of the resource on the computer; there are no players to deliver to |
+| `environment_asset` | files of the resource |
+
+No game client downloads anything: assets are files of the resource.
+
+Asset escrow: The host can read containers itself, but its operator holds the key: at-rest encryption only.
+
 ## The platform's own rules
 
 The Minecraft EULA lets you do what you want with your mods "as long as you don't sell them for money" (minecraft.net/en-us/eula).

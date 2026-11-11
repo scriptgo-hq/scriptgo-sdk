@@ -34,6 +34,11 @@ export const ParsedManifestSchema = z.object({
   serverExports: z.array(z.string()),
   webUiPage: z.string().nullable(),
   webFiles: z.array(z.string()),
+  /** Client-delivered assets (docs/spec/assets.md). Defaults keep releases parsed before them valid. */
+  assets: z.array(z.string()).default([]),
+  environmentAssets: z.record(z.string(), z.array(z.string())).default({}),
+  gameBuilds: z.record(z.string(), z.array(z.string())).default({}),
+  dataFiles: z.record(z.string(), z.array(z.string())).default({}),
   unknown: z.array(z.object({ directive: z.string(), args: z.array(z.unknown()), line: z.number().int().optional() })),
 });
 export type ParsedManifestShape = z.infer<typeof ParsedManifestSchema>;

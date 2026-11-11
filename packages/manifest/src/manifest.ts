@@ -88,6 +88,17 @@ export interface ParsedManifest {
   serverExports: string[];
   webUiPage: string | null;
   webFiles: string[];
+  /**
+   * Client-delivered assets (docs/spec/assets.md): globs of data files delivered to players on every
+   * environment that can deliver bundled files.
+   */
+  assets: string[];
+  /** Assets in one environment's native delivery form (`environment_asset "<env>" "<path>"`). */
+  environmentAssets: Record<string, string[]>;
+  /** Game or engine builds the assets were made and tested against, per environment. */
+  gameBuilds: Record<string, string[]>;
+  /** FiveM-style data files: data file type -> paths (`data_file "DLC_ITYP_REQUEST" "stream/x.ytyp"`). */
+  dataFiles: Record<string, string[]>;
   /** Directives this parser does not interpret (OPEN//77-only or future). Kept, never fatal. */
   unknown: { directive: string; args: unknown[]; line: number }[];
 }
@@ -131,6 +142,25 @@ def(["environments"], "environments", "list");
 def(["capability", "capabilities"], "capabilities", "list");
 def(["optional_capability", "optional_capabilities"], "optional_capabilities", "list");
 def(["environment_script", "environment_scripts"], "environment_scripts", "envlist");
+// Client-delivered assets (docs/spec/assets.md).
+def(["asset", "assets"], "assets", "list");
+def(["environment_asset", "environment_assets"], "environment_assets", "envlist");
+def(["game_build", "game_builds"], "game_builds", "envlist");
+def(["data_file", "data_files"], "data_files", "envlist");
+
+/** What the first argument of each keyed list directive names, for its error message. */
+const ENVLIST_HINT: Record<string, string> = {
+  environment_scripts: 'an environment and at least one script, e.g. environment_script "love2d" "env/love2d/hud.lua"',
+  environment_assets: 'an environment and at least one asset path, e.g. environment_asset "open77" "dist/map.zip"',
+  game_builds: 'an environment and at least one build, e.g. game_build "open77" "2.5"',
+  data_files: 'a data file type and at least one path, e.g. data_file "DLC_ITYP_REQUEST" "stream/props.ytyp"',
+};
+/** A game build label: "2.5", "1.0.3-hotfix", "b3258". */
+export const GAME_BUILD = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
+/** A FiveM data file type: "DLC_ITYP_REQUEST", "VEHICLE_METADATA_FILE". */
+export const DATA_FILE_TYPE = /^[A-Z0-9_]{1,64}$/;
+/** Reserved for the per-buyer fingerprint entry of a delivered archive (docs/spec/assets.md). */
+export const RESERVED_ASSET_PREFIX = ".scriptgo/";
 
 function flattenStrings(args: Value[], directive: RawDirective, errors: Diagnostic[]): string[] {
   const out: string[] = [];
@@ -295,7 +325,8 @@ export function parseManifest(source: string, opts: { fileName?: string } = {}):
 
   const scalars: Record<string, { value: string | boolean; line: number }> = {};
   const lists: Record<string, string[]> = {};
-  const envScripts: Record<string, string[]> = {};
+  const envLists: Record<string, Record<string, string[]>> = {};
+  const envScripts: Record<string, string[]> = (envLists["environment_scripts"] = {});
   const unknown: ParsedManifest["unknown"] = [];
 
   for (const d of directives) {
@@ -330,10 +361,10 @@ export function parseManifest(source: string, opts: { fileName?: string } = {}):
     if (spec.kind === "envlist") {
       const [env, ...rest] = d.args;
       if (typeof env !== "string" || rest.length === 0) {
-        errors.push({ code: "invalid_value", message: `'${d.name}' needs an environment and at least one script, e.g. ${d.name} "love2d" "env/love2d/hud.lua".`, line: d.line });
+        errors.push({ code: "invalid_value", message: `'${d.name}' needs ${ENVLIST_HINT[spec.key]}.`, line: d.line });
         continue;
       }
-      (envScripts[env] ??= []).push(...flattenStrings(rest, d, errors));
+      ((envLists[spec.key] ??= {})[env] ??= []).push(...flattenStrings(rest, d, errors));
       continue;
     }
     (lists[spec.key] ??= []).push(...flattenStrings(d.args, d, errors));
@@ -387,6 +418,29 @@ export function parseManifest(source: string, opts: { fileName?: string } = {}):
       if (reason) errors.push({ code: "unsafe_path", message: `'${p}' in ${key}: ${reason}.` });
     }
   }
+  // Assets: safe paths outside the reserved fingerprint folder; keyed lists with valid keys.
+  const environmentAssets = envLists["environment_assets"] ?? {};
+  const gameBuilds = envLists["game_builds"] ?? {};
+  const dataFiles = envLists["data_files"] ?? {};
+  const checkAsset = (p: string, where: string): void => {
+    const reason = unsafePathReason(p);
+    if (reason) errors.push({ code: "unsafe_path", message: `'${p}' in ${where}: ${reason}.` });
+    else if (p.startsWith(RESERVED_ASSET_PREFIX)) errors.push({ code: "reserved_path", message: `'${p}' in ${where}: ${RESERVED_ASSET_PREFIX} is reserved for the per-buyer fingerprint.` });
+  };
+  for (const p of list("assets")) checkAsset(p, "assets");
+  for (const [env, paths] of Object.entries(environmentAssets)) {
+    if (!SLUG.test(env)) errors.push({ code: "invalid_environment", message: `Environment '${env}' in environment_asset is not a valid slug.` });
+    for (const p of paths) checkAsset(p, `environment_asset "${env}"`);
+  }
+  for (const [env, builds] of Object.entries(gameBuilds)) {
+    if (!SLUG.test(env)) errors.push({ code: "invalid_environment", message: `Environment '${env}' in game_build is not a valid slug.` });
+    for (const b of builds) if (!GAME_BUILD.test(b)) errors.push({ code: "invalid_game_build", message: `Game build '${b}' for ${env}: use letters, digits, '.', '_', '+' or '-' (e.g. "2.5").` });
+  }
+  for (const [type, paths] of Object.entries(dataFiles)) {
+    if (!DATA_FILE_TYPE.test(type)) errors.push({ code: "invalid_data_file", message: `Data file type '${type}' must be upper-case letters, digits or '_' (e.g. "DLC_ITYP_REQUEST").` });
+    for (const p of paths) checkAsset(p, `data_file "${type}"`);
+  }
+
   const webUiPage = str("web_ui_page");
   if (webUiPage !== null) {
     const reason = unsafePathReason(webUiPage);
@@ -431,7 +485,8 @@ export function parseManifest(source: string, opts: { fileName?: string } = {}):
     warnings.push({ code: "missing_scriptgo_version", message: "Declare scriptgo_version (e.g. \">=0.1.0\") so hosts can check compatibility." });
   }
   const hasCode = scriptKeys.slice(0, 3).some((k) => list(k).length > 0) || Object.keys(envScripts).length > 0;
-  if (!hasCode && list("files").length === 0) errors.push({ code: "empty_resource", message: "The resource declares no scripts and no files." });
+  const hasAssets = list("assets").length > 0 || Object.keys(environmentAssets).length > 0;
+  if (!hasCode && list("files").length === 0 && !hasAssets) errors.push({ code: "empty_resource", message: "The resource declares no scripts, no files and no assets." });
 
   // scriptgo.json has no line numbers to report.
   if (json) for (const d of [...errors, ...warnings]) delete d.line;
@@ -467,6 +522,10 @@ export function parseManifest(source: string, opts: { fileName?: string } = {}):
     serverExports: list("server_exports"),
     webUiPage,
     webFiles: list("web_files"),
+    assets: list("assets"),
+    environmentAssets,
+    gameBuilds,
+    dataFiles,
     unknown,
   };
   return { ok: true, manifest, warnings };

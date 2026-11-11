@@ -50,6 +50,20 @@ Licence check and signed releases, once the adapter has passed a run on a real s
 
 See [Protect your work](/docs/protect-your-work) for what protection does and does not do.
 
+## Assets
+
+Maps, models, textures, sounds and other files players download. See [Selling assets](/docs/selling-assets).
+
+| | |
+|---|---|
+| Support | Supported |
+| `environment_asset` | BeamNG mod .zip files, put in Resources/Client/: every player downloads them at join |
+| Pack | `scriptgo pack --target beammp` |
+
+Packed (Resources/Client); not run, BeamMP-Server needs an AuthKey.
+
+Asset escrow: Open: would need native code in the BeamMP launcher or a BeamNG mod.
+
 ## The platform's own rules
 
 Neither BeamNG nor BeamMP publishes a rule on selling mods.

@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "warnings": [],
+  "manifest": {
+    "name": "bare_interior",
+    "assets": [],
+    "serverScripts": [],
+    "environmentAssets": { "open77": ["dist/bare_interior.zip"] }
+  }
+}

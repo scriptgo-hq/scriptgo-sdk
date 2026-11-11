@@ -66,7 +66,8 @@ scoped to one user. Revoke it from the same settings page if it leaks.
 | `scriptgo test <dir>` | Runs the resource's `test_script` files in the standalone host |
 | `scriptgo run <dir>...` | Runs resources in the standalone host, in simulated or real time |
 | `scriptgo verify <dir>` | Runs the resource on its environments and writes compatibility reports |
-| `scriptgo pack <dir>` | Builds the `.zip` you can upload on the website: the same archive `publish` sends, README and tests included. `--target open77` builds an OPEN//77 resource folder instead |
+| `scriptgo pack <dir>` | Builds the `.zip` you can upload on the website: the same archive `publish` sends, README, tests and assets included. `--target open77\|fivem\|garrysmod\|beammp\|luanti\|rust\|hytale` builds that platform's folder instead, assets in its own form; `--without-assets` builds a platform that delivers none of the package's assets. See [Selling assets](/docs/selling-assets) |
+| `scriptgo assets fingerprint <copy>` | Reads and checks the per-buyer fingerprints of a downloaded copy. `assets seal` and `assets open` make and read encrypted asset containers, for platform builders |
 | `scriptgo login` | Saves a personal access token |
 | `scriptgo publish [dir]` | Uploads a release of the resource and publishes it |
 | `scriptgo add creator//package` | Installs a package into `./resources` |
@@ -190,6 +191,10 @@ scriptgo publish --owns-code
 4. Waits for validation (`--timeout`, 120 seconds by default) and prints the checks.
 5. With `--owns-code`, declares your rights to the code and publishes. Add
    `--targets-proprietary-game` when the code targets or includes content from a proprietary game.
+
+A release with assets also needs `--asset-rights original|game-edits|game-extracted`: whether you
+made them, edited a game's own files, or included files taken from a game. Buyers see it on the
+package page.
 
 Without `--owns-code` the release stays validated but unpublished; you can finish it from your
 dashboard. `--dry-run` only packs. A published version is immutable: to fix `1.5.0`, publish

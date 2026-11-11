@@ -81,12 +81,18 @@ export async function run(args: string[]): Promise<number> {
     const actual = createHash("sha256").update(bytes).digest("hex");
     const announced = res.headers.get("x-sha256");
     const listed = pkg.versions.find((v) => v.version === version)?.sha256;
-    if (!announced || actual !== announced || (listed && listed !== actual)) {
+    // A release with assets is delivered as a copy built for this licence (docs/spec/assets.md): its
+    // hash is the copy's, and the registry's signature names the published archive it came from.
+    const fingerprint = res.headers.get("x-scriptgo-fingerprint");
+    if (!announced || actual !== announced || (listed && listed !== actual && !fingerprint)) {
       throw new Error(`SHA-256 mismatch for ${ident.creator}//${ident.name}@${version}: got ${actual}, registry says ${listed ?? announced ?? "nothing"}. Nothing was written.`);
     }
 
     // The registry's signature: the bytes are the ones it published, whoever served them.
     const signature = signatureFromHeaders(res.headers);
+    if (!signature && fingerprint) {
+      throw new Error(`${ident.creator}//${ident.name}@${version}: a licensed copy came without the registry's signature. Nothing was written.`);
+    }
     if (!signature) {
       if (!a.bools.has("allow-unsigned")) {
         throw new Error(`${ident.creator}//${ident.name}@${version} carries no release signature. Nothing was written. (A registry that predates release signing: rerun with --allow-unsigned.)`);
@@ -98,6 +104,12 @@ export async function run(args: string[]): Promise<number> {
       for (const n of trust.notes) console.log(n);
       const verdict = verifyRelease(signature, trust.keys, { package: `${ident.creator}//${ident.name}`, version, sha256: actual });
       if (!verdict.ok) throw new Error(`signature check failed for ${ident.creator}//${ident.name}@${version}: ${verdict.reason}. Nothing was written.`);
+      if (fingerprint) {
+        const att = JSON.parse(signature.payload) as { release?: { sha256?: string }; fingerprint?: string };
+        if (att.fingerprint !== fingerprint || (listed && att.release?.sha256 !== listed)) {
+          throw new Error(`${ident.creator}//${ident.name}@${version}: the signed copy does not name the published release (${listed ?? "unknown"}). Nothing was written.`);
+        }
+      }
     }
 
     const root = resolve(a.flags.dir ?? "resources");
@@ -130,6 +142,7 @@ export async function run(args: string[]): Promise<number> {
       writeFileSync(file, data);
     }
     console.log(`added ${ident.creator}//${ident.name}@${version} -> ${dest} (${Object.keys(entries).length} files, sha256 ${actual}${signature ? ", signature verified" : ""})`);
+    if (fingerprint) console.log("this copy is licensed to you and fingerprinted: it names your licence, so keep it to your own servers");
     if (pkg.pricing?.kind === "paid") console.log("this package is sold under license: activate it with `scriptgo license activate`");
     return 0;
   } catch (e) {

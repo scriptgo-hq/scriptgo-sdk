@@ -50,6 +50,21 @@ No licence check in the shim, so a package runs there without one. Releases are 
 
 See [Protect your work](/docs/protect-your-work) for what protection does and does not do.
 
+## Assets
+
+Maps, models, textures, sounds and other files players download. See [Selling assets](/docs/selling-assets).
+
+| | |
+|---|---|
+| Support | Supported |
+| `assets` | files under stream/ are streamed to players; other files are listed in files {} and downloaded by players |
+| `environment_asset` | streamed game files under stream/ (.ydr, .yft, .ytd, .ymap, .ytyp ...) and data files listed by data_file |
+| Pack | `scriptgo pack --target fivem` |
+
+Packed (fxmanifest files, data_file, this_is_a_map); not run on FXServer, which needs a Cfx.re licence key.
+
+Asset escrow: No client work is possible from a resource; FiveM's own Asset Escrow covers stream files on its side.
+
 ## The platform's own rules
 
 The platform's creator terms keep paid server content on its own marketplace (Rockstar Games Creator Platform License Agreement, 2026-09-10, §3.1(6)).

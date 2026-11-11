@@ -150,6 +150,19 @@ Code escrow: the compiled bridge next to the plugin has the native loader decryp
 
 See [Protect your work](/docs/protect-your-work) for what protection does and does not do.
 
+## Assets
+
+Maps, models, textures, sounds and other files players download. See [Selling assets](/docs/selling-assets).
+
+| | |
+|---|---|
+| Support | Partial |
+| `environment_asset` | one custom map (.map), which players download from a URL the operator hosts (server.levelurl); a plugin cannot send files to players |
+
+Packed (the map for server.levelurl); not run.
+
+Asset escrow: Not feasible: Facepunch's client.
+
 ## The platform's own rules
 
 The developer allows selling mods you own.

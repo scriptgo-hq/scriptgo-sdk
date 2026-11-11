@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "warnings": [],
+  "manifest": {
+    "name": "night_market",
+    "assets": ["media/**/*.png"],
+    "environmentAssets": { "open77": ["dist/night_market.zip"], "fivem": ["stream/**"] },
+    "gameBuilds": { "open77": ["2.5"] },
+    "dataFiles": { "DLC_ITYP_REQUEST": ["stream/night_market.ytyp"] }
+  }
+}

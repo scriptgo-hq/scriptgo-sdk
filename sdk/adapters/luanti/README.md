@@ -74,3 +74,15 @@ unknown, `activate`, verify by deployment token, `activate` refused; 5 licensing
 API schemas, environment `luanti`, adapter `luanti-0.1.0`): the first licensing run on Luanti, on
 Docker Desktop for Windows. No player joins a verify run, so the join, chat-command and
 chat-notification paths are covered by reading the code, not by a run yet.
+
+## Assets
+
+`scriptgo pack <dir> --target luanti` writes a media mod, `mods/sgmedia_<name>/` (`mod.conf`, a
+one-line `init.lua`, the media in `textures/`, `sounds/`, `models/`, `media/`, `locale/`,
+`fonts/`), which the engine sends to every client at join. Luanti does not load a mod folder without
+`init.lua`; measured on 5.18.
+
+Run in the real runtime (2026-11-11): `scriptgo verify sdk/conformance/sg_assets_probe --env luanti`
+on the official server image, Luanti 5.18.0. The server announced both packed files to clients with
+the SHA-1 of their bytes. Not run: a Luanti client joining and downloading them. See
+`docs/spec/assets.md`.

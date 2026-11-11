@@ -383,3 +383,11 @@ limit is 20 minutes. Without a server folder the run is reported as skipped, nev
 - Replacing `ScriptGo.Bridge.dll` or `KeraLua.dll` needs a server restart; reloading the plugin does
   not unload them.
 - Escrow has its own list: "Escrow limits".
+
+## Assets
+
+A package can carry one custom map (`environment_asset "rust" "<file>.map"`).
+`scriptgo pack <dir> --target rust` copies it; the operator hosts it at a URL and sets
+`server.levelurl`. A plugin cannot send files to players, so nothing else can be delivered on Rust.
+
+Not run in the real runtime. See `docs/spec/assets.md`.

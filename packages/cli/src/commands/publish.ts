@@ -1,5 +1,5 @@
 // scriptgo publish [dir] [--package <slug>] --owns-code [--targets-proprietary-game] [--dry-run]
-//                  [--escrow [--escrow-ignore <glob>]...]
+//                  [--escrow [--escrow-ignore <glob>]...] [--asset-rights original|game-edits|game-extracted]
 // scriptgo publish --bundle <file.escrow.zip> --escrow-key <file.json> --package <slug> --owns-code
 //
 // --escrow publishes a PROTECTED release: the CLI builds the encrypted bundle here, signs its
@@ -14,6 +14,8 @@
 // uploads it as a new release, waits for validation, declares rights and publishes. The package is
 // created on first publish (slug = resource name with '_' turned into '-', or --package).
 // Rights are never assumed: without --owns-code the release is left validated but unpublished.
+// A release with assets also needs --asset-rights: the case that applies to them (made by you,
+// edits of a game's files, or files taken from a game), shown to operators as information.
 import { existsSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { readBundle } from "@scriptgo/escrow";
@@ -21,6 +23,8 @@ import { Category } from "@scriptgo/shared";
 import { parseArgs } from "../lib/args.ts";
 import { buildEscrow } from "../lib/escrow-pack.ts";
 import { keyIdOf } from "../lib/release-signature.ts";
+import { uploadAssetErrors } from "../lib/assets.ts";
+import { hasAssets } from "@scriptgo/manifest";
 import { listFiles, readResource } from "../lib/sdk.ts";
 import { scriptgoArchive } from "./pack.ts";
 import { ApiClient, ApiError, describeError } from "./_api-client.ts";
@@ -48,6 +52,9 @@ export async function buildArchive(dir: string) {
   const res = readResource(dir);
   if (!res.result.ok) throw new Error(res.result.errors.map((e) => `${e.code}: ${e.message}`).join("\n"));
   const m = res.result.manifest;
+  // Assets: data only, sizes, delivery rules; never a buyer's fingerprinted copy (lib/assets.ts).
+  const assetErrors = uploadAssetErrors(res).errors;
+  if (assetErrors.length > 0) throw new Error(assetErrors.map((e) => `${e.code}: ${e.message}`).join("\n"));
   const { zip, files, errors } = await scriptgoArchive(m, listFiles(res.root), res.root, res.manifestFile);
   if (errors.length > 0) throw new Error(errors.map((e) => `${e.code}: ${e.message}`).join("\n"));
   return { zip, name: m.name, version: m.version, title: m.title, description: m.description, category: m.category, license: m.license, files, manifest: m, manifestFile: res.manifestFile };
@@ -69,6 +76,9 @@ function printChecks(r: Release): void {
   }
 }
 
+/** --asset-rights values and the case each one declares (AssetRightsCase in @scriptgo/shared). */
+const ASSET_RIGHTS: Record<string, string> = { original: "original", "game-edits": "game_edits", "game-extracted": "game_extracted" };
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function run(args: string[]): Promise<number> {
@@ -77,6 +87,7 @@ export async function run(args: string[]): Promise<number> {
     console.log(
       "scriptgo publish [resourceDir] [--package <slug>] --owns-code [--targets-proprietary-game] [--dry-run] [--timeout <seconds>]\n" +
         "                 [--escrow [--escrow-ignore <glob>]...]   protect the release: encrypted bundle, key handed to the master\n" +
+        "                 [--asset-rights original|game-edits|game-extracted]   required for a release with assets\n" +
         "scriptgo publish --bundle <file.escrow.zip> --escrow-key <file.json> --package <slug> --owns-code",
     );
     return 0;
@@ -84,6 +95,11 @@ export async function run(args: string[]): Promise<number> {
   const prebuilt = a.flags.bundle || a.flags["escrow-key"];
   if (prebuilt && !(a.flags.bundle && a.flags["escrow-key"] && a.flags.package)) {
     console.error("scriptgo publish: --bundle needs --escrow-key and --package (the registry slug the bundle was built for)");
+    return 2;
+  }
+  const assetRights = a.flags["asset-rights"] ? ASSET_RIGHTS[a.flags["asset-rights"]] : null;
+  if (a.flags["asset-rights"] && !assetRights) {
+    console.error(`scriptgo publish: --asset-rights takes ${Object.keys(ASSET_RIGHTS).join(", ")}`);
     return 2;
   }
   const dir = a.positional[0] ?? ".";
@@ -179,7 +195,14 @@ export async function run(args: string[]): Promise<number> {
       );
       return 1;
     }
-    await api.post(`/v1/creator/releases/${release.id}/rights`, { ownsCode: true, targetsProprietaryGame: a.bools.has("targets-proprietary-game"), thirdPartyAssets: [] });
+    if (pack && hasAssets(pack.manifest) && !assetRights) {
+      console.error(
+        "asset rights not declared: rerun with --asset-rights original (you made the assets or hold their rights),\n" +
+          "game-edits (edits of a game's own files) or game-extracted (includes files taken from a game).",
+      );
+      return 1;
+    }
+    await api.post(`/v1/creator/releases/${release.id}/rights`, { ownsCode: true, targetsProprietaryGame: a.bools.has("targets-proprietary-game"), thirdPartyAssets: [], ...(assetRights ? { assetRights } : {}) });
     const published = (await api.post<Release>(`/v1/creator/releases/${release.id}/publish`)).data;
     const me = (await api.get<{ creatorProfile: { username: string } | null }>("/v1/me")).data;
     console.log(`published ${me.creatorProfile?.username ?? "?"}//${slug}@${published.version} (sha256 ${published.sha256})`);

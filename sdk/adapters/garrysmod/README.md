@@ -99,3 +99,15 @@ convars, notifications, join and drop). See `TEST_RESULTS.md`.
 
 `sdk/lua/spec/garrysmod_adapter_spec.lua` tests the adapter against a mock of the GLua API; it
 checks the mapping only and is not evidence that anything runs on Garry's Mod.
+
+## Assets
+
+`scriptgo pack <dir> --target garrysmod` puts a package's content (`materials/`, `models/`,
+`sound/`, `maps/`, `resource/`, `particles/`) at the root of `scriptgo_<name>/` and generates
+`lua/autorun/server/sgassets_<name>.lua`, which adds each file to the download list with
+`resource.AddSingleFile`. An asset-only package gets no runtime addon.
+
+Run in the real runtime (2026-11-11): `scriptgo verify sdk/conformance/sg_assets_probe --env
+garrysmod` on a dedicated server (srcds, gm_construct, loopback). The engine found both files in the
+GAME file system and the autorun added them to the download list. Not run: a GMod client joining and
+downloading them; a `.bsp` map. See `docs/spec/assets.md`.

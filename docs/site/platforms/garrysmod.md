@@ -95,6 +95,21 @@ Licence check and signed releases. The host runs plain script, so its operator c
 
 See [Protect your work](/docs/protect-your-work) for what protection does and does not do.
 
+## Assets
+
+Maps, models, textures, sounds and other files players download. See [Selling assets](/docs/selling-assets).
+
+| | |
+|---|---|
+| Support | Supported |
+| `assets` | content of the addon (materials/, models/, sound/, maps/, resource/, particles/), each file added to the download list with resource.AddSingleFile |
+| `environment_asset` | the same content roots, including .bsp maps under maps/ |
+| Pack | `scriptgo pack --target garrysmod` |
+
+Run on a dedicated server (srcds): every packed file was found by the engine and added to the download list. No client was run.
+
+Asset escrow: Not feasible: GMod clients do not load server-sent binary modules.
+
 ## The platform's own rules
 
 The developer allows selling mods you own, outside the Steam Workshop.

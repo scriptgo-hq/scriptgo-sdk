@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "warnings": [],
+  "manifest": {
+    "name": "night_market",
+    "category": "housing",
+    "serverScripts": ["server/doors.lua"],
+    "assets": ["media/**/*.png", "media/sounds/*.ogg"],
+    "environmentAssets": {
+      "open77": ["dist/night_market.zip"],
+      "fivem": ["stream/**", "data/vehicles.meta"],
+      "garrysmod": ["maps/gm_night_market.bsp"]
+    },
+    "gameBuilds": {
+      "open77": ["2.5"],
+      "fivem": ["3258", "3407"]
+    },
+    "dataFiles": {
+      "DLC_ITYP_REQUEST": ["stream/night_market.ytyp"],
+      "VEHICLE_METADATA_FILE": ["data/vehicles.meta"]
+    }
+  }
+}
