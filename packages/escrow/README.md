@@ -3,7 +3,7 @@
 SCRIPT//GO protected releases: the release format, signing, sealing and watermarking (Node crypto).
 
 ```bash
-npm install https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.3/scriptgo-escrow-0.1.3.tgz
+npm install https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.4/scriptgo-escrow-0.1.4.tgz
 ```
 
 Part of the [SCRIPT//GO SDK](https://github.com/scriptgo-hq/scriptgo-sdk). Documentation:

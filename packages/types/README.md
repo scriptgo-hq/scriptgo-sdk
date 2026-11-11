@@ -3,7 +3,7 @@
 TypeScript declarations of the SCRIPT//GO runtime API, for scripts written in TypeScript.
 
 ```bash
-npm install https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.3/scriptgo-types-0.1.3.tgz
+npm install https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.4/scriptgo-types-0.1.4.tgz
 ```
 
 Part of the [SCRIPT//GO SDK](https://github.com/scriptgo-hq/scriptgo-sdk). Documentation:

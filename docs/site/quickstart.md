@@ -21,7 +21,7 @@ see [Languages](#languages) at the end.
 Install the CLI first (Node.js 22 or later):
 
 ```bash
-npm install -g https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.3/scriptgo-cli-0.1.3.tgz
+npm install -g https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.4/scriptgo-cli-0.1.4.tgz
 ```
 
 `scriptgo test` also needs a Lua interpreter (`lua`, `lua5.4` or `luajit`) on the `PATH`.
@@ -320,7 +320,7 @@ typings are `@scriptgo/types`, generated from the runtime contract. The package 
 registry yet; install it from the SDK's GitHub release:
 
 ```bash
-npm install -D https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.3/scriptgo-types-0.1.3.tgz
+npm install -D https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.4/scriptgo-types-0.1.4.tgz
 ```
 
 A resource's `tsconfig.json`:

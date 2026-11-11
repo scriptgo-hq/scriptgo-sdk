@@ -17,7 +17,7 @@ The CLI is the `@scriptgo/cli` package. It runs on Node.js 22 or later. Install 
 GitHub release:
 
 ```bash
-npm install -g https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.3/scriptgo-cli-0.1.3.tgz
+npm install -g https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.4/scriptgo-cli-0.1.4.tgz
 scriptgo --version
 ```
 
