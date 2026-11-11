@@ -333,6 +333,8 @@ function M.new(s)
             if #entries == 0 and handles then return end
         end
         state.sending = true
+        -- Known from the moment it is sent, so a player who leaves before the answer is removed too.
+        for _, pair in ipairs(ids) do known[pair[1]] = pair[2] end
         local body = #entries > 0 and { players = entries } or '{"players":[]}'
         call("POST", "/v1/presence", body, function(answer, reason)
             state.sending = false
@@ -353,7 +355,6 @@ function M.new(s)
             local k = answer.presenceKey
             local newKey = type(k) == "string" and #k >= 16 and #k <= 128 and k:find("^[%w_%-]+$") and k or nil
             state.rotatesAt = parseIsoTime(answer.rotatesAt)
-            for _, pair in ipairs(ids) do known[pair[1]] = pair[2] end
             if #entries > 0 then
                 state.lastReportAt = now
                 state.reported = #entries
