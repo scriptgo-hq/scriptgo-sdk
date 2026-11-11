@@ -99,6 +99,26 @@ POST /v1/identity/codes/confirm    (from a game server, server link token)
 After a match or a code, the browser holds a signed, `HttpOnly`, `Secure` cookie for that game
 identity, 30 days. Next time the page offers "Continue as **PlayerName**" (with "Not me").
 
+### When the player is not in game
+
+Presence only knows connected players, and `/link` needs the player in game. For a buyer who is not
+playing right now, two more things are tried, in this order, before asking them to join and type the
+code:
+
+1. **The remembered browser** (the cookie above).
+2. **Confirmed addresses.** Each time a buyer confirms an identity ("Yes, that's me", or a code), SCRIPT//GO
+   keeps the fingerprint of **that browser's** address against the identity: `HMAC-SHA256(historyKey,
+   normalised address)`, where `historyKey` is a long-term secret held by the API only (never sent to
+   game servers). Kept 60 days after the last confirmation from that address, at most 5 addresses per
+   identity. Only confirmed pairs are kept: an address a player merely played from is never stored
+   beyond presence.
+   A later visit from a matching address, with exactly one identity behind it, is offered as
+   "Continue as **PlayerName**?" with "Not me". Several identities, or none: the code.
+
+The worst case of a wrong offer is a buyer paying for someone else in the same home, who sees the
+name before paying. A player can clear their confirmed addresses ("Forget this browser and my
+addresses" on the sign-in page, and from the account settings when signed in with an account).
+
 ## What the shop receives
 
 - **Tebex webstore**, through "Sign in with SCRIPT//GO": the ID token's `sub` is an opaque, stable
@@ -113,7 +133,10 @@ identity, 30 days. Next time the page offers "Continue as **PlayerName**" (with 
 - Addresses are personal data. Only keyed fingerprints leave the game server, kept while the player
   is connected; the key rotates daily. The operator turns presence on, and the operator's own notice
   to players must say so. SCRIPT//GO's privacy policy describes it.
-- The page shows a name only to a browser whose address matched that one connected player.
+- The page shows a name only to a browser whose address matched exactly one connected player, or one
+  identity confirmed earlier from that address.
+- Confirmed addresses (API-side fingerprints, never raw) are kept 60 days after the last confirmation,
+  at most 5 per identity, and can be cleared by the player.
 
 ## What Tebex documents, and what to confirm with Tebex
 
