@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { ActivateBody, ActivateResult, VerifyBody, VerifyResult } from "@scriptgo/shared";
+import { createStubPerks } from "./stub-perks.ts";
+import { createStubPresence, type StubPresence } from "./stub-presence.ts";
 
 /**
  * A loopback stand-in for the SCRIPT//GO licensing API, for `scriptgo verify --stub-api`.
@@ -28,6 +30,10 @@ export interface StubApi {
   /** Package references the key is valid for ("creator//name" or the resource name). */
   packages: string[];
   requests: StubRequest[];
+  /** The server link token of the perks routes (lib/stub-perks.ts): config `scriptgo_server_token`. */
+  serverToken: string;
+  /** The player match routes (lib/stub-presence.ts), on the same server link token. */
+  presence: StubPresence;
   close(): Promise<void>;
 }
 
@@ -38,6 +44,8 @@ export async function startStubApi(opts: { packages: string[]; environments?: st
   const environments = opts.environments ?? ["standalone", "love2d", "godot", "luanti", "openresty", "defold", "neovim", "open77", "dotnet", "garrysmod", "hytale", "rust", "beammp"];
   const deployments = new Map<string, { environment: string; activationId: string }>();
   const requests: StubRequest[] = [];
+  const perks = createStubPerks();
+  const presence = createStubPresence(perks.serverToken);
   const periodEnd = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
 
   const verifyAnswer = (valid: boolean, reason: string | null, environment: string, activation: boolean): VerifyResult =>
@@ -68,6 +76,8 @@ export async function startStubApi(opts: { packages: string[]; environments?: st
     requests.push(entry);
 
     if (req.method === "GET" && path === "/v1/health") return send(res, 200, { ok: true, version: "stub" });
+    if (perks.handle(req, path, raw, entry, (s, b) => send(res, s, b), (s, c, m) => error(res, s, c, m))) return;
+    if (presence.handle(req, path, raw, entry, (s, b) => send(res, s, b), (s, c, m) => error(res, s, c, m))) return;
     if (req.method !== "POST" || (path !== "/v1/licenses/verify" && path !== "/v1/licenses/activate")) {
       return error(res, 404, "not_found", "The stub serves /v1/health, /v1/licenses/verify and /v1/licenses/activate.");
     }
@@ -127,6 +137,8 @@ export async function startStubApi(opts: { packages: string[]; environments?: st
     licenseKey,
     packages: opts.packages,
     requests,
+    serverToken: perks.serverToken,
+    presence,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }

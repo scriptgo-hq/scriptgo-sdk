@@ -8,8 +8,9 @@
 //               (--open77-server or OP77_SERVER_EXE); without it the run is reported as skipped,
 //               never as verified. Only the server half runs: no game client is started.
 //   luanti      builds the Luanti mod into a throwaway game and runs the official Luanti server
-//               image (Docker, no network) in the mod's verify mode; the mod writes the report.
-//               Without Docker or the image the run is skipped.
+//               image (Docker, no network; with --stub-api Docker's default network, to reach the
+//               stub through host.docker.internal) in the mod's verify mode; the mod writes the
+//               report. Without Docker or the image the run is skipped.
 //   love2d      runs LÖVE (lovec) headless on examples/love2d/demo in its verify mode, ticked by
 //               real love.update frames. Needs --love, SCRIPTGO_LOVE or tools/runtimes/love.
 //   godot       runs Godot headless on examples/godot/demo (lua-gdextension) in its verify mode,
@@ -59,7 +60,7 @@
 // --api <url> --license-key <key> does the same against a real SCRIPT//GO API (no api:* checks:
 // only the stub sees the requests).
 import { spawn, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 // @ts-expect-error plain ESM build script without type declarations
 import { buildMod } from "../../../../sdk/adapters/luanti/build.mjs";
@@ -71,6 +72,7 @@ import { parseArgs } from "../lib/args.ts";
 import { defaultSearchPaths, findManifestFile, fromCheckout, listFiles, pickInterpreters, readResource, repoRoot, standaloneMain, type LoadedResource } from "../lib/sdk.ts";
 import { writeReadmeExample, type ReadmeExample } from "../lib/readme-example.ts";
 import { startStubApi, type StubRequest } from "../lib/stub-api.ts";
+import type { StubPresence } from "../lib/stub-presence.ts";
 import { acceptMinecraftEula, verifyCcTweaked } from "../lib/cctweaked.ts";
 import { findDotnet, ensureDotnetHost } from "../lib/dotnet.ts";
 import { compileTypeScript, ESBUILD_VERSION } from "../lib/typescript.ts";
@@ -109,9 +111,23 @@ const SDK_VERSION = "0.1.0";
 interface ApiTarget {
   url: string;
   licenseKey: string;
+  /** The server link token for perks (config `scriptgo_server_token`): the stub's, or --server-token. */
+  serverToken?: string;
   /** Requests the stub saw; always empty for a real API. */
   requests: StubRequest[];
+  /** The stub's player match routes, to compare what was reported; absent for a real API. */
+  presence?: StubPresence;
   label: string;
+}
+
+/**
+ * The server link token as the convar every host reads (docs/spec/perks.md), when there is one;
+ * with it, `scriptgo_presence` on for a package that declares presence (docs/spec/player-match.md).
+ */
+export function serverTokenConvar(api?: { serverToken?: string }, m?: { capabilities: string[]; optionalCapabilities?: string[] }): Record<string, string> {
+  if (!api?.serverToken) return {};
+  const presence = m && (m.capabilities.includes("presence") || (m.optionalCapabilities ?? []).includes("presence"));
+  return { scriptgo_server_token: api.serverToken, ...(presence ? { scriptgo_presence: "true" } : {}) };
 }
 
 /** The adapter version the OPEN//77 shim reports at runtime (and sends to the licensing API). */
@@ -133,16 +149,51 @@ function stubPackages(m: ParsedManifest): string[] {
  * made no request (most packages never call the API).
  */
 export function apiChecks(requests: StubRequest[], from: number, environment: string, adapterVersion: string): Check[] {
+  const out: Check[] = [];
   const mine = requests.slice(from).filter((r) => r.path.startsWith("/v1/licenses/"));
-  if (mine.length === 0) return [];
-  const bad = mine.find((r) => r.bodyError !== null);
-  const wrongEnv = mine.find((r) => r.bodyError === null && r.environment !== environment);
-  const wrongAdapter = mine.find((r) => r.bodyError === null && r.adapterVersion !== adapterVersion);
-  return [
-    { name: "api:bodies_valid", status: bad ? "failed" : "passed", message: bad ? `${bad.path}: ${bad.bodyError}` : `${mine.length} licensing requests` },
-    { name: "api:environment", status: wrongEnv ? "failed" : "passed", message: wrongEnv ? `sent '${wrongEnv.environment}'` : environment },
-    { name: "api:adapter_version", status: wrongAdapter ? "failed" : "passed", message: wrongAdapter ? `sent '${wrongAdapter.adapterVersion}'` : adapterVersion },
-  ];
+  if (mine.length > 0) {
+    const bad = mine.find((r) => r.bodyError !== null);
+    const wrongEnv = mine.find((r) => r.bodyError === null && r.environment !== environment);
+    const wrongAdapter = mine.find((r) => r.bodyError === null && r.adapterVersion !== adapterVersion);
+    out.push(
+      { name: "api:bodies_valid", status: bad ? "failed" : "passed", message: bad ? `${bad.path}: ${bad.bodyError}` : `${mine.length} licensing requests` },
+      { name: "api:environment", status: wrongEnv ? "failed" : "passed", message: wrongEnv ? `sent '${wrongEnv.environment}'` : environment },
+      { name: "api:adapter_version", status: wrongAdapter ? "failed" : "passed", message: wrongAdapter ? `sent '${wrongAdapter.adapterVersion}'` : adapterVersion },
+    );
+  }
+  // Perks (lib/stub-perks.ts): every body matched its schema; a check names this environment.
+  const perks = requests.slice(from).filter((r) => r.path.startsWith("/v1/perks/"));
+  if (perks.length > 0) {
+    const bad = perks.find((r) => r.bodyError !== null);
+    const checks = perks.filter((r) => r.path === "/v1/perks/check" && r.bodyError === null);
+    const wrongEnv = checks.find((r) => r.environment !== environment);
+    out.push(
+      { name: "api:perks_bodies_valid", status: bad ? "failed" : "passed", message: bad ? `${bad.path}: ${bad.bodyError}` : `${perks.length} perks requests` },
+      { name: "api:perks_environment", status: wrongEnv || checks.length === 0 ? "failed" : "passed", message: wrongEnv ? `sent '${wrongEnv.environment}'` : checks.length === 0 ? "no perks check" : environment },
+    );
+  }
+  // Player match (lib/stub-presence.ts): every body matched its schema, so fingerprints only.
+  const match = requests.slice(from).filter((r) => r.path.startsWith("/v1/presence") || r.path.startsWith("/v1/identity/"));
+  if (match.length > 0) {
+    const bad = match.find((r) => r.bodyError !== null);
+    out.push({ name: "api:presence_bodies_valid", status: bad ? "failed" : "passed", message: bad ? `${bad.path}: ${bad.bodyError}` : `${match.length} player match requests` });
+  }
+  return out;
+}
+
+/** The standalone verifier's simulated address: a documentation address (RFC 5737). */
+export const VERIFIER_ADDRESS = "203.0.113.10";
+
+/**
+ * Player match: the host's fingerprint of the verifier is HMAC-SHA256(key, address) as Node's crypto
+ * computes it, so the host's HMAC and normalisation agree with the API's (docs/spec/player-match.md).
+ */
+export function fingerprintCheck(reports: { fp: string[]; key: string }[], address: string): Check {
+  if (reports.length === 0) return { name: "api:presence_fingerprint", status: "failed", message: "no presence entry reported" };
+  const bad = reports.find((r) => r.fp[0] !== createHmac("sha256", r.key).update(address).digest("hex"));
+  return bad
+    ? { name: "api:presence_fingerprint", status: "failed", message: `${bad.fp[0]!.slice(0, 12)}… is not HMAC-SHA256(key, address)` }
+    : { name: "api:presence_fingerprint", status: "passed", message: `${reports.length} entries match Node's HMAC-SHA256` };
 }
 
 /**
@@ -259,9 +310,9 @@ function testCompanions(res: LoadedResource, search: string[], have: Set<string>
  * spawnSync without blocking the event loop: the stub API lives in this process and must keep
  * answering while the Lua host runs.
  */
-function spawnAsync(cmd: string, argv: string[]): Promise<{ status: number | null; stdout: string; stderr: string }> {
+function spawnAsync(cmd: string, argv: string[], timeoutMs?: number): Promise<{ status: number | null; stdout: string; stderr: string }> {
   return new Promise((done) => {
-    const child = spawn(cmd, argv, { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(cmd, argv, { stdio: ["ignore", "pipe", "pipe"], ...(timeoutMs ? { timeout: timeoutMs } : {}) });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (c: Buffer) => { stdout += c.toString("utf8"); });
@@ -281,11 +332,14 @@ async function verifyStandalone(
   for (const s of search) argv.push("--search", s);
   if (example) argv.push("--with", example.dir);
   const firstRequest = stub?.requests.length ?? 0;
+  const firstReport = stub?.presence?.reports().length ?? 0;
   if (stub) {
     const config = join(tmp, "config.json");
     writeFileSync(config, JSON.stringify({
       resources: { [m.name]: { api: stub.url, license_key: stub.licenseKey } },
-      convars: { scriptgo_api: stub.url },
+      convars: { scriptgo_api: stub.url, ...serverTokenConvar(stub, m) },
+      // The simulated verifier's address, for a player-match probe: a documentation address.
+      verifierAddress: VERIFIER_ADDRESS,
     }));
     argv.push("--config", config);
   }
@@ -302,6 +356,9 @@ async function verifyStandalone(
   }
   report.checks.push(...selfChecks(report.log));
   if (stub) report.checks.push(...apiChecks(stub.requests, firstRequest, "standalone", report.adapterVersion));
+  if (stub?.presence && serverTokenConvar(stub, m).scriptgo_presence) {
+    report.checks.push(fingerprintCheck(stub.presence.reports().slice(firstReport), VERIFIER_ADDRESS));
+  }
   if (m.testScripts.length > 0) {
     const targv = [standaloneMain, "test", dir];
     for (const s of search) targv.push("--search", s);
@@ -399,7 +456,7 @@ async function verifyOpen77(
   const extra = stub
     ? {
         http: { enabled: true, allowedHosts: [new URL(stub.url).hostname], timeoutSeconds: 10 },
-        convars: { scriptgo_api: stub.url, [`${m.name}:api`]: stub.url, [`${m.name}:license_key`]: stub.licenseKey },
+        convars: { scriptgo_api: stub.url, ...serverTokenConvar(stub, m), [`${m.name}:api`]: stub.url, [`${m.name}:license_key`]: stub.licenseKey },
       }
     : {};
   writeFileSync(join(run, "server.jsonc"), serverConfig(opts.port, extra));
@@ -466,8 +523,13 @@ export const LUANTI_IMAGE = "ghcr.io/luanti-org/luanti:latest";
  * in the world's scriptgo/resources/, and runs the official Luanti server image with the mod in
  * verify mode (no port published: nothing can connect). The mod writes the report and shuts the
  * server down. Without Docker the run is skipped.
+ *
+ * With the stub API the container gets Docker's default network instead of none, so it can reach the
+ * stub through `host.docker.internal` (Docker Desktop forwards it to the host's loopback, where the
+ * stub listens); the mod is listed in `secure.http_mods` and the resource gets the stub's URL, key and
+ * server link token through the world's scriptgo.json. Still no port published.
  */
-function verifyLuanti(res: LoadedResource, m: ParsedManifest, search: string[], opts: { image: string; seconds: number; example?: ReadmeExample | null }): Report {
+async function verifyLuanti(res: LoadedResource, m: ParsedManifest, search: string[], opts: { image: string; seconds: number; example?: ReadmeExample | null; stub?: ApiTarget }): Promise<Report> {
   const started = Date.now();
   const skipped = (message: string, checks: Check[] = []): Report => ({
     package: m.name, version: m.version, environment: "luanti",
@@ -495,6 +557,15 @@ function verifyLuanti(res: LoadedResource, m: ParsedManifest, search: string[], 
     cpSync(r.root, join(world, "scriptgo", "resources", r.result.manifest.name), { recursive: true });
   }
   if (opts.example) cpSync(opts.example.dir, join(world, "scriptgo", "resources", opts.example.name), { recursive: true });
+  const stub = opts.stub;
+  const firstRequest = stub?.requests.length ?? 0;
+  const apiUrl = stub ? stub.url.replace("127.0.0.1", "host.docker.internal").replace("localhost", "host.docker.internal") : "";
+  if (stub) {
+    writeFileSync(join(world, "scriptgo.json"), JSON.stringify({
+      resources: { [m.name]: { api: apiUrl, license_key: stub.licenseKey } },
+      convars: { scriptgo_api: apiUrl, ...serverTokenConvar(stub, m) },
+    }));
+  }
   writeFileSync(join(world, "world.mt"), "gameid = sgverify\nbackend = sqlite3\nplayer_backend = sqlite3\nauth_backend = sqlite3\nmod_storage_backend = sqlite3\n");
   const reportName = "scriptgo-verify-report.json";
   writeFileSync(join(conf, "luanti.conf"), [
@@ -505,24 +576,31 @@ function verifyLuanti(res: LoadedResource, m: ParsedManifest, search: string[], 
     `scriptgo_verify_seconds = ${opts.seconds}`,
     `scriptgo_verify_report = ${reportName}`,
     ...(opts.example ? [`scriptgo_verify_with = ${opts.example.name}`] : []),
+    ...(stub ? ["secure.http_mods = scriptgo"] : []),
   ].join("\n") + "\n");
   const mount = (p: string): string => p.split("\\").join("/");
-  const r = spawnSync("docker", [
-    "run", "--rm", "--network", "none",
+  // Asynchronous: the stub API answers from this process's event loop while the server runs.
+  const r = await spawnAsync("docker", [
+    "run", "--rm", "--network", stub ? "bridge" : "none",
     "-v", `${mount(game)}:/usr/local/share/luanti/games/sgverify`,
     "-v", `${mount(world)}:/var/lib/minetest/world`,
     "-v", `${mount(conf)}:/etc/minetest`,
     opts.image, "--config", "/etc/minetest/luanti.conf", "--world", "/var/lib/minetest/world",
-  ], { encoding: "utf8", timeout: (opts.seconds + 90) * 1000 });
+  ], (opts.seconds + 90) * 1000);
   const engineLog = ((r.stdout ?? "") + (r.stderr ?? "")).split(/\r?\n/).filter((l) => /scriptgo|ERROR|error/.test(l)).slice(-200).join("\n");
   let report: Report;
   try {
     report = JSON.parse(readFileSync(join(world, reportName), "utf8")) as Report;
     report.log = [report.log, "--- engine", engineLog].filter(Boolean).join("\n");
-    report.evidence = { ...report.evidence, image: digest, ...exampleEvidence(opts.example) };
+    report.evidence = { ...report.evidence, image: digest, ...exampleEvidence(opts.example), ...(stub ? { api: stub.label } : {}) };
+    if (stub) {
+      report.checks.push(...apiChecks(stub.requests, firstRequest, "luanti", report.adapterVersion));
+      report.log = report.log.split(stub.licenseKey).join("<license_key>").split(apiUrl).join("<stub-api>");
+      report.status = statusOf(report.checks);
+    }
   } catch {
     report = skipped("", []);
-    report.checks = [{ name: "server_run", status: "failed", message: `no report written (exit ${r.status ?? r.signal})` }];
+    report.checks = [{ name: "server_run", status: "failed", message: `no report written (exit ${r.status ?? "killed"})` }];
     report.status = "failing";
     report.log = engineLog;
     report.evidence = { image: digest };
@@ -595,11 +673,13 @@ async function verifyDotnet(
   const argv = [host.dll, "verify", join(stage, m.name), "--search", stage, "--report", reportFile, "--settle", "2000", "--lang", opts.lang];
   if (exampleDir) argv.push("--with", exampleDir);
   const firstRequest = opts.stub?.requests.length ?? 0;
+  const firstReport = opts.stub?.presence?.reports().length ?? 0;
   if (opts.stub) {
     const config = join(tmp, "config.json");
     writeFileSync(config, JSON.stringify({
       resources: { [m.name]: { api: opts.stub.url, license_key: opts.stub.licenseKey } },
-      convars: { scriptgo_api: opts.stub.url },
+      convars: { scriptgo_api: opts.stub.url, ...serverTokenConvar(opts.stub, m) },
+      verifierAddress: VERIFIER_ADDRESS,
     }));
     argv.push("--config", config);
   }
@@ -614,6 +694,9 @@ async function verifyDotnet(
   report.checks.push(...tsChecks, ...selfChecks(report.log));
   if (opts.stub) {
     report.checks.push(...apiChecks(opts.stub.requests, firstRequest, "dotnet", report.adapterVersion));
+    if (opts.stub.presence && serverTokenConvar(opts.stub, m).scriptgo_presence) {
+      report.checks.push(fingerprintCheck(opts.stub.presence.reports().slice(firstReport), VERIFIER_ADDRESS));
+    }
     report.log = report.log.split(opts.stub.licenseKey).join("<license_key>").split(opts.stub.url).join("<stub-api>");
   }
   report.environment = "dotnet";
@@ -708,7 +791,7 @@ async function verifyEngine(
     const config = join(tmp, "config.json");
     writeFileSync(config, JSON.stringify({
       resources: { [m.name]: { api: stub.url, license_key: stub.licenseKey } },
-      convars: { scriptgo_api: stub.url },
+      convars: { scriptgo_api: stub.url, ...serverTokenConvar(stub, m) },
     }));
     verifyArgs.push("--config", config);
   }
@@ -760,7 +843,7 @@ export async function run(args: string[]): Promise<number> {
     [--beammp-server path\\to\\BeamMP-Server.exe] [--beammp-port ${BEAMMP_PORT}] [--beammp-seconds 3]  (AuthKey: BEAMMP_AUTH_KEY)
     [--fivem-server path\\to\\FXServer.exe] [--fivem-port ${FIVEM_PORT}] [--fivem-timeout 120000] [--fivem-workdir <dir>]  (key: ${FIVEM_KEY_ENV})
     [--search dir]... [--out verification/reports] [--json]
-    [--stub-api | --api <url> --license-key <sg_live_...>]
+    [--stub-api | --api <url> --license-key <sg_live_...> [--server-token <sg_srv_...>]]
     [--open77-server path\\to\\Open77.Server.exe] [--port 11861] [--settle 1500] [--timeout 30000]
     [--gmod-server <dir>] [--gmod-binary srcds.exe] [--gmod-port 27115] [--gmod-seconds 4] [--gmod-timeout 120000] [--gmod-verify extra.json]`);
     return a.bools.has("help") ? 0 : 2;
@@ -779,10 +862,11 @@ export async function run(args: string[]): Promise<number> {
   const stubServer = a.bools.has("stub-api") ? await startStubApi({ packages: stubPackages(m) }) : undefined;
   let stub: ApiTarget | undefined;
   if (stubServer) {
-    stub = { url: stubServer.url, licenseKey: stubServer.licenseKey, requests: stubServer.requests, label: "stub-api (loopback, schema-checked)" };
+    stub = { url: stubServer.url, licenseKey: stubServer.licenseKey, serverToken: stubServer.serverToken, requests: stubServer.requests, presence: stubServer.presence, label: "stub-api (loopback, schema-checked)" };
   } else if (a.flags.api) {
     const key = a.flags["license-key"] ?? process.env.SCRIPTGO_LICENSE_KEY ?? "";
-    stub = { url: a.flags.api.replace(/\/+$/, ""), licenseKey: key, requests: [], label: `api ${new URL(a.flags.api).host}` };
+    const serverToken = a.flags["server-token"] ?? process.env.SCRIPTGO_SERVER_TOKEN;
+    stub = { url: a.flags.api.replace(/\/+$/, ""), licenseKey: key, ...(serverToken ? { serverToken } : {}), requests: [], label: `api ${new URL(a.flags.api).host}` };
   }
 
   const asked = a.flags.lang ?? resourceLanguage(m);
@@ -818,10 +902,11 @@ export async function run(args: string[]): Promise<number> {
     }));
   }
   if (lang === "lua" && (env === "luanti" || env === "all")) {
-    reports.push(verifyLuanti(res, m, search, {
+    reports.push(await verifyLuanti(res, m, search, {
       image: a.flags["luanti-image"] ?? LUANTI_IMAGE,
       seconds: Number(a.flags["luanti-seconds"] ?? 3),
       example,
+      stub,
     }));
   }
   if (lang === "lua" && (env === "love2d" || env === "all")) {

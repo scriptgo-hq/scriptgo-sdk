@@ -245,6 +245,24 @@ public sealed partial class ScriptGoHost
                 var id = Integer(a, 0);
                 return BridgeResult.Of(id is null or < 1 ? SgValue.Nil : SgValue.Of(PlayerIdentifier((int)id)));
             }
+            // Player match: the address and HMAC-SHA256 the core's presence module needs. Both stay
+            // inside this process: the guest sends only the fingerprint.
+            case "playerAddress":
+            {
+                if (!_capabilities.Contains("presence")) return NeedCapability("presence");
+                if (side.Name != "server") return BridgeResult.Fail("presence is server-side only");
+                var id = Integer(a, 0);
+                return BridgeResult.Of(id is null or < 1 ? SgValue.Nil : SgValue.Of(PlayerAddress((int)id)));
+            }
+            case "hmacSha256":
+            {
+                if (!_capabilities.Contains("presence")) return NeedCapability("presence");
+                var key = Text(a, 0);
+                var message = Text(a, 1);
+                if (key is null || message is null) return BridgeResult.Fail("invalid_arguments");
+                var mac = System.Security.Cryptography.HMACSHA256.HashData(System.Text.Encoding.UTF8.GetBytes(key), System.Text.Encoding.UTF8.GetBytes(message));
+                return BridgeResult.Of(SgValue.Of(Convert.ToHexString(mac).ToLowerInvariant()));
+            }
             case "permissionsHas":
             {
                 if (!_capabilities.Contains("permissions")) return NeedCapability("permissions");

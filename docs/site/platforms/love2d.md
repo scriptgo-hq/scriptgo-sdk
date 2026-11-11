@@ -65,6 +65,7 @@ What the adapter provides. See [SDK and capabilities](/docs/sdk/capabilities) fo
 | `http` | Partial | curl through io.popen, run in a love.thread worker so frames keep running; unavailable when io.popen or curl is missing. Status and body only, no response headers. |
 | `licensing` | Partial | Available exactly when http is. |
 | `perks` | Not available | Not switched on: a single local player, with no account to tie a purchase to. |
+| `presence` | Not available | A single local player: nobody to match with a buyer. |
 
 ## Protection
 

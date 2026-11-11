@@ -334,8 +334,9 @@ function rt.join(id, name) host:playerJoin(id, name) end
 
 function rt.drop(id, reason) host:playerDrop(id, reason) end
 
+-- A resource command, or one of the host's own (the player-match `link`).
 function rt.hasCommand(name)
-    return type(name) == "string" and host.commands[name:lower()] ~= nil
+    return host:hasCommand(name)
 end
 
 -- Every resource command name, restricted ones flagged, for the plugin's permission registration.
@@ -343,7 +344,7 @@ function rt.commands()
     local out = {}
     for _, name in ipairs(host:commandList()) do
         local restricted = false
-        for _, e in ipairs(host.commands[name] or {}) do
+        for _, e in ipairs(host.commands[name] or {}) do -- host commands are never restricted
             if e.restricted then restricted = true end
         end
         out[#out + 1] = name .. (restricted and " restricted" or "")

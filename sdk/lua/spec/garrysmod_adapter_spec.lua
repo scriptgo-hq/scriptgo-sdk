@@ -257,4 +257,38 @@ describe("garrysmod adapter (mock GLua)", function()
         expect(w.files["DATA:scriptgo/storage/counter.json"]).toContain('"n":1')
         expect(host:hasCapability("http")).toBe(true)
     end)
+
+    test("player match: presence follows HTTP() and reports only in address mode (no HMAC in GLua)", function()
+        expect(world({ http = false }).load().capabilities.presence).toBe(false)
+        local cfg = { scriptgo_api = "http://api.test", scriptgo_server_token = "sg_srv_gmod", scriptgo_presence = "on" }
+        local function run(extra)
+            local convars = {}
+            for k, v in pairs(cfg) do convars[k] = v end
+            for k, v in pairs(extra or {}) do convars[k] = v end
+            local w = world({ convars = convars })
+            local ada = fakePlayer({ userid = 7, nick = "Ada" })
+            function ada:IPAddress() return "203.0.113.9:27005" end
+            w.players[7] = ada
+            local a = w.load()
+            expect(a.capabilities.presence).toBe(true)
+            local host = scriptgo.newHost({ adapter = a })
+            host:tick()
+            return w, host
+        end
+        -- Without address mode: no report, the reason says why; /link exists all the same.
+        local w, host = run()
+        expect(#w.http).toBe(0)
+        expect(host:_presenceClient().status().reason).toBe("presence unavailable: no HMAC on this host")
+        expect(host:hasCommand("link")).toBe(true)
+        -- Address mode: the normalised address goes to the API, with the environment.
+        w = run({ scriptgo_presence_addr = "on" })
+        expect(#w.http).toBe(1)
+        expect(w.http[1].url).toBe("http://api.test/v1/presence")
+        local body = scriptgo.json.decode(w.http[1].body)
+        expect(body.environment).toBe("garrysmod")
+        expect(body.adapterVersion).toBe("garrysmod-0.1.0")
+        expect(body.players[1].player).toBe("steam:76561198000000007")
+        expect(body.players[1].addr[1]).toBe("203.0.113.9")
+        expect(body.players[1].fp).toBeNil()
+    end)
 end)

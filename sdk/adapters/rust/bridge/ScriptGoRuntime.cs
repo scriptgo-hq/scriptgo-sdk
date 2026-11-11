@@ -183,6 +183,8 @@ namespace ScriptGo.Bridge
             Register("players", Players);
             Register("playerName", PlayerName);
             Register("playerIdentifier", PlayerIdentifier);
+            Register("playerAddress", PlayerAddress);
+            Register("hmacSha256", HmacSha256);
             Register("permission", Permission);
             Register("config", Config);
             Register("notify", Notify);
@@ -273,6 +275,7 @@ namespace ScriptGo.Bridge
             _lua.NewTable();
             SetFlag("storage", _s.Storage != null);
             SetFlag("players", _s.Players != null);
+            SetFlag("playerAddress", _s.Players is IHostPlayerAddresses);
             SetFlag("permissions", _s.Permissions != null);
             SetFlag("config", _s.Config != null);
             SetFlag("ui", _s.Ui != null);
@@ -596,6 +599,33 @@ namespace ScriptGo.Bridge
         private int PlayerIdentifier(LuaState l)
         {
             PushString(l, _s.Players == null ? null : _s.Players.Identifier((int)l.ToInteger(1)));
+            return 1;
+        }
+
+        private int PlayerAddress(LuaState l)
+        {
+            var addresses = _s.Players as IHostPlayerAddresses;
+            string address = null;
+            try { address = addresses == null ? null : addresses.Address((int)l.ToInteger(1)); }
+            catch (Exception) { address = null; }
+            PushString(l, address);
+            return 1;
+        }
+
+        // H.hmacSha256(key, message) -> lowercase hex. The key and the message are UTF-8 text; this is
+        // .NET's HMACSHA256, the vetted implementation player match uses (never one written in Lua).
+        private int HmacSha256(LuaState l)
+        {
+            var key = Str(l, 1);
+            var message = Str(l, 2);
+            if (key == null || message == null) { l.PushNil(); return 1; }
+            using (var hmac = new System.Security.Cryptography.HMACSHA256(Encoding.UTF8.GetBytes(key)))
+            {
+                var mac = hmac.ComputeHash(Encoding.UTF8.GetBytes(message));
+                var hex = new StringBuilder(mac.Length * 2);
+                foreach (var b in mac) hex.Append(b.ToString("x2"));
+                PushString(l, hex.ToString());
+            }
             return 1;
         }
 

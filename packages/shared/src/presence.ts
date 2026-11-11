@@ -1,0 +1,86 @@
+import { z } from "zod";
+import { Timestamp } from "./common.ts";
+import { PlayerId } from "./perks.ts";
+
+/**
+ * Player match (docs/spec/player-match.md): what a linked game server sends to tie a buyer on a shop
+ * to a player. Server-facing routes, authorised by the server link token (`Bearer sg_srv_…`), like
+ * the perks routes. The SDK's side is sdk/lua/scriptgo/presence.lua.
+ */
+
+/** HMAC-SHA256(presenceKey, normalised address), lowercase hex. Never the address itself. */
+export const PRESENCE_FINGERPRINT_RE = /^[0-9a-f]{64}$/;
+export const PresenceFingerprint = z.string().regex(PRESENCE_FINGERPRINT_RE, "64 lowercase hex characters");
+
+/** The day's key. A plain token, so a host may hand it to its crypto tool safely; used as the UTF-8 bytes of the string. */
+export const PRESENCE_KEY_RE = /^[A-Za-z0-9_-]{16,128}$/;
+export const PresenceKey = z.string().regex(PRESENCE_KEY_RE, "16 to 128 characters of A-Z, a-z, 0-9, '_' and '-'");
+
+/**
+ * Sent with every presence report and every code confirm, as POST /v1/perks/check sends them. The
+ * identity is `<environment>:<identifier>`: a server that never said its environment gets 409
+ * `environment_unknown`, and one whose environment is not matched on that deployment 409
+ * `environment_not_matchable`.
+ */
+export const PresenceSeen = {
+  environment: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/).optional(),
+  adapterVersion: z.string().max(128).optional(),
+};
+
+/** A normalised address (IPv4, or an IPv6 /64 written `<4 groups>::/64`), only in address mode. */
+export const PresenceAddress = z.string().min(1).max(64);
+
+/**
+ * One connected player. Exactly one of:
+ *   - `fp`: fingerprints the host computed with its vetted HMAC (the address never leaves the server);
+ *   - `addr`: the normalised address, for a host with no vetted HMAC, only when the operator turned
+ *     address mode on (`scriptgo_presence_addr`, default off; the owner's decision is pending). The
+ *     API fingerprints it at once with the day's key and drops it: never stored, logged or echoed.
+ */
+export const PresencePlayer = z
+  .object({
+    player: PlayerId,
+    /** The name the game shows; the sign-in page shows it to the one browser that matched. */
+    name: z.string().min(1).max(64),
+    fp: z.array(PresenceFingerprint).min(1).max(4).optional(),
+    addr: z.array(PresenceAddress).min(1).max(4).optional(),
+  })
+  .refine((p) => (p.fp === undefined) !== (p.addr === undefined), { message: "exactly one of fp and addr", path: ["fp"] });
+export type PresencePlayer = z.infer<typeof PresencePlayer>;
+
+/**
+ * POST /v1/presence. An empty list is valid: it is how a server first learns the key. Refusals:
+ * 401 `unknown_server_link`, 400 `validation_failed` (an `addr` that does not normalise refuses the
+ * whole request), 409 `environment_unknown` / `environment_not_matchable`, 429 `rate_limited`.
+ */
+export const PresenceBody = z.object({ players: z.array(PresencePlayer).max(1000), ...PresenceSeen });
+export type PresenceBody = z.infer<typeof PresenceBody>;
+
+/** The answer to POST /v1/presence (and the key a server hashes with until `rotatesAt`). */
+export const PresenceResult = z.object({
+  accepted: z.number().int().min(0).optional(),
+  presenceKey: PresenceKey,
+  rotatesAt: Timestamp,
+});
+export type PresenceResult = z.infer<typeof PresenceResult>;
+
+/** What a player types after /link: letters and digits, with or without the dash, any case. The API compares ignoring case, spaces and dashes. */
+export const IdentityCodeText = z.string().regex(/^[A-Za-z0-9-]{4,16}$/, "4 to 16 letters, digits or '-'");
+
+/** POST /v1/identity/codes/confirm, from a game server: the player who typed the code. */
+export const IdentityCodeConfirmBody = z.object({
+  code: IdentityCodeText,
+  player: PlayerId,
+  /** Optional: the name the game shows, so the page can say "Continue as <name>". */
+  name: z.string().min(1).max(64).optional(),
+  ...PresenceSeen,
+});
+export type IdentityCodeConfirmBody = z.infer<typeof IdentityCodeConfirmBody>;
+
+/**
+ * 200 on success. Refusals (`{ error: { code } }`): 404 `unknown_code`, 410 `code_expired` or
+ * `code_used`, 429 `rate_limited`, 401 `unknown_server_link`, 409 `environment_unknown` or
+ * `environment_not_matchable`.
+ */
+export const IdentityCodeConfirmResult = z.object({ linked: z.literal(true) });
+export type IdentityCodeConfirmResult = z.infer<typeof IdentityCodeConfirmResult>;

@@ -51,7 +51,7 @@ export interface GarrysmodVerifyOptions {
   seconds: number;
   timeoutMs: number;
   map?: string;
-  stub?: { url: string; licenseKey: string; requests: StubRequest[]; label: string };
+  stub?: { url: string; licenseKey: string; serverToken?: string; requests: StubRequest[]; label: string };
   example?: ReadmeExample | null;
   /**
    * More for the addon's verify request (--gmod-verify <file.json>): `config` (merged into the
@@ -73,7 +73,7 @@ export function verifyRequest(name: string, opts: GarrysmodVerifyOptions): Recor
   };
   const config: Record<string, unknown> = {};
   if (opts.stub) {
-    merge(config, { resources: { [name]: { api: opts.stub.url, license_key: opts.stub.licenseKey } }, convars: { scriptgo_api: opts.stub.url } });
+    merge(config, { resources: { [name]: { api: opts.stub.url, license_key: opts.stub.licenseKey } }, convars: { scriptgo_api: opts.stub.url, ...(opts.stub.serverToken ? { scriptgo_server_token: opts.stub.serverToken } : {}) } });
   }
   merge(config, opts.extra?.config);
   return {

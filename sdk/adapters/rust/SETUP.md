@@ -99,3 +99,21 @@ Player perks (`ScriptGo.perks`, `docs/spec/perks.md`): the server asks SCRIPT//G
 A player is `steam:<steamid64>`. The cache goes to the plugin's data files (`scriptgo.perks`). This
 is unit-tested in the bridge with fake services; it has not been run on a Rust server with a
 connected player.
+
+## Player match
+
+Player match (`ScriptGo.presence` and the `/link` command, `docs/spec/player-match.md`) ties a buyer on a shop to their player, without an account. It needs the server link of perks (`scriptgo_server_token`). Two parts:
+
+- **`/link <code>`** (name: `scriptgo_link_command`, default `link`; `off` removes it): the player types the code the sign-in page shows, and the server confirms it to SCRIPT//GO. It is registered as soon as the server is linked.
+- **Presence** (opt-in: `scriptgo_presence` `true`, default off): while a player is connected, the server tells SCRIPT//GO "this player is here" as `HMAC-SHA256(day's key, address)`, refreshed every 30 seconds and removed when they leave. The address never leaves the server and is never logged. Addresses are personal data: an operator who turns presence on says so in their own notice to players.
+
+The address is the player's connection address (`net.connection.ipaddress`) and the HMAC is .NET's
+`HMACSHA256`, in the bridge. In the plugin's configuration, next to the token:
+
+```json
+"convars": { "scriptgo_presence": "true" }
+```
+
+This is unit-tested in the bridge with fake services (`presence.*`); it has not been run on a Rust
+server with a connected player.
+

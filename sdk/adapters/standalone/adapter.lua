@@ -88,10 +88,11 @@ return function(scriptgo, opts)
         if probe then probe:close() end
         if not out:find("^curl") then adapter.capabilities.http = false end
     end
-    -- Licensing and player perks both go through HTTP.
+    -- Licensing, player perks and player match all go through HTTP.
     if adapter.capabilities.http == false then
         adapter.capabilities.licensing = false
         adapter.capabilities.perks = false
+        adapter.capabilities.presence = false
     end
 
     local logLevel = { debug = 0, info = 1, warn = 2, error = 3 }
@@ -226,6 +227,44 @@ return function(scriptgo, opts)
 
     -- Simulated players: config.players = [{ "id": 1, "name": "Ada" }]
     adapter.players = nil
+    -- Simulated players can carry a simulated address (`join 2 Bob @203.0.113.7` in a run script,
+    -- config.playerAddress for player 1), for player match tests (presence.lua). Use documentation
+    -- addresses (203.0.113.0/24, 2001:db8::/32), never a real person's.
+    adapter.playerAddresses = true
+
+    -- HMAC-SHA256 for player match, from OpenSSL (a vetted implementation; the core never hashes
+    -- by itself). The executable: config.openssl, else SCRIPTGO_OPENSSL, else `openssl` on the PATH.
+    -- Without it, presence says "presence unavailable: no HMAC on this host" and /link still works.
+    local openssl = cfg.openssl or (os.getenv and os.getenv("SCRIPTGO_OPENSSL")) or "openssl"
+    -- cmd.exe drops the first and last quote of a line that starts with one: wrap it once more.
+    local function popen(line)
+        if isWindows then line = '"' .. line .. '"' end
+        return io.popen(line)
+    end
+    local function hasOpenssl()
+        if not io.popen then return false end
+        local probe = popen(shellQuote(openssl) .. " version" .. (isWindows and " 2>NUL" or " 2>/dev/null"))
+        local out = probe and probe:read("*a") or ""
+        if probe then probe:close() end
+        return out:find("SSL") ~= nil
+    end
+    if adapter.capabilities.presence ~= false and hasOpenssl() then
+        adapter.crypto = {
+            -- The key is the API's presence key: it is checked to be a plain token before it reaches
+            -- a command line, and the message (a normalised address) goes through a temporary file.
+            hmacSha256 = function(key, message)
+                if type(key) ~= "string" or not key:find("^[%w%-_]+$") or #key > 256 then return nil end
+                local tmp = tempFile()
+                if not writeFile(tmp, message) then return nil end
+                local p = popen(shellQuote(openssl) .. " dgst -sha256 -hmac " .. shellQuote(key) .. " " .. shellQuote(tmp)
+                    .. (isWindows and " 2>NUL" or " 2>/dev/null"))
+                local out = p and p:read("*a") or ""
+                if p then p:close() end
+                os.remove(tmp)
+                return out:match("(%x+)%s*$")
+            end,
+        }
+    end
 
     return adapter
 end

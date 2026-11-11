@@ -102,6 +102,9 @@ internal sealed class ConfigFile : IHostConfig, IHostPermissions
     private readonly Dictionary<string, SgValue> _convars = new(StringComparer.Ordinal);
     private readonly Dictionary<int, HashSet<string>> _privileges = [];
 
+    /// <summary>The verifier's simulated address ("verifierAddress"), for a player-match probe.</summary>
+    public string? VerifierAddress { get; private set; }
+
     public static ConfigFile Load(string? path)
     {
         var c = new ConfigFile();
@@ -122,6 +125,7 @@ internal sealed class ConfigFile : IHostConfig, IHostPermissions
         {
             foreach (var (k, v) in convars) c._convars[k] = SgJson.Decode(v?.ToJsonString() ?? "null");
         }
+        if (root?["verifierAddress"] is JsonValue address && address.TryGetValue<string>(out var addressText)) c.VerifierAddress = addressText;
         if (root?["permissions"] is JsonObject perms)
         {
             foreach (var (id, privs) in perms)
@@ -290,7 +294,7 @@ internal static class Verify
                         Add("readme_example", w.Ok, w.Ok ? $"{wname} started" : w.Reason ?? "");
                     }
                     foreach (var n in host.ResourceNames) ranLanguages.UnionWith(ScriptLanguages(host.ResourceManifest(n)!));
-                    host.PlayerJoin(2, "Verifier");
+                    host.PlayerJoin(2, "Verifier", config.VerifierAddress);
                     // Simulated time: long enough for start-up threads and self-checks (SGCHECK lines).
                     Resources.Settle(host, settle);
                     host.PlayerDrop(2, "verify_done");

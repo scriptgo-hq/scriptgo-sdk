@@ -24,6 +24,8 @@ return function(scriptgo, opts)
             events = true, logging = true, storage = true, players = true, permissions = true,
             commands = true, config = true, ui = true,
             http = http ~= nil, licensing = http ~= nil,
+            -- Player match: /link over HTTP; presence reports only in address mode (no HMAC here).
+            presence = http ~= nil,
         },
         notifications = {},
     }
@@ -103,6 +105,14 @@ return function(scriptgo, opts)
             local name = nameById[id]
             if not name then return nil end
             return "luanti:" .. name
+        end,
+        -- The player's address, for player match only (docs/spec/player-match.md). Not visible to
+        -- scripts, never logged. Luanti has no HMAC: it is read only in address mode
+        -- (scriptgo_presence_addr, default off), where the core sends it normalised to SCRIPT//GO.
+        address = function(id)
+            local name = nameById[id]
+            if not online(name) then return nil end
+            return core.get_player_ip(name)
         end,
     }
 

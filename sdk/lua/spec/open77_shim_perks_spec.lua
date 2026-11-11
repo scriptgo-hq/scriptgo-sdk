@@ -62,7 +62,25 @@ local function world(opts)
     env.IsDuplicityVersion = function() return true end
     env.GetCurrentResourceName = function() return "shop" end
     env.GetResourceState = function() return "started" end
-    env.AddEventHandler, env.RemoveEventHandler, env.TriggerEvent = function() end, function() end, function() end
+    w.handlers, w.commands, w.chat, w.endpointReads = {}, {}, {}, 0
+    env.AddEventHandler = function(name, fn)
+        w.handlers[name] = w.handlers[name] or {}
+        table.insert(w.handlers[name], fn)
+    end
+    env.RemoveEventHandler, env.TriggerEvent = function() end, function() end
+    env.RegisterCommand = function(name, fn)
+        if w.commands[name] then error("duplicate command '" .. name .. "'") end
+        w.commands[name] = fn
+        return true
+    end
+    -- Fires a host event as OPEN//77 does: `source` is a global of the handler's call.
+    function w.fire(name, src, ...)
+        for _, fn in ipairs(w.handlers[name] or {}) do
+            env.source = src
+            fn(...)
+            env.source = nil
+        end
+    end
     env.RegisterNetEvent, env.TriggerServerEvent, env.TriggerClientEvent = function() end, function() end, function() end
     env.GetConvar = function(name, default)
         local v = w.convars[name]
@@ -93,7 +111,12 @@ local function world(opts)
                 if type(id) ~= "number" or id < 1 then error("id must be positive") end
                 return players[id]
             end,
+            endpoint = function(id)
+                w.endpointReads = w.endpointReads + 1
+                return players[id] and "203.0.113.9:31337" or nil, "player_not_found"
+            end,
         },
+        chat = { send = function(id, msg) w.chat[#w.chat + 1] = { id = id, msg = msg } return true end },
         acl = { isAllowed = function() return false end },
         notifications = { send = function() return true end, broadcast = function() return true end },
         exports = { call = function() end },
@@ -131,6 +154,15 @@ local function world(opts)
         elseif path == "/v1/perks/events/ack" then
             w.acked = math.max(w.acked, body.upTo)
             return r.callback(200, json.encode({ acked = w.acked }), {})
+        end
+        if path == "/v1/identity/codes/confirm" then
+            w.confirmed = body
+            if (body.code:gsub("%-", "")) == "MT42JF" then return r.callback(200, json.encode({ linked = true }), {}) end
+            return r.callback(404, '{"error":{"code":"unknown_code"}}', {})
+        end
+        if path == "/v1/presence" then
+            w.presence = body
+            return r.callback(200, json.encode({ presenceKey = "pk_test", rotatesAt = iso(w.now + 86400) }), {})
         end
         return r.callback(404, '{"error":{"code":"not_found"}}', {})
     end
@@ -205,7 +237,7 @@ describe("open77 shim: perks (stub natives)", function()
         local body = json.decode(check.body)
         expect(body.player).toBe(ADA)
         expect(body.environment).toBe("open77")
-        expect(body.adapterVersion).toBe("open77-shim-0.4.0")
+        expect(body.adapterVersion).toBe("open77-shim-0.5.0")
         -- A player id below 1 never reaches the native (it would stop the resource).
         local none, why = w.run(function() return SG.perks.has(0, "vip") end)
         expect(none).toBe(false)
@@ -264,5 +296,78 @@ describe("open77 shim: perks (stub natives)", function()
         local has2, why2 = wrong.run(function() return SG2.perks.has(3, "vip") end)
         expect(has2).toBe(false)
         expect(why2).toBe("not_linked")
+    end)
+end)
+
+describe("open77 shim: presence (stub natives)", function()
+    test("off unless declared: the shared shim alone refuses", function()
+        local w = world()
+        w.load(shared, "scriptgo_shim.lua")
+        expect(w.env.ScriptGo.capabilities.has("presence")).toBe(false)
+        expect(function() w.env.ScriptGo.presence.status() end).toThrow("capability_unavailable:presence@open77")
+    end)
+
+    test("/link is registered at resource start and confirms the durable identifier", function()
+        local w, SG = shop()
+        expect(SG.capabilities.has("presence")).toBe(true)
+        w.fire("onResourceStart", nil, "shop")
+        expect(type(w.commands.link)).toBe("function")
+        w.env.CreateThread(function() w.commands.link(3, { "mt4-2jf", n = 1 }, "link mt4-2jf") end)
+        w.pass(1)
+        expect(w.confirmed.player).toBe(ADA)
+        expect(w.confirmed.code).toBe("MT4-2JF")
+        expect(w.chat[1].id).toBe(3)
+        expect(w.chat[1].msg.text).toBe("Linked: you can go back to your browser.")
+        w.env.CreateThread(function() w.commands.link(3, { "ZZ-ZZZZ", n = 1 }, "link ZZ-ZZZZ") end)
+        w.pass(1)
+        expect(w.chat[2].msg.text).toContain("not valid")
+    end)
+
+    test("/link joins every argument and names the environment and the adapter version", function()
+        local w = shop()
+        w.fire("onResourceStart", nil, "shop")
+        w.env.CreateThread(function() w.commands.link(3, { "mt4", "2jf", n = 2 }, "link mt4 2jf") end)
+        w.pass(1)
+        expect(w.confirmed.code).toBe("MT42JF")
+        expect(w.confirmed.environment).toBe("open77")
+        expect(w.confirmed.adapterVersion).toBe("open77-shim-0.5.0")
+        expect(w.chat[1].msg.text).toBe("Linked: you can go back to your browser.")
+    end)
+
+    test("address mode: the normalised address is sent, never logged, with the environment", function()
+        local w, SG = shop({ convars = { scriptgo_api = API, scriptgo_server_token = TOKEN, scriptgo_presence = "on", scriptgo_presence_addr = "on" } })
+        w.fire("onResourceStart", nil, "shop")
+        w.pass(5)
+        local st = SG.presence.status()
+        expect(st.active).toBe(true)
+        expect(st.mode).toBe("addr")
+        expect(w.presence.environment).toBe("open77")
+        expect(w.presence.adapterVersion).toBe("open77-shim-0.5.0")
+        expect(w.presence.players[1].player).toBe(ADA)
+        expect(w.presence.players[1].addr[1]).toBe("203.0.113.9")
+        expect(w.presence.players[1].fp).toBeNil()
+        for _, l in ipairs(w.logs) do expect(l:find("203.0.113", 1, true)).toBeNil() end
+    end)
+
+    test("presence on, but no HMAC native: it says so and never reads an endpoint", function()
+        local w, SG = shop({ convars = { scriptgo_api = API, scriptgo_server_token = TOKEN, scriptgo_presence = "on" } })
+        w.fire("onResourceStart", nil, "shop")
+        w.fire("playerJoining", 3)
+        w.pass(5)
+        local st = SG.presence.status()
+        expect(st.enabled).toBe(true)
+        expect(st.active).toBe(false)
+        expect(st.reason).toBe("presence unavailable: no HMAC on this host")
+        expect(w.endpointReads).toBe(0)
+        expect(w.presence).toBeNil()
+        local warned = 0
+        for _, l in ipairs(w.logs) do if l:find("no HMAC on this host", 1, true) then warned = warned + 1 end end
+        expect(warned).toBe(1)
+    end)
+
+    test("scriptgo_link_command off: no command", function()
+        local w = shop({ convars = { scriptgo_api = API, scriptgo_server_token = TOKEN, scriptgo_link_command = "off" } })
+        w.fire("onResourceStart", nil, "shop")
+        expect(w.commands.link).toBeNil()
     end)
 end)

@@ -6,7 +6,21 @@ local suite, scriptgo, ctx = ...
 local test, expect, describe = suite.test, scriptgo.testing.expect, suite.describe
 
 local stub = dofile(ctx.root .. "/sdk/adapters/fivem/test/natives_stub.lua")
-local shimText = assert(ctx.readFile(ctx.root .. "/sdk/adapters/fivem/shim.lua"))
+local shimDir = ctx.root .. "/sdk/adapters/fivem/"
+local rawShim = assert(ctx.readFile(shimDir .. "shim.lua"))
+-- What `scriptgo pack --target fivem` writes (packages/cli/src/lib/fivem-pack.ts): a capability's
+-- section only for a resource that declares it, with its include expanded.
+local function packed(withPresence)
+    local text = rawShim:gsub("\r\n", "\n")
+    if withPresence then
+        text = text:gsub("\n%-%- @capability presence\n", "\n"):gsub("\n%-%- @end\n", "\n")
+        return (text:gsub("[^\n]*%-%-%s*@include%s+(%S+)[^\n]*", function(rel)
+            return (assert(ctx.readFile(shimDir .. rel), "cannot include " .. rel))
+        end))
+    end
+    return (text:gsub("\n%-%- @capability presence\n.-\n%-%- @end\n", "\n"))
+end
+local shimText = packed(false)
 
 local function world(opts)
     opts = opts or {}
@@ -288,5 +302,103 @@ describe("fivem shim (stub natives)", function()
         local w, SG = world()
         SG.log.warn("careful")
         expect(w.printed[1]).toBe("[warn] careful")
+    end)
+end)
+
+-- Player match in the FiveM shim: the presence section that `scriptgo pack` keeps for a resource
+-- declaring presence. FiveM's Lua has no HMAC, so presence reports only in address mode.
+describe("fivem shim: player match (stub natives)", function()
+    local API, TOKEN = "http://api.test", "sg_srv_fivem"
+    local function matchWorld(convars)
+        local requests = {}
+        local w = stub.new({
+            json = scriptgo.json, resource = "match",
+            convars = convars,
+            players = { ["3"] = { name = "Ada", identifiers = { "license:ada" } } },
+            http = function(url, method, data)
+                requests[#requests + 1] = { url = url, method = method, body = data }
+                if url == API .. "/v1/presence" then
+                    return 200, scriptgo.json.encode({ accepted = 1, presenceKey = "pk_test_20261111", rotatesAt = "2099-01-01T00:00:00.000Z" }), {}
+                end
+                if url == API .. "/v1/identity/codes/confirm" then
+                    local code = scriptgo.json.decode(data).code
+                    if code == "MT42JF" then return 200, '{"linked":true}', {} end
+                    return 410, nil, {}, 'HTTP 410: {"error":{"code":"code_used","message":"x"}}'
+                end
+                return 404, nil, {}, "HTTP 404: {}"
+            end,
+        })
+        local threads, commands, handlers, endpoints = {}, {}, {}, 0
+        w.env.CreateThread = function(fn) threads[#threads + 1] = coroutine.create(fn) end
+        w.env.Wait = function() coroutine.yield() end
+        w.env.RegisterCommand = function(name, fn) commands[name] = fn end
+        w.env.AddEventHandler = function(name, fn) handlers[name] = fn end
+        w.env.GetPlayerEndpoint = function(src)
+            endpoints = endpoints + 1
+            return src == "3" and "203.0.113.9:30120" or nil
+        end
+        w.load(packed(true))
+        local function tick()
+            for _, co in ipairs(threads) do
+                if coroutine.status(co) ~= "dead" then assert(coroutine.resume(co)) end
+            end
+        end
+        return {
+            SG = w.env.ScriptGo, w = w, requests = requests, commands = commands, handlers = handlers, tick = tick,
+            endpoints = function() return endpoints end,
+        }
+    end
+    local base = { scriptgo_api = API, scriptgo_server_token = TOKEN, scriptgo_presence = "true" }
+    local function with(extra)
+        local t = {}
+        for k, v in pairs(base) do t[k] = v end
+        for k, v in pairs(extra or {}) do t[k] = v end
+        return t
+    end
+
+    test("without the presence section, presence is refused and no command is registered", function()
+        local w, SG = world()
+        expect(SG.capabilities.has("presence")).toBe(false)
+        expect(capError(function() SG.presence.status() end)).toContain("capability_unavailable:presence@fivem")
+        expect(shimText:find("@include", 1, true)).toBeNil()
+        expect(w.env.RegisterCommand).toBeNil()
+    end)
+
+    test("address mode reports the normalised address with the environment, never logs it", function()
+        local m = matchWorld(with({ scriptgo_presence_addr = "true" }))
+        expect(m.SG.capabilities.has("presence")).toBe(true)
+        expect(m.SG.presence.status().mode).toBe("addr")
+        m.tick()
+        local report
+        for _, r in ipairs(m.requests) do if r.url == API .. "/v1/presence" then report = scriptgo.json.decode(r.body) end end
+        expect(report.environment).toBe("fivem")
+        expect(report.adapterVersion).toBe(m.SG.runtime.adapterVersion())
+        expect(report.players[1].player).toBe("license:ada")
+        expect(report.players[1].addr[1]).toBe("203.0.113.9")
+        expect(report.players[1].fp).toBeNil()
+        for _, line in ipairs(m.w.printed) do expect(line:find("203.0.113", 1, true)).toBeNil() end
+    end)
+
+    test("without address mode, presence says there is no HMAC and never reads an address", function()
+        local m = matchWorld(with())
+        m.tick()
+        expect(m.SG.presence.status().reason).toBe("presence unavailable: no HMAC on this host")
+        expect(m.endpoints()).toBe(0)
+        for _, r in ipairs(m.requests) do expect(r.url).never.toBe(API .. "/v1/presence") end
+    end)
+
+    test("/link joins its words, confirms with the environment, and answers in chat", function()
+        local m = matchWorld(with())
+        expect(type(m.commands.link)).toBe("function")
+        m.w.run(function() m.commands.link(3, { "mt4", "2jf" }, "link mt4 2jf") end)
+        local confirm
+        for _, r in ipairs(m.requests) do if r.url == API .. "/v1/identity/codes/confirm" then confirm = scriptgo.json.decode(r.body) end end
+        expect(confirm.code).toBe("MT42JF")
+        expect(confirm.player).toBe("license:ada")
+        expect(confirm.environment).toBe("fivem")
+        local chat = m.w.called("TriggerClientEvent")
+        expect(chat[#chat][1]).toBe("chat:addMessage")
+        expect(chat[#chat][2]).toBe(3)
+        expect(scriptgo.json.encode(chat[#chat][3])).toContain("Linked: you can go back to your browser.")
     end)
 end)

@@ -27,6 +27,9 @@ return function(scriptgo, H, opts)
             ui = caps.ui == true, http = caps.http == true, licensing = caps.http == true,
             -- Player perks: the core's module, over the plugin's web requests and the Steam identifier.
             perks = caps.http == true and caps.players == true,
+            -- Player match: the core's presence module and the link command, over the same; the
+            -- fingerprints use the bridge's HMACSHA256 and the player's connection address.
+            presence = caps.http == true and caps.players == true,
         },
         budgetMs = opts.budgetMs,
     }
@@ -68,7 +71,23 @@ return function(scriptgo, H, opts)
                 return H.playerIdentifier(id)
             end,
         }
+        -- The address a player connects from, for player match only: the core hashes it and never
+        -- sends or logs it, and scripts never see it. nil when the plugin cannot tell.
+        if caps.playerAddress then
+            adapter.players.address = function(id)
+                if not validId(id) then return nil end
+                return H.playerAddress(id)
+            end
+        end
     end
+
+    -- HMAC-SHA256 from .NET (System.Security.Cryptography.HMACSHA256), for player match.
+    adapter.crypto = {
+        hmacSha256 = function(key, message)
+            if type(key) ~= "string" or type(message) ~= "string" then return nil end
+            return H.hmacSha256(key, message)
+        end,
+    }
 
     if caps.permissions then
         adapter.permissions = {

@@ -133,6 +133,15 @@ cross between languages is fixed in `docs/spec/multi-language.md`.
 - **Player perks**: an operator sells a perk to the players of their own servers, and the server
   asks SCRIPT//GO who holds it through `ScriptGo.perks`. It is wired on OPEN//77, Rust, the .NET
   kit's Lua guests and the standalone host. It waits for real checkout, like every sale. See [Selling](/docs/selling#an-operator-sells-a-perk).
+- **Player match**: ties a buyer on a shop to their player without an account: the player types
+  `/link <code>` in game, or, where the operator turns presence on, the sign-in page recognises
+  them from a keyed fingerprint of their address. The SDK side is built: `/link` on OPEN//77, Rust,
+  the .NET kit's Lua guests, the standalone host, FiveM, Garry's Mod, Luanti and BeamMP; presence
+  with fingerprints on Rust, the .NET kit and the standalone host. Hosts with no HMAC (OPEN//77,
+  FiveM, Garry's Mod, Luanti, BeamMP) report only in address mode, a second opt-in (default off):
+  the address is sent and SCRIPT//GO fingerprints it at once. The sign-in page and the API side are
+  not live.
+  The contract is `docs/spec/player-match.md`.
 - **Free licences**: a creator grants a free licence for their own package to an account or a
   server key, with nothing sold. See [Protect without selling](/docs/protect-your-work#protect-without-selling).
 - **Compatibility proof**: statuses and package badges come from verification reports.

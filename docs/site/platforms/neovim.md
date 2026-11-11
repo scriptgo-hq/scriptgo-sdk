@@ -70,6 +70,7 @@ What the adapter provides. See [SDK and capabilities](/docs/sdk/capabilities) fo
 | `http` | Partial | curl through vim.system (Neovim 0.10 or later), asynchronous so the editor never waits; unavailable without curl. Status and body only, no response headers. |
 | `licensing` | Partial | Available exactly when http is. |
 | `perks` | Not available | Not applicable: an editor has no players to sell a perk to. |
+| `presence` | Not available | Not applicable: an editor has no players to match. |
 
 ## Protection
 

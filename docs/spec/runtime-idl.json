@@ -42,7 +42,8 @@
     "ui": "ScriptGo.ui.notify: on-screen notifications or chat fallback.",
     "http": "Outbound HTTP requests from the server side.",
     "licensing": "License activation and verification against the SCRIPT//GO API.",
-    "perks": "Player perks: what the operator sold to a player from their own store, asked from the SCRIPT//GO API."
+    "perks": "Player perks: what the operator sold to a player from their own store, asked from the SCRIPT//GO API.",
+    "presence": "Player match: tells SCRIPT//GO which players are connected (opt-in), as keyed fingerprints of their addresses, or on a host with no HMAC in address mode (a second opt-in), and serves the /link command, so a buyer on a shop is tied to their player."
   },
   "types": {
     "value": { "kind": "primitive", "doc": "Any value the codec copies: nil, boolean, integer, number (finite), string, or an acyclic table with string or integer keys (see codec)." },
@@ -792,6 +793,26 @@
         },
         { "name": "off", "kind": "function", "languages": ["lua"], "doc": "Removes a handler by its id.", "params": [{ "name": "id", "type": "integer" }], "returns": ["boolean"] },
         { "name": "status", "kind": "function", "languages": ["lua"], "doc": "{ linked, configured, cursor, lastPollAt, lastError } of the perks client.", "params": [], "returns": ["table"] }
+      ]
+    },
+    {
+      "name": "ScriptGo.presence",
+      "capability": "presence",
+      "sides": ["server"],
+      "languages": ["lua"],
+      "doc": "Player match (docs/spec/player-match.md). The host does the work on its own, from operator settings: presence reporting (scriptgo_presence, default off) and the /link command (scriptgo_link_command, default link) once the server is linked (scriptgo_server_token). One implementation, the portable core's module sdk/lua/scriptgo/presence.lua, which Lua guests run. Scripts never see a player's address.",
+      "members": [
+        { "name": "status", "kind": "function", "languages": ["lua"], "doc": "{ enabled, active, reason, reported, lastError, lastReportAt, rotatesAt }: whether presence reporting is on and running, and why not (\"off\", \"not_linked\", \"presence unavailable: no HMAC on this host\", ...).", "params": [], "returns": ["table"] },
+        {
+          "name": "link",
+          "kind": "function", "languages": ["lua"],
+          "doc": "Confirms a code from the sign-in page for this player, as the /link command does: for a script that offers its own command or menu.",
+          "params": [{ "name": "player", "type": "value" }, { "name": "code", "type": "string" }],
+          "returns": ["boolean"],
+          "errors": ["presence is server-side only", "usage", "invalid_code", "unknown_code", "code_expired", "code_used", "not_linked", "rate_limited", "unreachable", "unknown_player"],
+          "lua": { "failure": "false_reason", "doc": "Waits for the answer: call it from a thread. true, or false, reason." }
+        },
+        { "name": "linkMessage", "kind": "function", "languages": ["lua"], "doc": "The plain sentence to show the player for a link result (ok, reason).", "params": [{ "name": "ok", "type": "boolean" }, { "name": "reason", "type": "value" }], "returns": ["string"] }
       ]
     },
     {

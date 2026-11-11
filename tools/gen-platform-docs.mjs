@@ -24,7 +24,7 @@ const STATUS = {
 const SUPPORT = { supported: "Supported", partial: "Partial", fallback: "Fallback", unavailable: "Not available" };
 const TIER = { escrow: "Code escrow", license: "Licence check and signed releases", none: "No licence check; releases are signed" };
 const DIALECT = { LuaJIT: "LuaJIT" };
-const CAP_ORDER = ["events", "logging", "storage", "players", "permissions", "commands", "config", "ui", "http", "licensing", "perks"];
+const CAP_ORDER = ["events", "logging", "storage", "players", "permissions", "commands", "config", "ui", "http", "licensing", "perks", "presence"];
 
 /** Registry text inside markdown: `<resource>` would be read as an HTML tag. */
 const text = (s) => String(s ?? "").replace(/</g, "&lt;").replace(/>/g, "&gt;");

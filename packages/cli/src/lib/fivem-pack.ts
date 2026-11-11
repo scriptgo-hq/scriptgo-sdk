@@ -15,7 +15,7 @@
 // answers for.
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { expandGlob, validateResourceFiles, type ParsedManifest } from "@scriptgo/manifest";
+import { expandGlob, expandIncludes, stripCapabilitySections, validateResourceFiles, type ParsedManifest } from "@scriptgo/manifest";
 import { scanSource, type PortabilityIssue } from "./portability.ts";
 import { listFiles, sdkRoot, type LoadedResource } from "./sdk.ts";
 
@@ -196,7 +196,11 @@ export function packForFivem(
     mkdirSync(dirname(join(dest, f)), { recursive: true });
     copyFileSync(join(res.root, f), join(dest, f));
   }
-  copyFileSync(join(sdkRoot, "adapters", "fivem", "shim.lua"), join(dest, FIVEM_SHIM_FILE));
+  // The shim keeps a capability's section only for a resource that declares it (player match), with
+  // the core's module included word for word, as for OPEN//77.
+  const shimDir = join(sdkRoot, "adapters", "fivem");
+  const declared = new Set([...m.capabilities, ...m.optionalCapabilities]);
+  writeFileSync(join(dest, FIVEM_SHIM_FILE), expandIncludes(stripCapabilitySections(readFileSync(join(shimDir, "shim.lua"), "utf8"), declared), shimDir));
   writeFileSync(join(dest, "fxmanifest.lua"), fivemManifest(m, warnings));
   return { dest, warnings, errors: [] };
 }

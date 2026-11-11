@@ -68,6 +68,7 @@ What the adapter provides. See [SDK and capabilities](/docs/sdk/capabilities) fo
 | `http` | Not available | Not implemented: no outbound HTTP from resources yet. |
 | `licensing` | Not available | Needs http. |
 | `perks` | Not available | Needs http, which this adapter does not have. |
+| `presence` | Not available | Needs http, which this adapter does not have. |
 
 ## Protection
 

@@ -55,6 +55,7 @@ Measured against the BeamMP-Server v3.9.3 sources (`src/TLuaEngine.cpp`, `src/Lu
 | Logging | `Util.LogInfo` / `LogWarn` / `LogError` / `LogDebug` |
 | Files | `io.open` for reads and writes, `FS.ListFiles` / `FS.ListDirectories` for listings, `FS.CreateDirectory` |
 | `http`, `licensing` | `curl` started in the background (`os.execute` + `start /B` on Windows, `&` elsewhere), writing body, headers and exit code to files under `<dataDir>/http/` that the tick polls: a request never blocks the plugin. BeamMP's own `Http.CreateConnection(host, port):Get(path, headers)` returns nothing (cpp-httplib's response is dropped) and has no POST, so it cannot carry a license check |
+| `presence` | With curl: `/link <code>` works. BeamMP's Lua has no HMAC, so presence reports only in address mode (`scriptgo_presence_addr`, default off; the owner's decision on it is pending): the address from `MP.GetPlayerIdentifiers(pid).ip` is sent normalised and SCRIPT//GO fingerprints it at once; never logged. Not run on a BeamMP server |
 | Shutdown, reload | `onShutdown` stops every resource. BeamMP re-runs `main.lua` when it changes (plugin monitor): the old host is stopped and its timer cancelled first |
 
 The server console accepts `scriptgo` (list), `scriptgo start|stop|restart <name>`, and any

@@ -9,6 +9,7 @@ local manifest = R("manifest")
 local semver = R("semver")
 local caps = R("capabilities")
 local perksLib = R("perks")
+local presenceLib = R("presence")
 
 local unpack, pack = compat.unpack, compat.pack
 
@@ -317,6 +318,8 @@ function M.new(opts)
         resources = {}, order = {},
         players = {}, localPlayer = opts.localPlayer,
         commands = {},
+        -- Commands the host itself registers, owned by no resource (the player-match `link`).
+        hostCommands = {},
         queue = {},
         now = 0, tickCount = 0,
         storageCache = {},
@@ -331,6 +334,8 @@ function M.new(opts)
     self.capabilities.logging = true
     -- Perks are implemented once, in the core, over the adapter's HTTP: no HTTP, no perks.
     if not self.capabilities.http then self.capabilities.perks = false end
+    -- Player match (presence and the link command): the core's module over HTTP and the players.
+    if not (self.capabilities.http and self.capabilities.players) then self.capabilities.presence = false end
     -- Guest languages this host runs: the portable host is Lua only (.js/.ts need a JS guest).
     self.languages = { lua = true }
     self.now = self:_clock()
@@ -657,15 +662,20 @@ end
 -- Players ----------------------------------------------------------------------------------------------
 -- Same events as Open77: playerJoining(oldId) and playerDropped(reason) carry the player in `source`;
 -- onPlayerConnected(playerId) and onPlayerDisconnected(playerId, reason) carry it as an argument.
-function Host:playerJoin(id, name)
-    self.players[id] = { id = id, name = name or ("Player " .. tostring(id)) }
+-- `address` is optional: the player's network address, for adapters that learn it at the join
+-- (adapter.playerAddresses = true) instead of answering adapter.players.address(id). It is kept in
+-- memory only, for player match (presence.lua), which hashes it and never sends or logs it.
+function Host:playerJoin(id, name, address)
+    self.players[id] = { id = id, name = name or ("Player " .. tostring(id)), address = address }
     self:_fanout("server", "playerJoining", { source = id }, id)
     self:_fanout("server", "onPlayerConnected", {}, id)
+    if self.presence then self.presence.joined(id) end
 end
 
 function Host:playerDrop(id, reason)
     if not self.players[id] then return end
     reason = reason or "disconnected"
+    if self.presence then self.presence.left(id) end
     self:_fanout("server", "playerDropped", { source = id }, reason)
     self:_fanout("server", "onPlayerDisconnected", {}, id, reason)
     self.players[id] = nil
@@ -687,6 +697,20 @@ function Host:playerIdentifier(id)
     return "local:" .. tostring(p.name):lower():gsub("[^%w_%-]", "_")
 end
 
+-- The address a connected player plays from, or nil. Only player match reads it.
+function Host:playerAddress(id)
+    local ap = self.adapter.players
+    if ap and ap.address then return ap.address(id) end
+    local p = self.players[id]
+    return p and p.address or nil
+end
+
+-- Does this host know its players' addresses? (adapter.players.address, or addresses given at join)
+function Host:knowsAddresses()
+    local ap = self.adapter.players
+    return (ap and type(ap.address) == "function") or self.adapter.playerAddresses == true
+end
+
 function Host:playerName(id)
     if self.adapter.players and self.adapter.players.name then return self.adapter.players.name(id) end
     local p = self.players[id]
@@ -704,10 +728,19 @@ function Host:_dropCommands(resName)
 end
 
 function Host:commandList()
-    local names = {}
-    for name in pairs(self.commands) do names[#names + 1] = name end
+    local names, seen = {}, {}
+    for name in pairs(self.commands) do names[#names + 1] = name; seen[name] = true end
+    for name in pairs(self.hostCommands) do if not seen[name] then names[#names + 1] = name end end
     table.sort(names)
     return names
+end
+
+-- Is there a resource or host command of that name?
+function Host:hasCommand(name)
+    if type(name) ~= "string" then return false end
+    name = name:lower()
+    local list = self.commands[name]
+    return (list ~= nil and #list > 0) or self.hostCommands[name] ~= nil
 end
 
 -- Executes a command line as `source` (0 = console). Returns true or false, reason.
@@ -719,7 +752,18 @@ function Host:executeCommand(source, line)
     if not name then return false, "empty_command" end
     name = name:lower()
     local list = self.commands[name]
-    if not list or #list == 0 then return false, "unknown_command:" .. name end
+    if not list or #list == 0 then
+        -- A resource's command of that name wins; else the host's own (the player-match `link`).
+        local hc = self.hostCommands[name]
+        if not hc then return false, "unknown_command:" .. name end
+        local args = { n = 0 }
+        for word in rest:gmatch("%S+") do
+            args.n = args.n + 1
+            args[args.n] = word
+        end
+        hc(source, args)
+        return true
+    end
     local entry
     if source ~= 0 then
         for _, e in ipairs(list) do if e.side.name == "client" then entry = e end end
@@ -961,12 +1005,80 @@ function Host:_perks()
     return self.perks
 end
 
+-- Player match ------------------------------------------------------------------------------------------
+-- One presence client for the whole host (scriptgo/presence.lua), created at the first tick of a host
+-- that has the capability. It reports connected players' keyed address fingerprints when the operator
+-- turned `scriptgo_presence` on, and serves the `link` command (scriptgo_link_command, default
+-- "link") once the server is linked (scriptgo_server_token).
+function Host:_presenceClient()
+    if self.presence then return self.presence end
+    local host, adapter = self, self.adapter
+    local crypto = adapter.crypto
+    self.presence = presenceLib.new({
+        request = function(req, done) return adapter.http.request(req, done) end,
+        await = function(register)
+            local promise = newPromise(host)
+            register(function(...) promise:resolve(...) end)
+            return promise:await()
+        end,
+        identifier = function(player) return host:playerIdentifier(player) end,
+        name = function(player) return host:playerName(player) end,
+        address = host:knowsAddresses() and function(player) return host:playerAddress(player) end or nil,
+        players = function() return host:playerList() end,
+        hmacSha256 = crypto and type(crypto.hmacSha256) == "function" and crypto.hmacSha256 or nil,
+        now = function() return host:_wall() end,
+        json = json,
+        config = function(key)
+            local cfg = adapter.config
+            return cfg and cfg.get and cfg.get(nil, key) or nil
+        end,
+        log = function(level, message) host:_log(level, "presence", message) end,
+        environment = self.environment,
+        adapterVersion = adapter.adapterVersion,
+    })
+    return self.presence
+end
+
+-- A line to one player: the adapter's notification (chat on most hosts), else the log.
+function Host:tellPlayer(id, text)
+    local ui = self.adapter.ui
+    if ui and ui.notify then
+        ui.notify(id, { type = "info", title = "SCRIPT//GO", message = text, resource = "scriptgo" })
+    else
+        self:_log("info", "presence", "to player " .. tostring(id) .. ": " .. text)
+    end
+end
+
+function Host:_tickPresence()
+    local p = self:_presenceClient()
+    p.tick()
+    -- The link command exists while the server is linked and the operator did not switch it off.
+    local cfg = self.adapter.config
+    local token = cfg and cfg.get and cfg.get(nil, "scriptgo_server_token")
+    local name = (type(token) == "string" and token ~= "" and self.capabilities.commands) and p.command() or nil
+    if name == self.linkCommand then return end
+    if self.linkCommand then self.hostCommands[self.linkCommand] = nil end
+    self.linkCommand = name
+    if not name then return end
+    local host = self
+    self.hostCommands[name] = function(source, args)
+        if source == 0 then
+            host:_log("info", "presence", "/" .. name .. " is typed by a player in game, with the code their browser shows")
+            return
+        end
+        p.linkAsync(source, presenceLib.codeFromArgs(args), function(ok, reason)
+            host:tellPlayer(source, p.linkMessage(ok, reason))
+        end)
+    end
+end
+
 -- Tick -------------------------------------------------------------------------------------------------
 function Host:tick(now)
     self.now = now or self:_clock()
     self.tickCount = self.tickCount + 1
     if self.licenseGuards then self:_tickLicenses() end
     if self.perks then self.perks.tick() end
+    if self.capabilities.presence and self.sides.server then self:_tickPresence() end
     self:_drain()
     for _, rname in ipairs(self.order) do
         local r = self.resources[rname]
@@ -1434,6 +1546,22 @@ function Host:_buildEnv(side)
             local client = perksCall("status", false)
             if not client then return nil, "perks is server-side only" end
             return client.status()
+        end,
+    })
+    -- Player match: the host reports presence and serves the link command on its own (operator
+    -- settings); a script can read the state, or confirm a code from a command of its own.
+    SG.presence = capTable("presence", {
+        status = function()
+            if side.name ~= "server" then return nil, "presence is server-side only" end
+            return host:_presenceClient().status()
+        end,
+        link = function(player, code)
+            inThread("ScriptGo.presence.link")
+            if side.name ~= "server" then return false, "presence is server-side only" end
+            return host:_presenceClient().link(player, code)
+        end,
+        linkMessage = function(ok, reason)
+            return host:_presenceClient().linkMessage(ok, reason)
         end,
     })
     -- OPEN//77-compatible names for the portable subset.

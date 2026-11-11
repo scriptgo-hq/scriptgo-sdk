@@ -42,6 +42,7 @@ public sealed partial class ScriptGoHost : IDisposable
     private readonly Dictionary<string, List<CommandEntry>> _commands = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Dictionary<string, SgValue>> _storage = new(StringComparer.Ordinal);
     private readonly SortedDictionary<int, string> _players = [];
+    private readonly Dictionary<int, string> _addresses = [];
     private readonly Dictionary<string, NativeModule> _natives = new(StringComparer.Ordinal);
     private readonly HashSet<string> _capabilities = new(StringComparer.Ordinal);
     private readonly Dictionary<int, AsyncCall> _asyncCalls = [];
@@ -62,13 +63,15 @@ public sealed partial class ScriptGoHost : IDisposable
         if (Options.Commands) provided.Add("commands");
         if (services.Config is not null) provided.Add("config");
         if (services.Ui is not null) provided.Add("ui");
-        if (services.Http is not null) { provided.Add("http"); provided.Add("licensing"); provided.Add("perks"); }
+        if (services.Http is not null) { provided.Add("http"); provided.Add("licensing"); provided.Add("perks"); provided.Add("presence"); }
         foreach (var c in provided)
         {
             if (c is "events" or "logging" || Options.Capabilities is null || Options.Capabilities.Contains(c)) _capabilities.Add(c);
         }
         // Player perks are the portable core's module, running over the kit's HTTP: no HTTP, no perks.
         if (!_capabilities.Contains("http")) _capabilities.Remove("perks");
+        // Player match (presence and the link command) is the core's presence module too.
+        if (!_capabilities.Contains("http")) _capabilities.Remove("presence");
         Now = services.Clock.MonotonicMilliseconds() / 1000.0;
     }
 
@@ -94,7 +97,7 @@ public sealed partial class ScriptGoHost : IDisposable
     /// (the portable core's perks module, which the Lua guest runs): JavaScript and TypeScript guests
     /// do not have them yet, and are told so (<c>capability_unavailable:perks@&lt;environment&gt;</c>).
     /// </summary>
-    internal IEnumerable<string> CapabilitiesFor(string language) => language == "lua" ? Capabilities : Capabilities.Where(c => c != "perks");
+    internal IEnumerable<string> CapabilitiesFor(string language) => language == "lua" ? Capabilities : Capabilities.Where(c => c is not ("perks" or "presence"));
 
     internal static string Unavailable(string capability, string environment) => $"capability_unavailable:{capability}@{environment}";
 
@@ -214,11 +217,12 @@ public sealed partial class ScriptGoHost : IDisposable
             if (!_capabilities.Contains(c)) return Fail(res, Unavailable(c, Environment));
         // A resource that requires perks and brings a JavaScript or TypeScript server script cannot
         // have them here: only Lua guests run the perks module.
-        if (m.Capabilities.Contains("perks"))
+        foreach (var luaOnly in new[] { "perks", "presence" })
         {
+            if (!m.Capabilities.Contains(luaOnly)) continue;
             var own = m.EnvironmentScripts.TryGetValue(Environment, out var envScripts) ? envScripts : [];
             if (m.SharedScripts.Concat(m.ServerScripts).Concat(own).Any(p => ManifestParser.LanguageOf(p) is { } lang && lang != "lua"))
-                return Fail(res, Unavailable("perks", Environment));
+                return Fail(res, Unavailable(luaOnly, Environment));
         }
         // Only the scripts this host would run count: its sides and its own environment scripts.
         var env = m.EnvironmentScripts.TryGetValue(Environment, out var e) ? e : [];
@@ -514,9 +518,14 @@ public sealed partial class ScriptGoHost : IDisposable
     // Players -------------------------------------------------------------------------------------------
 
     /// <summary>A player joined: playerJoining (source = id) and onPlayerConnected(id) on the server side.</summary>
-    public void PlayerJoin(int id, string? name = null)
+    /// <remarks>
+    /// <paramref name="address"/> is the player's network address when the integrator has no
+    /// <see cref="IHostPlayerAddresses"/>: only player match reads it, as a keyed fingerprint.
+    /// </remarks>
+    public void PlayerJoin(int id, string? name = null, string? address = null)
     {
         _players[id] = name ?? $"Player {id}";
+        if (address is not null) _addresses[id] = address; else _addresses.Remove(id);
         Fanout("server", "playerJoining", new CallContext(id, null), [SgValue.Of(id)]);
         Fanout("server", "onPlayerConnected", default, [SgValue.Of(id)]);
         FlushDeferred();
@@ -529,6 +538,7 @@ public sealed partial class ScriptGoHost : IDisposable
         Fanout("server", "playerDropped", new CallContext(id, null), [SgValue.Of(reason)]);
         Fanout("server", "onPlayerDisconnected", default, [SgValue.Of(id), SgValue.Of(reason)]);
         _players.Remove(id);
+        _addresses.Remove(id);
         FlushDeferred();
     }
 
@@ -538,6 +548,13 @@ public sealed partial class ScriptGoHost : IDisposable
     {
         if (Services.Players is { } p) return p.Name(id);
         return _players.TryGetValue(id, out var n) ? n : null;
+    }
+
+    /// <summary>A connected player's address for player match: the integrator's, else the one given at join.</summary>
+    internal string? PlayerAddress(int id)
+    {
+        if (Services.Players is IHostPlayerAddresses a) return a.Address(id);
+        return _addresses.TryGetValue(id, out var v) ? v : null;
     }
 
     /// <summary>A stable identifier for storage keys (the engine's account id when the integrator provides one).</summary>

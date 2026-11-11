@@ -42,6 +42,7 @@ What the adapter provides. See [SDK and capabilities](/docs/sdk/capabilities) fo
 | `http` | Partial | curl started in the background through os.execute and polled each tick, so a request never blocks the plugin; needs curl on the server's PATH. BeamMP's own Http.CreateConnection has no POST and drops the response. |
 | `licensing` | Partial | Over the same curl path, to the scriptgo_api convar. |
 | `perks` | Not available | Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here. |
+| `presence` | Partial | With curl: /link works, and presence reports only in address mode (`scriptgo_presence_addr`, default off; the owner's decision on it is pending): the normalised address is sent and SCRIPT//GO fingerprints it at once, from MP.GetPlayerIdentifiers(pid).ip; BeamMP's Lua has no HMAC. Not run on a BeamMP server with a connected player. |
 
 ## Protection
 

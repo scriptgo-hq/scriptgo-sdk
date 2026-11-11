@@ -124,8 +124,12 @@ export function open77Manifest(m: ParsedManifest, warnings: string[], source = "
   // The shim reads the server ACL for ScriptGo.permissions and sends notifications over the network.
   if (caps.has("permissions")) permissions.add("acl.read");
   if (caps.has("ui")) permissions.add("network.events");
-  // ScriptGo.http, ScriptGo.licensing and ScriptGo.perks go through Open77.http.request (server side).
-  if (caps.has("http") || caps.has("licensing") || caps.has("perks")) permissions.add("http.request");
+  // ScriptGo.http, licensing, perks and player match go through Open77.http.request (server side).
+  const api = caps.has("licensing") || caps.has("perks") || caps.has("presence");
+  if (caps.has("http") || api) permissions.add("http.request");
+  // Player match reads a player's address (Open77.players.endpoint), the one sensitive identity field:
+  // only a resource that declares presence asks for it, where the operator sees it before running it.
+  if (caps.has("presence")) permissions.add("players.identity.sensitive");
   if (permissions.size > 0) lines.push(`permissions ${list([...permissions].sort())}`);
   for (const dep of m.dependencies) {
     const { constraint, warning } = toOpen77Constraint(dep.range);
@@ -150,14 +154,20 @@ export function open77Manifest(m: ParsedManifest, warnings: string[], source = "
   if (!m.environments.includes("open77") && m.environments.length > 0) {
     warnings.push("the manifest does not list open77 in environments; the package is untested there");
   }
-  if (caps.has("http") || caps.has("licensing") || caps.has("perks")) {
+  if (caps.has("http") || api) {
     warnings.push(
       "outbound HTTP is off on an OPEN//77 server until the operator sets server.jsonc http.enabled and lists every host the resource calls in http.allowedHosts" +
-        (caps.has("licensing") || caps.has("perks") ? " (licensing and perks call the SCRIPT//GO API at the scriptgo_api convar, default https://api.scriptgo.dev: allow api.scriptgo.dev)" : ""),
+        (api ? " (licensing, perks and player match call the SCRIPT//GO API at the scriptgo_api convar, default https://api.scriptgo.dev: allow api.scriptgo.dev)" : ""),
     );
   }
   if (caps.has("perks")) {
     warnings.push("perks needs the server linked to the operator's SCRIPT//GO account: set the scriptgo_server_token convar to the sg_srv_ token of a server link");
+  }
+  if (caps.has("presence")) {
+    warnings.push(
+      "presence registers the /link command (convar scriptgo_link_command) once the server is linked (scriptgo_server_token): declare it in one resource per server. " +
+        "Presence reporting (convar scriptgo_presence, default off) asks for players.identity.sensitive and needs an HMAC-SHA256 native that OPEN//77 does not have yet: until it does, only /link works",
+    );
   }
   return lines.join("\n") + "\n";
 }
