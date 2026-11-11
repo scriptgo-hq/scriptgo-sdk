@@ -89,6 +89,8 @@ export interface AssetEnvironmentRule {
   native: string | null;
   /** `scriptgo pack --target <x>` writes this environment's delivery form. */
   packTarget: string | null;
+  /** Why an environment cannot deliver assets, or a caveat. */
+  note?: string;
 }
 
 export const ASSET_RULES: Record<string, AssetEnvironmentRule> = {
@@ -146,6 +148,12 @@ export const ASSET_RULES: Record<string, AssetEnvironmentRule> = {
   dotnet: { support: "bundled", generic: "files of the resource (resource.readFile)", native: "files of the resource", packTarget: null },
   neovim: { support: "bundled", generic: "files of the resource (resource.readFile); there are no players to deliver to", native: "files of the resource", packTarget: null },
   cctweaked: { support: "bundled", generic: "files of the resource on the computer; there are no players to deliver to", native: "files of the resource", packTarget: null },
+  defold: { support: "bundled", generic: "files of the resource (resource.readFile), inside the game build", native: "files of the resource", packTarget: null },
+  openresty: { support: "bundled", generic: "files of the resource (resource.readFile); a web server has no game client to deliver to", native: "files of the resource", packTarget: null },
+  roblox: { support: "unsupported", generic: null, native: null, packTarget: null, note: "Roblox content is uploaded to Roblox's own asset system by the experience owner; a package cannot deliver files" },
+  zomboid: { support: "unsupported", generic: null, native: null, packTarget: null, note: "Project Zomboid servers send mods as Steam Workshop items the operator lists; a package cannot deliver files itself" },
+  dst: { support: "unsupported", generic: null, native: null, packTarget: null, note: "Don't Starve Together servers send mods as Steam Workshop items the operator lists; a package cannot deliver files itself" },
+  kcdmp: { support: "unsupported", generic: null, native: null, packTarget: null, note: "asset delivery on KCD multiplayer has not been researched" },
 };
 
 /** OPEN//77 preload packages: what OPEN//77's server accepts as inert data (its ModRootPolicy). */
@@ -405,9 +413,11 @@ export function inspectAssets(opts: {
       err(c, "assets_unsupported", `${env}: SCRIPT//GO has no asset delivery for this environment yet.`);
       continue;
     }
-    if (native.length > 0 && rule.native === null) err(c, "assets_unsupported", `environment_asset "${env}": ${env} takes no native assets.`);
+    if (native.length > 0 && rule.native === null) err(c, "assets_unsupported", `environment_asset "${env}": ${env} takes no native assets${rule.note ? ` (${rule.note})` : ""}.`);
     if (generic.length > 0 && rule.generic === null) {
-      err(c, "assets_unsupported", `${env} cannot deliver generic assets (${rule.native ?? "no delivery"}). Declare them with environment_asset "${env}" in its own form, or remove ${env} from environments.`);
+      err(c, "assets_unsupported", rule.native
+        ? `${env} cannot deliver generic assets (it takes ${rule.native}). Declare them with environment_asset "${env}" in its own form, or remove ${env} from environments.`
+        : `${env} cannot deliver assets${rule.note ? ` (${rule.note})` : ""}. Remove ${env} from environments, or sell the assets without it.`);
     }
     const delivered = [...new Set([...(rule.generic ? generic : []), ...native])].sort();
     envReport.files = delivered;
@@ -493,7 +503,7 @@ const ENV_CHECKS: Record<string, (x: EnvCheck) => void> = {
       if (!/^[A-Za-z0-9_.-]+$/.test(base)) err(c, "luanti_media_name", `${f}: Luanti media names use a-z A-Z 0-9 _ . - only.`);
       if (f.split("/").slice(1, -1).some((s) => s.startsWith("_") || s.startsWith("."))) err(c, "luanti_media_hidden", `${f}: Luanti ignores media folders whose name starts with _ or .`);
       if (bytesOf(f).length > LUANTI_MAX_MEDIA_BYTES) err(c, "luanti_media_too_large", `${f}: Luanti cannot handle media files over about 16 MB.`);
-      if (!base.startsWith(`${m.name}_`)) warn(c, "luanti_media_prefix", `${f}: Luanti's media names are one namespace for every mod; prefix the file name with "${m.name}_" to avoid a clash.`);
+      if (!base.startsWith(`${m.name}_`) && !base.startsWith(`${m.name}.`)) warn(c, "luanti_media_prefix", `${f}: Luanti's media names are one namespace for every mod; prefix the file name with "${m.name}_" to avoid a clash.`);
     }
   },
 
@@ -571,7 +581,7 @@ function fivemCheck({ c, m, env, generic, native, listing, bytesOf, report }: En
 
 /** One line per environment for a terminal: support, download size, needs. */
 export function describeAssetReport(r: AssetReport): string[] {
-  const mb = (n: number): string => `${(n / (1024 * 1024)).toFixed(n < 1024 * 1024 ? 2 : 1)} MiB`;
+  const mb = (n: number): string => (n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KiB` : `${(n / (1024 * 1024)).toFixed(1)} MiB`);
   const out = [`assets: ${r.files.length} files, ${mb(r.totalBytes)}`];
   for (const [env, e] of Object.entries(r.environments)) {
     const dl = e.support === "bundled" ? "bundled with the resource, no player download" : `each player downloads ${mb(e.downloadBytes)}`;

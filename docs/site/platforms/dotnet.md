@@ -95,6 +95,20 @@ Code escrow: the kit's compiled loader decrypts in memory with a key released to
 
 See [Protect your work](/docs/protect-your-work) for what protection does and does not do.
 
+## Assets
+
+Maps, models, textures, sounds and other files players download. See [Selling assets](/docs/selling-assets).
+
+| | |
+|---|---|
+| Support | Bundled with the resource |
+| `assets` | files of the resource (resource.readFile) |
+| `environment_asset` | files of the resource |
+
+No game client downloads anything: assets are files of the resource.
+
+Asset escrow: The host can read containers itself, but its operator holds the key: at-rest encryption only.
+
 ## Limits
 
 - TypeScript must be compiled first (scriptgo pack or scriptgo verify do it with esbuild); the kit loads x.ts.js next to x.ts.

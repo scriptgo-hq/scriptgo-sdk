@@ -1,7 +1,7 @@
 // Writes one documentation page per platform, docs/site/platforms/<slug>.md, from
 // sdk/environments.json and each adapter's SETUP.md. The website keeps a platform's page short and
-// links here for the detail: how it runs, setup, capabilities, protection, limits and the real runs
-// behind its status.
+// links here for the detail: how it runs, setup, capabilities, protection, assets, limits and the
+// real runs behind its status.
 //
 //   node tools/gen-platform-docs.mjs [--check]
 //
@@ -52,6 +52,22 @@ function setupOf(e) {
     .join("\n");
 }
 
+const ASSET_SUPPORT = { supported: "Supported", partial: "Partial", bundled: "Bundled with the resource", unsupported: "Not available" };
+
+/** Client-delivered assets (docs/spec/assets.md): how they reach players here. */
+function assetsSection(a) {
+  const out = ["## Assets", "", "Maps, models, textures, sounds and other files players download. See [Selling assets](/docs/selling-assets).", ""];
+  out.push("| | |", "|---|---|");
+  out.push(`| Support | ${cell(ASSET_SUPPORT[a.support] ?? a.support)} |`);
+  if (a.generic) out.push(`| \`assets\` | ${cell(a.generic)} |`);
+  if (a.native) out.push(`| \`environment_asset\` | ${cell(a.native)} |`);
+  if (a.packTarget) out.push(`| Pack | \`scriptgo pack --target ${a.packTarget}\` |`);
+  out.push("");
+  if (a.note) out.push(text(a.note), "");
+  if (a.escrow && a.escrow !== "Not applicable.") out.push(`Asset escrow: ${text(a.escrow)}`, "");
+  return out;
+}
+
 function page(e) {
   const i = e.integration;
   const p = e.protection;
@@ -86,6 +102,8 @@ function page(e) {
   }
 
   out.push("## Protection", "", text(p.note || TIER[p.tier]), "", "See [Protect your work](/docs/protect-your-work) for what protection does and does not do.", "");
+
+  if (e.assets) out.push(...assetsSection(e.assets));
 
   if (e.platformRulesNote) {
     out.push(

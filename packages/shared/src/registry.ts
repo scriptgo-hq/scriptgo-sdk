@@ -36,6 +36,21 @@ export const EnvironmentProtection = z.object({
 });
 export type EnvironmentProtection = z.infer<typeof EnvironmentProtection>;
 
+/**
+ * How client-delivered assets reach players in one environment (docs/spec/assets.md, ASSET_RULES of
+ * @scriptgo/manifest). `generic`/`native`: what `assets` and `environment_asset` become there, null
+ * when the environment cannot take them. `escrow`: the client work asset escrow would need there.
+ */
+export const EnvironmentAssets = z.object({
+  support: z.enum(["supported", "partial", "bundled", "unsupported"]),
+  generic: z.string().nullable(),
+  native: z.string().nullable(),
+  packTarget: z.string().nullable(),
+  note: z.string(),
+  escrow: z.string(),
+});
+export type EnvironmentAssets = z.infer<typeof EnvironmentAssets>;
+
 export const Environment = z.object({
   slug: z.string(),
   name: z.string(),
@@ -50,6 +65,8 @@ export const Environment = z.object({
   platformRulesNote: z.string(),
   /** Protection tier (ADR-0027). Never weaker or stronger than what the adapter really does. */
   protection: EnvironmentProtection.default({ tier: "none", state: "available", optIn: false, note: "" }),
+  /** Asset delivery (docs/spec/assets.md). Optional until the API serves it. */
+  assets: EnvironmentAssets.optional(),
   luaDialects: z.array(z.string()),
   /** Guest languages the environment's host runs ("lua", "ts", "js"). */
   languages: z.array(z.string()).default(["lua"]),

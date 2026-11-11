@@ -71,6 +71,21 @@ Licence check and signed releases. The host runs plain script, so its operator c
 
 See [Protect your work](/docs/protect-your-work) for what protection does and does not do.
 
+## Assets
+
+Maps, models, textures, sounds and other files players download. See [Selling assets](/docs/selling-assets).
+
+| | |
+|---|---|
+| Support | Supported |
+| `assets` | mod media (textures/, sounds/, models/, media/, locale/, fonts/) in a generated media mod: the engine sends it to every client at join |
+| `environment_asset` | the same media folders |
+| Pack | `scriptgo pack --target luanti` |
+
+Run on Luanti 5.18.0 (official server image): every packed media file was announced to clients with the SHA-1 of its bytes. No client was run.
+
+Asset escrow: Not feasible without forking the engine.
+
 ## Limits
 
 - No client side.

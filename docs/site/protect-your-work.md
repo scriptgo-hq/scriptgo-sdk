@@ -31,6 +31,10 @@ publisher's rights are untouched.
 Ownership only matters if it can be enforced. Per-server licences and encrypted releases are what
 enforce it: the script runs where a licence allows it, and stops where one ends.
 
+Assets (maps, models, textures, sounds) are protected differently: a licence-gated download, a
+fingerprinted copy per buyer, signed releases and takedown on report. See
+[Selling assets](/docs/selling-assets#protection).
+
 ## Three layers
 
 | Layer | Applies to | What it gives you |

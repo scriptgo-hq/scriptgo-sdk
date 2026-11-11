@@ -33,6 +33,14 @@
         "optIn": false,
         "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
       },
+      "assets": {
+        "support": "bundled",
+        "generic": "files of the resource (resource.readFile)",
+        "native": "files of the resource",
+        "packTarget": null,
+        "note": "No game client downloads anything: assets are files of the resource.",
+        "escrow": "The host can read containers itself, but its operator holds the key: at-rest encryption only."
+      },
       "proof": [
         {
           "package": "inventory_pro",
@@ -286,6 +294,14 @@
         "optIn": false,
         "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
       },
+      "assets": {
+        "support": "bundled",
+        "generic": "files of the resource (resource.readFile)",
+        "native": "files of the resource",
+        "packTarget": null,
+        "note": "No game client downloads anything: assets are files of the resource.",
+        "escrow": "The host can read containers itself, but its operator holds the key: at-rest encryption only."
+      },
       "proof": [
         {
           "package": "inventory_pro",
@@ -413,6 +429,14 @@
         "optIn": false,
         "note": "Licence check and signed releases, once the adapter has HTTP. The adapter is script-level, so the operator can read what it loads; a native GDExtension loader would be a later upgrade."
       },
+      "assets": {
+        "support": "bundled",
+        "generic": "files of the resource (resource.readFile)",
+        "native": "files of the resource",
+        "packTarget": null,
+        "note": "No game client downloads anything: assets are files of the resource.",
+        "escrow": "The host can read containers itself, but its operator holds the key: at-rest encryption only."
+      },
       "proof": [
         {
           "package": "sg_eventbus",
@@ -530,6 +554,14 @@
         "optIn": false,
         "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
       },
+      "assets": {
+        "support": "supported",
+        "generic": "mod media (textures/, sounds/, models/, media/, locale/, fonts/) in a generated media mod: the engine sends it to every client at join",
+        "native": "the same media folders",
+        "packTarget": "luanti",
+        "note": "Run on Luanti 5.18.0 (official server image): every packed media file was announced to clients with the SHA-1 of its bytes. No client was run.",
+        "escrow": "Not feasible without forking the engine."
+      },
       "proof": [
         {
           "package": "sg_eventbus",
@@ -644,6 +676,14 @@
         "state": "available",
         "optIn": true,
         "note": "Code escrow, an opt-in server feature: a protected release is decrypted in memory, with a key released to the licensed server only. The operator of the machine can still inspect their own process; that takes real effort and the copy is traceable."
+      },
+      "assets": {
+        "support": "supported",
+        "generic": "resource files: sent to every player's client cache before the resource starts; scripts and the WebUI read them, the game engine does not mount them",
+        "native": "preload packages: .zip files holding REDengine data under archive/pc/mod/, r6/tweaks/ or engine/config/, declared as preload_mod and mounted by the game at its next boot",
+        "packTarget": "open77",
+        "note": "Packed and checked against OPEN//77's preload rules; not run on an OPEN//77 server with a game client.",
+        "escrow": "Asset escrow needs the OPEN//77 client to mount REDengine archives from memory: unresearched for REDengine 2.5."
       },
       "proof": [
         {
@@ -776,6 +816,14 @@
         "optIn": false,
         "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
       },
+      "assets": {
+        "support": "bundled",
+        "generic": "files of the resource (resource.readFile); a web server has no game client to deliver to",
+        "native": "files of the resource",
+        "packTarget": null,
+        "note": "No game client downloads anything: assets are files of the resource.",
+        "escrow": "The host can read containers itself, but its operator holds the key: at-rest encryption only."
+      },
       "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
@@ -817,6 +865,14 @@
         "state": "planned",
         "optIn": false,
         "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
+      },
+      "assets": {
+        "support": "bundled",
+        "generic": "files of the resource (resource.readFile), inside the game build",
+        "native": "files of the resource",
+        "packTarget": null,
+        "note": "No game client downloads anything: assets are files of the resource.",
+        "escrow": "The host can read containers itself, but its operator holds the key: at-rest encryption only."
       },
       "proof": [],
       "runtimeVersions": [],
@@ -863,6 +919,14 @@
         "state": "available",
         "optIn": false,
         "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
+      },
+      "assets": {
+        "support": "bundled",
+        "generic": "files of the resource (resource.readFile); there are no players to deliver to",
+        "native": "files of the resource",
+        "packTarget": null,
+        "note": "No game client downloads anything: assets are files of the resource.",
+        "escrow": "The host can read containers itself, but its operator holds the key: at-rest encryption only."
       },
       "proof": [
         {
@@ -1001,6 +1065,14 @@
         "optIn": false,
         "note": "No licence check in this adapter, so a package runs there without one. Releases are still signed."
       },
+      "assets": {
+        "support": "bundled",
+        "generic": "files of the resource on the computer; there are no players to deliver to",
+        "native": "files of the resource",
+        "packTarget": null,
+        "note": "No game client downloads anything: assets are files of the resource.",
+        "escrow": "The host can read containers itself, but its operator holds the key: at-rest encryption only."
+      },
       "proof": [
         {
           "package": "sg_probe",
@@ -1094,6 +1166,14 @@
         "state": "available",
         "optIn": false,
         "note": "Code escrow: the kit's compiled loader decrypts in memory with a key released to this server only. The operator of the machine can still inspect their own process; that takes real effort and the copy is traceable."
+      },
+      "assets": {
+        "support": "bundled",
+        "generic": "files of the resource (resource.readFile)",
+        "native": "files of the resource",
+        "packTarget": null,
+        "note": "No game client downloads anything: assets are files of the resource.",
+        "escrow": "The host can read containers itself, but its operator holds the key: at-rest encryption only."
       },
       "proof": [
         {
@@ -1210,6 +1290,14 @@
         "optIn": false,
         "note": "Code escrow is planned: a JVM plugin with a native library would hold the key. Until it exists, licence check and signed releases only."
       },
+      "assets": {
+        "support": "partial",
+        "generic": null,
+        "native": "an asset pack (.zip with manifest.json, Common/ and Server/) installed in the server's mods/ folder; the server sends its assets to players. Validated, not packed or run yet",
+        "packTarget": null,
+        "note": "Validated and packed (mods/); not loaded by a Hytale server yet.",
+        "escrow": "Not feasible today: the official client."
+      },
       "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
@@ -1280,6 +1368,14 @@
         "state": "available",
         "optIn": false,
         "note": "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim."
+      },
+      "assets": {
+        "support": "supported",
+        "generic": "content of the addon (materials/, models/, sound/, maps/, resource/, particles/), each file added to the download list with resource.AddSingleFile",
+        "native": "the same content roots, including .bsp maps under maps/",
+        "packTarget": "garrysmod",
+        "note": "Run on a dedicated server (srcds): every packed file was found by the engine and added to the download list. No client was run.",
+        "escrow": "Not feasible: GMod clients do not load server-sent binary modules."
       },
       "proof": [
         {
@@ -1380,6 +1476,14 @@
         "optIn": false,
         "note": "Code escrow: the compiled bridge next to the plugin has the native loader decrypt in memory, with a key released to this server only. It is off until the operator turns it on in the plugin config. Measured on Windows servers with Oxide and with Carbon, and on a Linux server with Oxide in a container. The operator of the machine can still inspect their own process; that takes real effort and the copy is traceable."
       },
+      "assets": {
+        "support": "partial",
+        "generic": null,
+        "native": "one custom map (.map), which players download from a URL the operator hosts (server.levelurl); a plugin cannot send files to players",
+        "packTarget": null,
+        "note": "Packed (the map for server.levelurl); not run.",
+        "escrow": "Not feasible: Facepunch's client."
+      },
       "proof": [
         {
           "package": "sg_probe",
@@ -1468,6 +1572,14 @@
         "optIn": false,
         "note": "Licence check and signed releases, once the adapter has passed a run on a real server. The server plugin is plain Lua, so the operator can read what it loads: no code-secrecy claim."
       },
+      "assets": {
+        "support": "supported",
+        "generic": null,
+        "native": "BeamNG mod .zip files, put in Resources/Client/: every player downloads them at join",
+        "packTarget": "beammp",
+        "note": "Packed (Resources/Client); not run, BeamMP-Server needs an AuthKey.",
+        "escrow": "Open: would need native code in the BeamMP launcher or a BeamNG mod."
+      },
       "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
@@ -1533,6 +1645,14 @@
         "optIn": false,
         "note": "Licence check and signed releases at most, once an adapter exists. No code-secrecy claim."
       },
+      "assets": {
+        "support": "unsupported",
+        "generic": null,
+        "native": null,
+        "packTarget": null,
+        "note": "Roblox content is uploaded to Roblox's own asset system by the experience owner; a package cannot deliver files",
+        "escrow": "Not applicable."
+      },
       "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
@@ -1578,6 +1698,14 @@
         "state": "available",
         "optIn": false,
         "note": "No licence check in the shim, so a package runs there without one. Releases are still signed."
+      },
+      "assets": {
+        "support": "supported",
+        "generic": "files under stream/ are streamed to players; other files are listed in files {} and downloaded by players",
+        "native": "streamed game files under stream/ (.ydr, .yft, .ytd, .ymap, .ytyp ...) and data files listed by data_file",
+        "packTarget": "fivem",
+        "note": "Packed (fxmanifest files, data_file, this_is_a_map); not run on FXServer, which needs a Cfx.re licence key.",
+        "escrow": "No client work is possible from a resource; FiveM's own Asset Escrow covers stream files on its side."
       },
       "proof": [],
       "runtimeVersions": [],
@@ -1648,6 +1776,14 @@
         "optIn": false,
         "note": "It would run the FiveM shim, which has no licence check, so a package runs there without one. Releases are still signed."
       },
+      "assets": {
+        "support": "partial",
+        "generic": "as on FiveM (stream/ and files {}); the RedM pack target is not built yet",
+        "native": "as on FiveM; the RedM pack target is not built yet",
+        "packTarget": null,
+        "note": "Validated as FiveM; no RedM pack target yet.",
+        "escrow": "No client work is possible from a resource; Cfx.re's own Asset Escrow covers stream files on its side."
+      },
       "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
@@ -1689,6 +1825,14 @@
         "state": "planned",
         "optIn": false,
         "note": "No adapter yet. Licence check and signed releases are planned with it; the host would run plain script, so its operator could read what it loads: no code-secrecy claim."
+      },
+      "assets": {
+        "support": "unsupported",
+        "generic": null,
+        "native": null,
+        "packTarget": null,
+        "note": "asset delivery on KCD multiplayer has not been researched",
+        "escrow": "Not applicable."
       },
       "proof": [],
       "runtimeVersions": [],
@@ -1732,6 +1876,14 @@
         "optIn": false,
         "note": "No adapter yet. Licence check and signed releases are planned with it; the host would run plain script, so its operator could read what it loads: no code-secrecy claim."
       },
+      "assets": {
+        "support": "unsupported",
+        "generic": null,
+        "native": null,
+        "packTarget": null,
+        "note": "Project Zomboid servers send mods as Steam Workshop items the operator lists; a package cannot deliver files itself",
+        "escrow": "Not applicable."
+      },
       "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
@@ -1773,6 +1925,14 @@
         "state": "planned",
         "optIn": false,
         "note": "No adapter yet. Licence check and signed releases are planned with it; the host would run plain script, so its operator could read what it loads: no code-secrecy claim."
+      },
+      "assets": {
+        "support": "unsupported",
+        "generic": null,
+        "native": null,
+        "packTarget": null,
+        "note": "Don't Starve Together servers send mods as Steam Workshop items the operator lists; a package cannot deliver files itself",
+        "escrow": "Not applicable."
       },
       "proof": [],
       "runtimeVersions": [],

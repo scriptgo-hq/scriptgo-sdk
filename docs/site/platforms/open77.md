@@ -106,6 +106,21 @@ Code escrow, an opt-in server feature: a protected release is decrypted in memor
 
 See [Protect your work](/docs/protect-your-work) for what protection does and does not do.
 
+## Assets
+
+Maps, models, textures, sounds and other files players download. See [Selling assets](/docs/selling-assets).
+
+| | |
+|---|---|
+| Support | Supported |
+| `assets` | resource files: sent to every player's client cache before the resource starts; scripts and the WebUI read them, the game engine does not mount them |
+| `environment_asset` | preload packages: .zip files holding REDengine data under archive/pc/mod/, r6/tweaks/ or engine/config/, declared as preload_mod and mounted by the game at its next boot |
+| Pack | `scriptgo pack --target open77` |
+
+Packed and checked against OPEN//77's preload rules; not run on an OPEN//77 server with a game client.
+
+Asset escrow: Asset escrow needs the OPEN//77 client to mount REDengine archives from memory: unresearched for REDengine 2.5.
+
 ## The platform's own rules
 
 A script is your own code. CD PROJEKT RED's own rules cover the game's content.

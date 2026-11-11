@@ -61,6 +61,8 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { hasAssetsFor, verifyGarrysmodAssets, verifyLuantiAssets } from "../lib/asset-verify.ts";
+import { hasScripts } from "../lib/assets.ts";
 // @ts-expect-error plain ESM build script without type declarations
 import { buildMod } from "../../../../sdk/adapters/luanti/build.mjs";
 import { homedir, tmpdir } from "node:os";
@@ -744,6 +746,7 @@ async function verifyEngine(
 
 /** The report's tag: standalone per interpreter, dotnet per guest language, else the environment. */
 function runTag(r: Report): string {
+  if (r.evidence.kind === "assets") return `${r.environment}-assets`;
   if (r.environment === "standalone") return `standalone-${String(r.evidence.interpreter ?? "lua")}`;
   if (r.environment === "dotnet") return `dotnet-${String(r.evidence.language ?? "lua")}`;
   return r.environment;
@@ -817,7 +820,20 @@ export async function run(args: string[]): Promise<number> {
       example,
     }));
   }
-  if (lang === "lua" && (env === "luanti" || env === "all")) {
+  // Assets (lib/asset-verify.ts): the packed delivery form in the real server, as its own report;
+  // an asset-only package has no script run there.
+  if (env === "luanti" || env === "all") {
+    if (hasAssetsFor(res, "luanti")) reports.push(verifyLuantiAssets(res, m, { image: a.flags["luanti-image"] ?? LUANTI_IMAGE }));
+  }
+  if (env === "garrysmod" || env === "all") {
+    if (hasAssetsFor(res, "garrysmod")) {
+      reports.push(await verifyGarrysmodAssets(res, m, {
+        server: a.flags["gmod-server"], binary: a.flags["gmod-binary"], port: Number(a.flags["gmod-port"] ?? 27115), timeoutMs: Number(a.flags["gmod-timeout"] ?? 120000),
+      }));
+    }
+  }
+  const scripts = hasScripts(m);
+  if (lang === "lua" && scripts && (env === "luanti" || env === "all")) {
     reports.push(verifyLuanti(res, m, search, {
       image: a.flags["luanti-image"] ?? LUANTI_IMAGE,
       seconds: Number(a.flags["luanti-seconds"] ?? 3),
@@ -861,7 +877,7 @@ export async function run(args: string[]): Promise<number> {
   if (env === "dotnet" || env === "all") {
     reports.push(await verifyDotnet(res, m, search, { lang, dotnet: a.flags.dotnet, rebuild: a.bools.has("rebuild-dotnet"), stub, example }));
   }
-  if (lang === "lua" && (env === "garrysmod" || env === "all")) {
+  if (lang === "lua" && scripts && (env === "garrysmod" || env === "all")) {
     reports.push(await verifyGarrysmod(res, m, search, {
       server: a.flags["gmod-server"], binary: a.flags["gmod-binary"], port: Number(a.flags["gmod-port"] ?? 27115),
       seconds: Number(a.flags["gmod-seconds"] ?? 4), timeoutMs: Number(a.flags["gmod-timeout"] ?? 120000), stub, example,

@@ -66,7 +66,8 @@ scoped to one user. Revoke it from the same settings page if it leaks.
 | `scriptgo test <dir>` | Runs the resource's `test_script` files in the standalone host |
 | `scriptgo run <dir>...` | Runs resources in the standalone host, in simulated or real time |
 | `scriptgo verify <dir>` | Runs the resource on its environments and writes compatibility reports |
-| `scriptgo pack <dir>` | Builds the `.zip` you can upload on the website: the same archive `publish` sends, README and tests included. `--target open77` builds an OPEN//77 resource folder instead |
+| `scriptgo pack <dir>` | Builds the `.zip` you can upload on the website: the same archive `publish` sends, README, tests and assets included. `--target open77\|fivem\|garrysmod\|beammp\|luanti\|rust\|hytale` builds that platform's folder instead, assets in its own form; `--without-assets` builds a platform that delivers none of the package's assets. See [Selling assets](/docs/selling-assets) |
+| `scriptgo assets fingerprint <copy>` | Reads and checks the per-buyer fingerprints of a downloaded copy. `assets seal` and `assets open` make and read encrypted asset containers, for platform builders |
 | `scriptgo login` | Saves a personal access token |
 | `scriptgo publish [dir]` | Uploads a release of the resource and publishes it |
 | `scriptgo add creator//package` | Installs a package into `./resources` |
