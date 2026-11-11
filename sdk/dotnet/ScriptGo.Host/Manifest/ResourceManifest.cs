@@ -46,6 +46,14 @@ public sealed class ResourceManifest
     public IReadOnlyList<string> ServerExports { get; init; } = [];
     public string? WebUiPage { get; init; }
     public IReadOnlyList<string> WebFiles { get; init; } = [];
+    /// <summary>Client-delivered assets (docs/spec/assets.md): globs delivered on every environment that can.</summary>
+    public IReadOnlyList<string> Assets { get; init; } = [];
+    /// <summary>Assets in one environment's native delivery form.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> EnvironmentAssets { get; init; } = new Dictionary<string, IReadOnlyList<string>>();
+    /// <summary>Game or engine builds the assets were made and tested against, per environment.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> GameBuilds { get; init; } = new Dictionary<string, IReadOnlyList<string>>();
+    /// <summary>FiveM-style data files: data file type to paths.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> DataFiles { get; init; } = new Dictionary<string, IReadOnlyList<string>>();
     public IReadOnlyList<UnknownDirective> Unknown { get; init; } = [];
 
     /// <summary>Guest languages the scripts need: "lua" for .lua, "js" for .js and .ts (sorted).</summary>
@@ -71,6 +79,23 @@ public static partial class ManifestParser
 
     [GeneratedRegex("^[a-z0-9][a-z0-9_-]{0,63}$")]
     public static partial Regex SlugPattern();
+
+    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$")]
+    private static partial Regex GameBuildPattern();
+
+    [GeneratedRegex("^[A-Z0-9_]{1,64}$")]
+    private static partial Regex DataFileTypePattern();
+
+    /// <summary>Reserved for the per-buyer fingerprint entry of a delivered archive.</summary>
+    public const string ReservedAssetPrefix = ".scriptgo/";
+
+    private static readonly Dictionary<string, string> EnvListHint = new(StringComparer.Ordinal)
+    {
+        ["environment_scripts"] = "an environment and at least one script, e.g. environment_script \"love2d\" \"env/love2d/hud.lua\"",
+        ["environment_assets"] = "an environment and at least one asset path, e.g. environment_asset \"open77\" \"dist/map.zip\"",
+        ["game_builds"] = "an environment and at least one build, e.g. game_build \"open77\" \"2.5\"",
+        ["data_files"] = "a data file type and at least one path, e.g. data_file \"DLC_ITYP_REQUEST\" \"stream/props.ytyp\"",
+    };
 
     [GeneratedRegex("^x-[a-z0-9-]+$")]
     private static partial Regex ExtensionCapability();
@@ -117,6 +142,11 @@ public static partial class ManifestParser
         Def(["capability", "capabilities"], "capabilities", Kind.List);
         Def(["optional_capability", "optional_capabilities"], "optional_capabilities", Kind.List);
         Def(["environment_script", "environment_scripts"], "environment_scripts", Kind.EnvList);
+        // Client-delivered assets (docs/spec/assets.md).
+        Def(["asset", "assets"], "assets", Kind.List);
+        Def(["environment_asset", "environment_assets"], "environment_assets", Kind.EnvList);
+        Def(["game_build", "game_builds"], "game_builds", Kind.EnvList);
+        Def(["data_file", "data_files"], "data_files", Kind.EnvList);
         return d;
     }
 
@@ -294,8 +324,13 @@ public static partial class ManifestParser
         var errors = new List<Diagnostic>();
         var scalars = new Dictionary<string, (object Value, RawDirective D)>();
         var lists = new Dictionary<string, List<string>>();
-        var envScripts = new Dictionary<string, List<string>>();
-        var envOrder = new List<string>();
+        // Keyed lists (environment_script, environment_asset, game_build, data_file): key -> paths, in first-seen order.
+        var envLists = new Dictionary<string, (Dictionary<string, List<string>> Map, List<string> Order)>(StringComparer.Ordinal)
+        {
+            ["environment_scripts"] = (new Dictionary<string, List<string>>(), new List<string>()),
+        };
+        var envScripts = envLists["environment_scripts"].Map;
+        var envOrder = envLists["environment_scripts"].Order;
         var unknown = new List<UnknownDirective>();
 
         foreach (var d in directives)
@@ -324,10 +359,11 @@ public static partial class ManifestParser
             {
                 if (d.Args.Count < 2 || d.Args[0] is not string env)
                 {
-                    errors.Add(new("invalid_value", $"'{d.Name}' needs an environment and at least one script, e.g. {d.Name} \"love2d\" \"env/love2d/hud.lua\".", LineOf(d)));
+                    errors.Add(new("invalid_value", $"'{d.Name}' needs {EnvListHint[spec.Key]}.", LineOf(d)));
                     continue;
                 }
-                if (!envScripts.TryGetValue(env, out var paths)) { paths = []; envScripts[env] = paths; envOrder.Add(env); }
+                if (!envLists.TryGetValue(spec.Key, out var keyed)) { keyed = (new Dictionary<string, List<string>>(), new List<string>()); envLists[spec.Key] = keyed; }
+                if (!keyed.Map.TryGetValue(env, out var paths)) { paths = []; keyed.Map[env] = paths; keyed.Order.Add(env); }
                 paths.AddRange(FlattenStrings(d.Args.Skip(1), d, errors));
                 continue;
             }
@@ -385,6 +421,37 @@ public static partial class ManifestParser
                 if (reason is not null) errors.Add(new("unsafe_path", $"'{p}' in {key}: {reason}."));
             }
         }
+        // Assets: safe paths outside the reserved fingerprint folder; keyed lists with valid keys.
+        (Dictionary<string, List<string>> Map, List<string> Order) Keyed(string key) =>
+            envLists.TryGetValue(key, out var k) ? k : (new Dictionary<string, List<string>>(), new List<string>());
+        void CheckAsset(string p, string where)
+        {
+            var reason = UnsafePathReason(p);
+            if (reason is not null) errors.Add(new("unsafe_path", $"'{p}' in {where}: {reason}."));
+            else if (p.StartsWith(ReservedAssetPrefix, StringComparison.Ordinal))
+                errors.Add(new("reserved_path", $"'{p}' in {where}: {ReservedAssetPrefix} is reserved for the per-buyer fingerprint."));
+        }
+        var environmentAssets = Keyed("environment_assets");
+        var gameBuilds = Keyed("game_builds");
+        var dataFiles = Keyed("data_files");
+        foreach (var p in List("assets")) CheckAsset(p, "assets");
+        foreach (var env in environmentAssets.Order)
+        {
+            if (!SlugPattern().IsMatch(env)) errors.Add(new("invalid_environment", $"Environment '{env}' in environment_asset is not a valid slug."));
+            foreach (var p in environmentAssets.Map[env]) CheckAsset(p, $"environment_asset \"{env}\"");
+        }
+        foreach (var env in gameBuilds.Order)
+        {
+            if (!SlugPattern().IsMatch(env)) errors.Add(new("invalid_environment", $"Environment '{env}' in game_build is not a valid slug."));
+            foreach (var b in gameBuilds.Map[env])
+                if (!GameBuildPattern().IsMatch(b)) errors.Add(new("invalid_game_build", $"Game build '{b}' for {env}: use letters, digits, '.', '_', '+' or '-' (e.g. \"2.5\")."));
+        }
+        foreach (var t in dataFiles.Order)
+        {
+            if (!DataFileTypePattern().IsMatch(t)) errors.Add(new("invalid_data_file", $"Data file type '{t}' must be upper-case letters, digits or '_' (e.g. \"DLC_ITYP_REQUEST\")."));
+            foreach (var p in dataFiles.Map[t]) CheckAsset(p, $"data_file \"{t}\"");
+        }
+
         var webUiPage = Str("web_ui_page");
         if (webUiPage is not null && UnsafePathReason(webUiPage) is { } wr)
             errors.Add(new("unsafe_path", $"'{webUiPage}' in web_ui_page: {wr}.", KeyLine("web_ui_page")));
@@ -421,7 +488,8 @@ public static partial class ManifestParser
         if (format == "scriptgo" && Str("scriptgo_version") is null)
             warnings.Add(new("missing_scriptgo_version", "Declare scriptgo_version (e.g. \">=0.1.0\") so hosts can check compatibility."));
         var hasCode = new[] { "shared_scripts", "server_scripts", "client_scripts" }.Any(k => List(k).Count > 0) || envScripts.Count > 0;
-        if (!hasCode && List("files").Count == 0) errors.Add(new("empty_resource", "The resource declares no scripts and no files."));
+        var hasAssets = List("assets").Count > 0 || environmentAssets.Order.Count > 0;
+        if (!hasCode && List("files").Count == 0 && !hasAssets) errors.Add(new("empty_resource", "The resource declares no scripts, no files and no assets."));
 
         if (errors.Count > 0) return new(false, null, errors, warnings);
 
@@ -456,6 +524,10 @@ public static partial class ManifestParser
             ServerExports = List("server_exports"),
             WebUiPage = webUiPage,
             WebFiles = List("web_files"),
+            Assets = List("assets"),
+            EnvironmentAssets = environmentAssets.Order.ToDictionary(e => e, e => (IReadOnlyList<string>)environmentAssets.Map[e]),
+            GameBuilds = gameBuilds.Order.ToDictionary(e => e, e => (IReadOnlyList<string>)gameBuilds.Map[e]),
+            DataFiles = dataFiles.Order.ToDictionary(e => e, e => (IReadOnlyList<string>)dataFiles.Map[e]),
             Unknown = unknown,
         };
         return new(true, manifest, errors, warnings);

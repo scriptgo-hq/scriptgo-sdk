@@ -1,0 +1,9 @@
+{
+  "resource": "night_market",
+  "version": "2.0.0",
+  "scriptgo_version": ">=0.1.0",
+  "assets": ["media/**/*.png"],
+  "environment_assets": { "open77": "dist/night_market.zip", "fivem": ["stream/**"] },
+  "game_builds": { "open77": "2.5" },
+  "data_files": { "DLC_ITYP_REQUEST": "stream/night_market.ytyp" }
+}

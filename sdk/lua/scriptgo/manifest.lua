@@ -245,6 +245,19 @@ def({ "environments" }, "environments", "list")
 def({ "capability", "capabilities" }, "capabilities", "list")
 def({ "optional_capability", "optional_capabilities" }, "optional_capabilities", "list")
 def({ "environment_script", "environment_scripts" }, "environment_scripts", "envlist")
+-- Client-delivered assets (docs/spec/assets.md).
+def({ "asset", "assets" }, "assets", "list")
+def({ "environment_asset", "environment_assets" }, "environment_assets", "envlist")
+def({ "game_build", "game_builds" }, "game_builds", "envlist")
+def({ "data_file", "data_files" }, "data_files", "envlist")
+local ENVLIST_HINT = {
+    environment_scripts = "an environment and at least one script",
+    environment_assets = "an environment and at least one asset path",
+    game_builds = "an environment and at least one build",
+    data_files = "a data file type and at least one path",
+}
+-- Reserved for the per-buyer fingerprint entry of a delivered archive.
+M.RESERVED_ASSET_PREFIX = ".scriptgo/"
 
 local function toPlain(v)
     if type(v) == "table" and v.kind == "table" then
@@ -472,7 +485,10 @@ function M.parse(source, fileName)
         end
     end
 
-    local scalars, lists, envScripts, envOrder, unknown = {}, {}, {}, {}, {}
+    local scalars, lists, unknown = {}, {}, {}
+    -- Keyed lists (environment_script, environment_asset, game_build, data_file): key -> paths, in first-seen order.
+    local envLists, envListOrder = { environment_scripts = {} }, { environment_scripts = {} }
+    local envScripts, envOrder = envLists.environment_scripts, envListOrder.environment_scripts
     for _, d in ipairs(directives) do
         local spec = DIRECTIVES[d.name]
         if not spec then
@@ -494,12 +510,15 @@ function M.parse(source, fileName)
         elseif spec.kind == "envlist" then
             local env = d.args[1]
             if type(env) ~= "string" or #d.args < 2 then
-                err("invalid_value", "'" .. d.name .. "' needs an environment and at least one script.", d.line)
+                err("invalid_value", "'" .. d.name .. "' needs " .. ENVLIST_HINT[spec.key] .. ".", d.line)
             else
                 local rest = {}
                 for i = 2, #d.args do rest[#rest + 1] = d.args[i] end
-                if not envScripts[env] then envScripts[env] = {}; envOrder[#envOrder + 1] = env end
-                for _, p in ipairs(flatten(rest, d, errors)) do table.insert(envScripts[env], p) end
+                local byKey = envLists[spec.key] or {}
+                envLists[spec.key] = byKey
+                envListOrder[spec.key] = envListOrder[spec.key] or {}
+                if not byKey[env] then byKey[env] = {}; table.insert(envListOrder[spec.key], env) end
+                for _, p in ipairs(flatten(rest, d, errors)) do table.insert(byKey[env], p) end
             end
         else
             lists[spec.key] = lists[spec.key] or {}
@@ -553,6 +572,35 @@ function M.parse(source, fileName)
             if reason then err("unsafe_path", "'" .. p .. "' in " .. k .. ": " .. reason .. ".") end
         end
     end
+    -- Assets: safe paths outside the reserved fingerprint folder; keyed lists with valid keys.
+    local function checkAsset(p, where)
+        local reason = M.unsafePathReason(p)
+        if reason then err("unsafe_path", "'" .. p .. "' in " .. where .. ": " .. reason .. ".")
+        elseif p:sub(1, #M.RESERVED_ASSET_PREFIX) == M.RESERVED_ASSET_PREFIX then
+            err("reserved_path", "'" .. p .. "' in " .. where .. ": " .. M.RESERVED_ASSET_PREFIX .. " is reserved for the per-buyer fingerprint.")
+        end
+    end
+    local environmentAssets, gameBuilds, dataFiles = envLists.environment_assets or {}, envLists.game_builds or {}, envLists.data_files or {}
+    for _, p in ipairs(list("assets")) do checkAsset(p, "assets") end
+    for _, env in ipairs(envListOrder.environment_assets or {}) do
+        if not M.isSlug(env) then err("invalid_environment", "Environment '" .. env .. "' in environment_asset is not a valid slug.") end
+        for _, p in ipairs(environmentAssets[env]) do checkAsset(p, 'environment_asset "' .. env .. '"') end
+    end
+    for _, env in ipairs(envListOrder.game_builds or {}) do
+        if not M.isSlug(env) then err("invalid_environment", "Environment '" .. env .. "' in game_build is not a valid slug.") end
+        for _, b in ipairs(gameBuilds[env]) do
+            if #b > 64 or not b:match("^[%w][%w%._%+%-]*$") then
+                err("invalid_game_build", "Game build '" .. b .. "' for " .. env .. ": use letters, digits, '.', '_', '+' or '-'.")
+            end
+        end
+    end
+    for _, t in ipairs(envListOrder.data_files or {}) do
+        if #t > 64 or not t:match("^[A-Z0-9_]+$") then
+            err("invalid_data_file", "Data file type '" .. t .. "' must be upper-case letters, digits or '_'.")
+        end
+        for _, p in ipairs(dataFiles[t]) do checkAsset(p, 'data_file "' .. t .. '"') end
+    end
+
     local webUiPage = str("web_ui_page")
     if webUiPage then
         local reason = M.unsafePathReason(webUiPage)
@@ -608,7 +656,8 @@ function M.parse(source, fileName)
         warn("missing_scriptgo_version", "Declare scriptgo_version (e.g. \">=0.1.0\") so hosts can check compatibility.")
     end
     local hasCode = #list("shared_scripts") > 0 or #list("server_scripts") > 0 or #list("client_scripts") > 0 or #envOrder > 0
-    if not hasCode and #list("files") == 0 then err("empty_resource", "The resource declares no scripts and no files.") end
+    local hasAssets = #list("assets") > 0 or #(envListOrder.environment_assets or {}) > 0
+    if not hasCode and #list("files") == 0 and not hasAssets then err("empty_resource", "The resource declares no scripts, no files and no assets.") end
 
     -- scriptgo.json has no line numbers to report.
     if isJson then
@@ -633,7 +682,9 @@ function M.parse(source, fileName)
             testScripts = list("test_scripts"), dependencies = dependencies,
             permissions = list("permissions"), files = list("files"),
             exports = list("exports"), serverExports = list("server_exports"),
-            webUiPage = webUiPage, webFiles = list("web_files"), unknown = unknown,
+            webUiPage = webUiPage, webFiles = list("web_files"),
+            assets = list("assets"), environmentAssets = environmentAssets, gameBuilds = gameBuilds, dataFiles = dataFiles,
+            unknown = unknown,
         },
     }
 end
