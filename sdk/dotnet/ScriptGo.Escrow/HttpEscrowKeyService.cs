@@ -40,6 +40,10 @@ public sealed record EscrowKeyResult
     public DateTimeOffset? ExpiresAt { get; init; }
     /// <summary>The last instant the resource may keep running without a fresh valid answer.</summary>
     public DateTimeOffset? OfflineGraceUntil { get; init; }
+    /// <summary>An asset key's id (<c>kind: "assets"</c>): names the key the containers were sealed with.</summary>
+    public string? KeyId { get; init; }
+    /// <summary>The release version the key is for, as the API answered it.</summary>
+    public string? Version { get; init; }
 
     public static EscrowKeyResult Granted(WrappedKey key, string? watermark = null, DateTimeOffset? expiresAt = null, DateTimeOffset? offlineGraceUntil = null) =>
         new() { Valid = true, WrappedKey = key, DeliveryWatermark = watermark, ExpiresAt = expiresAt, OfflineGraceUntil = offlineGraceUntil };
@@ -122,15 +126,31 @@ public sealed class HttpEscrowKeyService : IEscrowKeyService
         return client;
     }
 
-    public async Task<EscrowKeyResult> RequestKeyAsync(EscrowManifest manifest, EscrowIdentity identity, CancellationToken cancellation = default)
+    public Task<EscrowKeyResult> RequestKeyAsync(EscrowManifest manifest, EscrowIdentity identity, CancellationToken cancellation = default)
     {
         ArgumentNullException.ThrowIfNull(manifest);
         ArgumentNullException.ThrowIfNull(identity);
+        return SendAsync(ManifestVersion(manifest), null, identity, cancellation);
+    }
+
+    /// <summary>Asks for the asset content key of <paramref name="version"/> (<c>kind: "assets"</c>,
+    /// docs/spec/assets.md "Asset escrow"), wrapped to <paramref name="identity"/> with the server aad.
+    /// Same answers as <see cref="RequestKeyAsync"/>; a granted one carries <see cref="EscrowKeyResult.KeyId"/>.
+    /// Check <see cref="EscrowKeyResult.Aad"/> against <see cref="AssetEscrowFormat.ServerAad"/> before unwrapping.</summary>
+    public Task<EscrowKeyResult> RequestAssetKeyAsync(string version, EscrowIdentity identity, CancellationToken cancellation = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(version);
+        ArgumentNullException.ThrowIfNull(identity);
+        return SendAsync(version, "assets", identity, cancellation);
+    }
+
+    private async Task<EscrowKeyResult> SendAsync(string version, string? kind, EscrowIdentity identity, CancellationToken cancellation)
+    {
         Options options;
         try { options = _options() ?? throw new InvalidOperationException("no options"); }
         catch (Exception e) when (e is not OutOfMemoryException) { return EscrowKeyResult.Unreachable("token_unavailable"); }
 
-        var request = new KeyRequest(options.DeploymentToken, options.Package, ManifestVersion(manifest), options.Environment, options.AdapterVersion, identity.PublicKeyBase64Url);
+        var request = new KeyRequest(options.DeploymentToken, options.Package, version, options.Environment, options.AdapterVersion, identity.PublicKeyBase64Url, kind);
         try
         {
             // Relative to the client's base address, so a master mounted under a path
@@ -193,6 +213,8 @@ public sealed class HttpEscrowKeyService : IEscrowKeyService
                 DeliveryWatermark = Text(root, "deliveryWatermark"),
                 OfflineGraceUntil = Time(root, "offlineGraceUntil"),
                 ExpiresAt = Time(root, "expiresAt"),
+                KeyId = Text(root, "keyId"),
+                Version = Text(root, "version"),
             };
         }
         catch (Exception e) when (e is JsonException or InvalidOperationException) { return EscrowKeyResult.Unreachable("bad_response"); }
@@ -238,5 +260,7 @@ public sealed class HttpEscrowKeyService : IEscrowKeyService
         [property: JsonPropertyName("version")] string Version,
         [property: JsonPropertyName("environment")] string Environment,
         [property: JsonPropertyName("adapterVersion")] string? AdapterVersion,
-        [property: JsonPropertyName("serverPublicKey")] string ServerPublicKey);
+        [property: JsonPropertyName("serverPublicKey")] string ServerPublicKey,
+        // Omitted for code escrow, so a request is byte-identical to one from before asset escrow.
+        [property: JsonPropertyName("kind"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Kind = null);
 }

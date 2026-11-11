@@ -26,6 +26,12 @@ internal static partial class EscrowNative
     internal const int ErrLuaLoad = -17;
     internal const int ErrUnsupported = -18;
     internal const int ErrExists = -20;
+    internal const int ErrBadContainer = -21;
+    internal const int ErrKeyMismatch = -22;
+    internal const int ErrUntrustedSigner = -23;
+
+    internal const int AssetWrapServer = 1;
+    internal const int AssetWrapClient = 2;
 
     // The resolver must be in place before the first call into the library: a static constructor
     // runs before any member of this class is used.
@@ -103,6 +109,50 @@ internal static partial class EscrowNative
     [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     internal static partial void sg_bundle_free(IntPtr bundle);
 
+    // ---------------------------------------------------------------- asset escrow (scriptgo-asset-escrow/1)
+
+    [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static unsafe partial int sg_asset_key_unwrap(
+        EscrowIdentityHandle identity, int kind, byte* epk, byte* wrapNonce, byte* wrapped, nuint wrappedLength,
+        byte* aad, nuint aadLength, out IntPtr key);
+
+    [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static unsafe partial int sg_asset_key_wrap(
+        AssetKeyHandle key, byte* clientPublicKey, byte* aad, nuint aadLength, byte* outEpk, byte* outWrapNonce, byte* outWrapped);
+
+    [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static unsafe partial int sg_asset_key_id(AssetKeyHandle key, byte* output, nuint capacity);
+
+    [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial void sg_asset_key_free(IntPtr key);
+
+    [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static unsafe partial int sg_asset_container_open(byte* data, nuint length, byte* trustedSigner, out IntPtr container);
+
+    [LibraryImport(Library, StringMarshalling = StringMarshalling.Utf8), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial int sg_asset_container_field(AssetContainerHandle container, string name, out IntPtr value);
+
+    [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial int sg_asset_container_file_count(AssetContainerHandle container, out nuint count);
+
+    [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial int sg_asset_container_file_at(AssetContainerHandle container, nuint index, out IntPtr path, out ulong size);
+
+    [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial int sg_asset_container_bind(AssetContainerHandle container, AssetKeyHandle key);
+
+    [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial void sg_asset_container_free(IntPtr container);
+
+    [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial int sg_asset_reader_new(AssetContainerHandle container, out IntPtr reader);
+
+    [LibraryImport(Library, StringMarshalling = StringMarshalling.Utf8), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static unsafe partial int sg_asset_reader_read(IntPtr reader, string path, ulong offset, byte* buffer, nuint length, out nuint read);
+
+    [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial void sg_asset_reader_free(IntPtr reader);
+
     internal static string ErrorText(int code) => Marshal.PtrToStringUTF8(sg_strerror(code)) ?? $"error {code}";
 }
 
@@ -129,6 +179,39 @@ internal sealed class EscrowBundleHandle : SafeHandle
     protected override bool ReleaseHandle()
     {
         EscrowNative.sg_bundle_free(handle); // wipes the plaintext, then frees it
+        return true;
+    }
+}
+
+/// <summary>Owns an sg_asset_key: a content key in guarded native memory, wiped on release.</summary>
+internal sealed class AssetKeyHandle : SafeHandle
+{
+    public AssetKeyHandle() : base(IntPtr.Zero, ownsHandle: true) { }
+    public AssetKeyHandle(IntPtr handle) : base(IntPtr.Zero, ownsHandle: true) => SetHandle(handle);
+    public override bool IsInvalid => handle == IntPtr.Zero;
+    protected override bool ReleaseHandle()
+    {
+        EscrowNative.sg_asset_key_free(handle);
+        return true;
+    }
+}
+
+/// <summary>Owns an sg_asset_container and the unmanaged copy of the bytes it borrows: both are freed
+/// together, container first, once no call or reader holds a reference.</summary>
+internal sealed unsafe class AssetContainerHandle : SafeHandle
+{
+    private readonly IntPtr _data;
+    public AssetContainerHandle() : base(IntPtr.Zero, ownsHandle: true) { }
+    public AssetContainerHandle(IntPtr handle, IntPtr data) : base(IntPtr.Zero, ownsHandle: true)
+    {
+        _data = data;
+        SetHandle(handle);
+    }
+    public override bool IsInvalid => handle == IntPtr.Zero;
+    protected override bool ReleaseHandle()
+    {
+        EscrowNative.sg_asset_container_free(handle); // wipes the key, frees the container
+        if (_data != IntPtr.Zero) NativeMemory.Free((void*)_data);
         return true;
     }
 }
