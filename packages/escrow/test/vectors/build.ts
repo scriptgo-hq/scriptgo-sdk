@@ -34,7 +34,8 @@ export const MATERIAL = {
 };
 
 const sha = (b: Uint8Array): string => createHash("sha256").update(b).digest("hex");
-const FIXED = new Date("2026-01-01T00:00:00Z");
+// Local midnight: zip times are local wall-clock (DOS), so a UTC instant would change with the time zone.
+const FIXED = new Date(2026, 0, 1);
 
 /** A small release archive: a resource folder with a script, a texture and an OPEN//77 preload. */
 export function releaseArchive(): { zip: Buffer; preload: Buffer } {
