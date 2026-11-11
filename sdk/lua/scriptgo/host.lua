@@ -1066,7 +1066,7 @@ function Host:_tickPresence()
             host:_log("info", "presence", "/" .. name .. " is typed by a player in game, with the code their browser shows")
             return
         end
-        p.linkAsync(source, args[1], function(ok, reason)
+        p.linkAsync(source, presenceLib.codeFromArgs(args), function(ok, reason)
             host:tellPlayer(source, p.linkMessage(ok, reason))
         end)
     end

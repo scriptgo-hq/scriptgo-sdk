@@ -40,7 +40,7 @@ internal static partial class Program
                 if (request.Method == "POST" && path == "/v1/identity/codes/confirm")
                 {
                     using var body = JsonDocument.Parse(request.Body);
-                    return body.RootElement.GetProperty("code").GetString() == "K7-4QX"
+                    return body.RootElement.GetProperty("code").GetString().Replace("-", "") == "MT42JF"
                         ? new HttpResponseData(200, none, "{\"linked\":true}")
                         : new HttpResponseData(410, none, "{\"error\":{\"code\":\"code_expired\",\"message\":\"x\"}}");
                 }
@@ -109,6 +109,11 @@ internal static partial class Program
             Assert(entry.GetProperty("player").GetString() == "steam:76561198000000003", report.Body);
             Assert(entry.GetProperty("name").GetString() == "Ada", report.Body);
         }
+        foreach (var q in api.Seen.Where(q => q.Method == "POST" && q.Url.EndsWith("/v1/presence", StringComparison.Ordinal)))
+        {
+            using var b = JsonDocument.Parse(q.Body);
+            Assert(b.RootElement.GetProperty("environment").GetString() == "rust" && !string.IsNullOrEmpty(b.RootElement.GetProperty("adapterVersion").GetString()), q.Body);
+        }
         Assert(!api.Seen.Any(r => (r.Body ?? "").Contains("203.0.113.9") || r.Url.Contains("203.0.113.9")), "the raw address left the bridge");
         Assert(!rig.Log.Has("203.0.113.9"), "the raw address was logged");
         players.Online.Remove(3);
@@ -125,13 +130,19 @@ internal static partial class Program
         players.Online[3] = ("Ada", "203.0.113.9");
         rig.Runtime.PlayerJoin(3, "Ada");
         Assert(Wait(rig, () => rig.Runtime.HasCommand("link"), 3000), "no link command:\n" + rig.Log.Dump());
-        var r = rig.Runtime.ExecuteCommand(3, "/link k7-4qx");
+        // Every word of the command is the code: "/link mt4 2jf" as typed with a space.
+        var r = rig.Runtime.ExecuteCommand(3, "/link mt4 2jf");
         Assert(r.Ok, r.Reason);
         Assert(Wait(rig, () => rig.Ui.Sent.Count > 0, 5000), "the player was not told:\n" + rig.Log.Dump());
         Assert(rig.Ui.Sent[0].target == 3 && rig.Ui.Sent[0].n.Message == "Linked: you can go back to your browser.", rig.Ui.Sent[0].n.Message);
         var confirm = api.Seen.First(q => q.Url == "http://api.test/v1/identity/codes/confirm");
         using (var body = JsonDocument.Parse(confirm.Body))
-            Assert(body.RootElement.GetProperty("player").GetString() == "steam:76561198000000003", confirm.Body);
+        {
+            var b = body.RootElement;
+            Assert(b.GetProperty("player").GetString() == "steam:76561198000000003", confirm.Body);
+            Assert(b.GetProperty("code").GetString() == "MT42JF", confirm.Body);
+            Assert(b.GetProperty("environment").GetString() == "rust" && !string.IsNullOrEmpty(b.GetProperty("adapterVersion").GetString()), confirm.Body);
+        }
         rig.Runtime.ExecuteCommand(3, "link OLD-123");
         Assert(Wait(rig, () => rig.Ui.Sent.Count > 1, 5000), "no refusal:\n" + rig.Log.Dump());
         Assert(rig.Ui.Sent[1].n.Message.StartsWith("That code is not valid", StringComparison.Ordinal), rig.Ui.Sent[1].n.Message);

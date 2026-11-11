@@ -31,6 +31,8 @@ return function(scriptgo, opts)
             events = true, logging = true, storage = true, players = true, permissions = true,
             commands = true, config = true, ui = true,
             http = hasHttp, licensing = hasHttp,
+            -- Player match: /link over HTTP; presence reports only in address mode (GLua has no HMAC).
+            presence = hasHttp,
         },
         notifications = {},
     }
@@ -136,9 +138,9 @@ return function(scriptgo, opts)
             if ply then api.remember(ply) end
             return identifiers[id]
         end,
-        -- The player's address ("ip:port"), for player match only (docs/spec/player-match.md): the
-        -- core hashes it and never sends or logs it. Not visible to scripts. Presence is not switched
-        -- on here (GLua has no HMAC), so nothing reads it yet.
+        -- The player's address ("ip:port"), for player match only (docs/spec/player-match.md). Not
+        -- visible to scripts, never logged. GLua has no HMAC: it is read only in address mode
+        -- (scriptgo_presence_addr, default off), where the core sends it normalised to SCRIPT//GO.
         address = function(id)
             local ply = byId(id)
             return ply and ply:IPAddress() or nil

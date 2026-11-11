@@ -1,6 +1,6 @@
 -- Prints `SGCHECK PASS|FAIL <name>` per check and `SGCHECK DONE ...` at the end, like sg_probe.
--- The fixed data is the stub's (packages/cli/src/lib/stub-presence.ts): code `K7-4QX` links,
--- `US-ED00` is used, `EX-P1RE` has expired. What the probe cannot see from here (that only
+-- The fixed data is the stub's (packages/cli/src/lib/stub-presence.ts): code `MT4-2JF` links,
+-- `USE-D99` is used, `EXP-R3D` has expired. What the probe cannot see from here (that only
 -- fingerprints reached the API) the stub checks on its side: `api:presence_bodies_valid`.
 local results = { pass = 0, fail = 0, done = false }
 
@@ -61,15 +61,15 @@ local function run()
 
     if player ~= nil then
         check("link.confirmed", function()
-            local ok, why = ScriptGo.presence.link(player, "k7 4qx")
+            local ok, why = ScriptGo.presence.link(player, "mt4 2jf")
             return ok == true, why
         end)
         check("link.code_used", function()
-            local ok, why = ScriptGo.presence.link(player, "US-ED00")
+            local ok, why = ScriptGo.presence.link(player, "USE-D99")
             return ok == false and why == "code_used", why
         end)
         check("link.code_expired", function()
-            local ok, why = ScriptGo.presence.link(player, "EX-P1RE")
+            local ok, why = ScriptGo.presence.link(player, "EXP-R3D")
             return ok == false and why == "code_expired", why
         end)
         check("link.unknown_code", function()

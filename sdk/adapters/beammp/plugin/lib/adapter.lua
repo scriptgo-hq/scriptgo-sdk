@@ -30,7 +30,7 @@ return function(scriptgo, opts)
         sides = { server = true },
         capabilities = {
             events = true, logging = true, storage = true, players = true, permissions = true,
-            commands = true, config = true, ui = true, http = false, licensing = false,
+            commands = true, config = true, ui = true, http = false, licensing = false, presence = false,
         },
         notifications = {},
     }
@@ -165,9 +165,9 @@ return function(scriptgo, opts)
             end
             return "beammp-guest:" .. name:lower():gsub("[^%w_%-]", "_")
         end,
-        -- The player's address, for player match only (docs/spec/player-match.md): the core hashes it
-        -- and never sends or logs it. Not visible to scripts. Presence is not switched on here
-        -- (BeamMP's Lua has no HMAC), so nothing reads it yet.
+        -- The player's address, for player match only (docs/spec/player-match.md). Not visible to
+        -- scripts, never logged. BeamMP's Lua has no HMAC: it is read only in address mode
+        -- (scriptgo_presence_addr, default off), where the core sends it normalised to SCRIPT//GO.
         address = function(id)
             local pid = beamId(id)
             if not pid then return nil end
@@ -241,6 +241,8 @@ return function(scriptgo, opts)
     local httpOn = cfg.http ~= false and os.execute ~= nil and hasCurl()
     adapter.capabilities.http = httpOn
     adapter.capabilities.licensing = httpOn
+    -- Player match: /link over HTTP; presence reports only in address mode (no HMAC here).
+    adapter.capabilities.presence = httpOn
 
     local allowed = nil
     if type(cfg.httpAllowedHosts) == "table" then

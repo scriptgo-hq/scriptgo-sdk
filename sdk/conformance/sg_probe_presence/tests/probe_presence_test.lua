@@ -26,9 +26,9 @@ local function fakeApi(json, seen)
         ["POST " .. API .. "/v1/identity/codes/confirm"] = function(req)
             if not authorized(req) then return err(401, "unknown_server_link") end
             local code = json.decode(req.body).code:gsub("%-", "")
-            if code == "K74QX" then return { status = 200, body = "{\"linked\":true}" } end
-            if code == "USED00" then return err(410, "code_used") end
-            if code == "EXP1RE" then return err(410, "code_expired") end
+            if code == "MT42JF" then return { status = 200, body = "{\"linked\":true}" } end
+            if code == "USED99" then return err(410, "code_used") end
+            if code == "EXPR3D" then return err(410, "code_expired") end
             return err(404, "unknown_code")
         end,
     }

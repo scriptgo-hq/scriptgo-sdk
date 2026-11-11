@@ -24,18 +24,43 @@ const fp = (key: string, address: string) => createHmac("sha256", key).update(ad
 describe("stub player match API", () => {
   it("refuses an unknown server link token", async () => {
     expect((await call("POST", "/v1/presence", { players: [] }, "sg_srv_nope")).status).toBe(401);
-    expect((await call("POST", "/v1/identity/codes/confirm", { code: "K7-4QX", player: "a:b" }, "sg_srv_nope")).status).toBe(401);
+    expect((await call("POST", "/v1/identity/codes/confirm", { code: "MT4-2JF", player: "a:b" }, "sg_srv_nope")).status).toBe(401);
+  });
+
+  it("refuses a server link that never named its environment, as the API does", async () => {
+    const r = await call("POST", "/v1/presence", '{"players":[]}');
+    expect([r.status, r.json]).toEqual([409, { error: { code: "environment_unknown", message: expect.any(String) } }]);
+    expect((await call("POST", "/v1/identity/codes/confirm", { code: "MT4-2JF", player: "standalone:2" })).status).toBe(409);
   });
 
   it("hands out the key on an empty report, then keeps fingerprints only", async () => {
-    const first = await call("POST", "/v1/presence", '{"players":[]}');
+    const first = await call("POST", "/v1/presence", '{"players":[],"environment":"standalone","adapterVersion":"standalone-0.1.0"}');
     expect(first.status).toBe(200);
     const { presenceKey } = PresenceResult.parse(first.json);
     expect(presenceKey).toBe(STUB_PRESENCE.key);
     const entry = { player: "standalone:2", name: "Bob", fp: [fp(presenceKey, "203.0.113.7")] };
     const r = await call("POST", "/v1/presence", { players: [entry] });
     expect(r.json).toMatchObject({ accepted: 1, presenceKey });
-    expect(stub.presence.entries().get("standalone:2")).toMatchObject({ name: "Bob", fp: entry.fp });
+    expect(stub.presence.entries().get("standalone:2")).toMatchObject({ name: "Bob", fp: entry.fp, mode: "fp", environment: "standalone" });
+  });
+
+  it("address mode: fingerprints the address at once and keeps only the fingerprint", async () => {
+    const r = await call("POST", "/v1/presence", { players: [{ player: "fivem:license:1", name: "Fi", addr: ["203.0.113.7"] }], environment: "fivem", adapterVersion: "fivem-shim-0.1.0" });
+    expect(r.status).toBe(200);
+    const kept = stub.presence.entries().get("fivem:license:1")!;
+    expect(kept).toMatchObject({ mode: "addr", environment: "fivem", adapterVersion: "fivem-shim-0.1.0", fp: [fp(STUB_PRESENCE.key, "203.0.113.7")] });
+    expect(JSON.stringify(kept)).not.toContain("203.0.113.7");
+    const v6 = await call("POST", "/v1/presence", { players: [{ player: "fivem:license:2", name: "Fo", addr: ["2001:db8:0:1::/64"] }] });
+    expect(v6.status).toBe(200);
+  });
+
+  it("refuses an address that is not normalised, and both fp and addr, without echoing it", async () => {
+    const raw = await call("POST", "/v1/presence", { players: [{ player: "fivem:license:3", name: "X", addr: ["203.0.113.7:30120"] }] });
+    expect(raw.status).toBe(400);
+    expect(JSON.stringify(raw.json)).not.toContain("203.0.113.7");
+    const both = await call("POST", "/v1/presence", { players: [{ player: "fivem:license:3", name: "X", addr: ["203.0.113.7"], fp: [fp(STUB_PRESENCE.key, "203.0.113.7")] }] });
+    expect(both.status).toBe(400);
+    expect(stub.presence.entries().has("fivem:license:3")).toBe(false);
   });
 
   it("refuses a raw address where a fingerprint belongs", async () => {
@@ -58,11 +83,13 @@ describe("stub player match API", () => {
   });
 
   it("confirms codes ignoring case, spaces and dashes, with the contract's refusals", async () => {
-    expect((await call("POST", "/v1/identity/codes/confirm", { code: "k74qx", player: "standalone:2", name: "Bob" })).json).toEqual({ linked: true });
-    expect(stub.presence.linked().at(-1)).toEqual({ player: "standalone:2", name: "Bob" });
-    const used = await call("POST", "/v1/identity/codes/confirm", { code: "US-ED00", player: "standalone:2" });
+    expect((await call("POST", "/v1/identity/codes/confirm", { code: "mt42jf", player: "standalone:2", name: "Bob" })).json).toEqual({ linked: true });
+    expect(stub.presence.linked().at(-1)).toEqual({ player: "standalone:2", name: "Bob", environment: "fivem" });
+    await call("POST", "/v1/identity/codes/confirm", { code: "Mt4-2jf", player: "standalone:2", environment: "standalone", adapterVersion: "standalone-0.1.0" });
+    expect(stub.presence.linked().at(-1)).toEqual({ player: "standalone:2", environment: "standalone", adapterVersion: "standalone-0.1.0" });
+    const used = await call("POST", "/v1/identity/codes/confirm", { code: "USE-D99", player: "standalone:2" });
     expect([used.status, used.json]).toEqual([410, { error: { code: "code_used", message: expect.any(String) } }]);
-    expect((await call("POST", "/v1/identity/codes/confirm", { code: "EX-P1RE", player: "standalone:2" })).json).toMatchObject({ error: { code: "code_expired" } });
+    expect((await call("POST", "/v1/identity/codes/confirm", { code: "EXP-R3D", player: "standalone:2" })).json).toMatchObject({ error: { code: "code_expired" } });
     expect((await call("POST", "/v1/identity/codes/confirm", { code: "ZZ-ZZZZ", player: "standalone:2" })).status).toBe(404);
     expect((await call("POST", "/v1/identity/codes/confirm", { code: "no!", player: "standalone:2" })).status).toBe(400);
   });

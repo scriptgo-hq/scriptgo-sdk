@@ -248,7 +248,9 @@ end
 --     keyed address fingerprints. It reads Open77.players.endpoint (permission
 --     `players.identity.sensitive`, which `scriptgo pack` adds for this capability), and needs an
 --     HMAC-SHA256 from the host. OPEN//77 build 2.50.0+op77.208 has no HMAC native, so presence
---     says "presence unavailable: no HMAC on this host" and never reads an address; /link works.
+--     says "presence unavailable: no HMAC on this host" and never reads an address, unless the
+--     operator turns address mode on (convar `scriptgo_presence_addr`, default off): then the
+--     normalised address is sent and SCRIPT//GO fingerprints it. /link works either way.
 -- Declare this capability in ONE resource per server: each packed resource registers its own /link.
 do
     local Core = (function(...)
@@ -280,8 +282,8 @@ do
                 if validPlayer(id) then return GetPlayerName(id) end
                 return nil
             end,
-            -- "ip:port" or "[v6]:port"; the core drops the port and hashes the rest. Read only when
-            -- presence is on and an HMAC exists (never on a build without one).
+            -- "ip:port" or "[v6]:port"; the core drops the port. Read only when presence is on, and
+            -- with an HMAC or address mode; never logged.
             address = function(id)
                 if not validPlayer(id) then return nil end
                 local endpoint = Open77.players.endpoint(id)
@@ -289,8 +291,8 @@ do
                 return endpoint
             end,
             players = function() return GetPlayers() end,
-            -- No HMAC native in OPEN//77 build 2.50.0+op77.208: presence reporting stays off. When
-            -- OPEN//77 gains a vetted HMAC-SHA256, it is wired here.
+            -- No HMAC native in OPEN//77 build 2.50.0+op77.208: fingerprints need address mode
+            -- (scriptgo_presence_addr). When OPEN//77 gains a vetted HMAC-SHA256, it is wired here.
             hmacSha256 = nil,
             now = function() return Open77.time.unix() end,
             json = { encode = J.encode, decode = J.decode },
@@ -334,7 +336,7 @@ do
                 Open77.log.info("ScriptGo.presence: /" .. command .. " is typed by a player in game, with the code their browser shows")
                 return
             end
-            p.linkAsync(src, args and args[1], function(linked, reason)
+            p.linkAsync(src, Core.codeFromArgs(args), function(linked, reason)
                 Open77.chat.send(src, { author = "SCRIPT//GO", text = p.linkMessage(linked, reason) })
             end)
         end, false)

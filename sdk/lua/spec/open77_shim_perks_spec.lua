@@ -157,7 +157,7 @@ local function world(opts)
         end
         if path == "/v1/identity/codes/confirm" then
             w.confirmed = body
-            if body.code == "K7-4QX" then return r.callback(200, json.encode({ linked = true }), {}) end
+            if (body.code:gsub("%-", "")) == "MT42JF" then return r.callback(200, json.encode({ linked = true }), {}) end
             return r.callback(404, '{"error":{"code":"unknown_code"}}', {})
         end
         if path == "/v1/presence" then
@@ -312,15 +312,41 @@ describe("open77 shim: presence (stub natives)", function()
         expect(SG.capabilities.has("presence")).toBe(true)
         w.fire("onResourceStart", nil, "shop")
         expect(type(w.commands.link)).toBe("function")
-        w.env.CreateThread(function() w.commands.link(3, { "k7-4qx", n = 1 }, "link k7-4qx") end)
+        w.env.CreateThread(function() w.commands.link(3, { "mt4-2jf", n = 1 }, "link mt4-2jf") end)
         w.pass(1)
         expect(w.confirmed.player).toBe(ADA)
-        expect(w.confirmed.code).toBe("K7-4QX")
+        expect(w.confirmed.code).toBe("MT4-2JF")
         expect(w.chat[1].id).toBe(3)
         expect(w.chat[1].msg.text).toBe("Linked: you can go back to your browser.")
         w.env.CreateThread(function() w.commands.link(3, { "ZZ-ZZZZ", n = 1 }, "link ZZ-ZZZZ") end)
         w.pass(1)
         expect(w.chat[2].msg.text).toContain("not valid")
+    end)
+
+    test("/link joins every argument and names the environment and the adapter version", function()
+        local w = shop()
+        w.fire("onResourceStart", nil, "shop")
+        w.env.CreateThread(function() w.commands.link(3, { "mt4", "2jf", n = 2 }, "link mt4 2jf") end)
+        w.pass(1)
+        expect(w.confirmed.code).toBe("MT42JF")
+        expect(w.confirmed.environment).toBe("open77")
+        expect(w.confirmed.adapterVersion).toBe("open77-shim-0.5.0")
+        expect(w.chat[1].msg.text).toBe("Linked: you can go back to your browser.")
+    end)
+
+    test("address mode: the normalised address is sent, never logged, with the environment", function()
+        local w, SG = shop({ convars = { scriptgo_api = API, scriptgo_server_token = TOKEN, scriptgo_presence = "on", scriptgo_presence_addr = "on" } })
+        w.fire("onResourceStart", nil, "shop")
+        w.pass(5)
+        local st = SG.presence.status()
+        expect(st.active).toBe(true)
+        expect(st.mode).toBe("addr")
+        expect(w.presence.environment).toBe("open77")
+        expect(w.presence.adapterVersion).toBe("open77-shim-0.5.0")
+        expect(w.presence.players[1].player).toBe(ADA)
+        expect(w.presence.players[1].addr[1]).toBe("203.0.113.9")
+        expect(w.presence.players[1].fp).toBeNil()
+        for _, l in ipairs(w.logs) do expect(l:find("203.0.113", 1, true)).toBeNil() end
     end)
 
     test("presence on, but no HMAC native: it says so and never reads an endpoint", function()

@@ -46,7 +46,8 @@ local CAPS = {
     licensing = false,
     -- Player perks: the shim does not carry the core's perks module.
     perks = false,
-    -- Player match: nor the presence module (and FiveM's Lua has no HMAC).
+    -- Player match: on the server side, only in a resource that declares presence (its section
+    -- below, kept by `scriptgo pack`), and with no HMAC in FiveM's Lua, only in address mode.
     presence = false,
 }
 
@@ -249,6 +250,9 @@ local function chatMessage(payload)
     }
 end
 
+-- The address a player connects from (server side; set below). Never in ScriptGo.players.
+local playerAddress
+
 if isServer then
     SG.players = {
         -- GetPlayers() answers the ids as strings (scheduler.lua); SCRIPT//GO uses integers.
@@ -285,9 +289,8 @@ if isServer then
 
     -- The host function player match needs (docs/spec/player-match.md, "What each adapter adds"):
     -- the address a player connects from, "ip:port" from GetPlayerEndpoint. It is kept out of
-    -- ScriptGo.players on purpose: scripts never see addresses. This shim does not carry the core's
-    -- presence module (nor perks, nor an HMAC), so nothing calls it yet.
-    local function playerAddress(id) -- luacheck: ignore (wired when the shim carries presence)
+    -- ScriptGo.players on purpose: scripts never see addresses. Only the presence section reads it.
+    playerAddress = function(id)
         if not validPlayer(id) then return nil end
         local endpoint = GetPlayerEndpoint(tostring(id))
         if type(endpoint) ~= "string" or endpoint == "" then return nil end
@@ -379,6 +382,95 @@ SG.perks = {
     catalog = refuse("perks"), on = refuse("perks"), off = refuse("perks"), status = refuse("perks"),
 }
 SG.presence = { status = refuse("presence"), link = refuse("presence"), linkMessage = refuse("presence") }
+
+-- @capability presence
+-- Player match (docs/spec/player-match.md), server side: the portable core's presence module,
+-- included word for word by `scriptgo pack --target fivem`, only for a resource that declares the
+-- presence capability. Declare it in ONE resource per server: each one registers /link and reports.
+--   - /link (convar `scriptgo_link_command`, default "link"; "off" removes it) confirms the code a
+--     player types, for the player's `license:` identifier. Needs `scriptgo_server_token`.
+--   - Presence (convar `scriptgo_presence`, default off). FiveM's Lua has no HMAC, so it reports
+--     only in address mode (convar `scriptgo_presence_addr`, default off): the normalised address is
+--     sent and SCRIPT//GO fingerprints it at once. Without it, status says "no HMAC on this host".
+if isServer then
+    local Core = (function(...)
+-- @include ../../lua/scriptgo/presence.lua
+    end)()
+    local function convar(key)
+        local v = GetConvar(key, "")
+        if v == nil or v == "" then return nil end
+        return v
+    end
+    local client = Core.new({
+        request = function(req, done)
+            PerformHttpRequest(req.url, function(status, body, headers, errorData)
+                status = tonumber(status) or 0
+                if body == nil and status >= 400 and type(errorData) == "string" then
+                    local prefix = "HTTP " .. status .. ": "
+                    if errorData:sub(1, #prefix) == prefix then body = errorData:sub(#prefix + 1) end
+                end
+                done({ status = status, body = body or "" })
+            end, req.method or "GET", req.body or "", req.headers or {}, { followLocation = false })
+        end,
+        await = function(register)
+            local p = promise.new()
+            register(function(a, b) p:resolve({ a, b }) end)
+            local r = Citizen.Await(p)
+            if type(r) ~= "table" then return false, "await_failed" end
+            return r[1], r[2]
+        end,
+        identifier = function(id) return SG.players.identifier(id) end,
+        name = function(id) return SG.players.name(id) end,
+        address = function(id) return playerAddress(id) end,
+        players = function()
+            local out = {}
+            for _, p in ipairs(GetPlayers()) do out[#out + 1] = tonumber(p) end
+            return out
+        end,
+        -- FiveM's Lua has no vetted HMAC-SHA256: fingerprints only through address mode.
+        hmacSha256 = nil,
+        now = function() return os.time() end,
+        json = { encode = J.encode, decode = J.decode },
+        config = convar,
+        log = function(level, message) (SG.log[level] or SG.log.info)(message) end,
+        environment = ENVIRONMENT,
+        adapterVersion = ADAPTER_VERSION,
+    })
+    CreateThread(function()
+        while true do
+            client.tick()
+            Wait(1000)
+        end
+    end)
+    AddEventHandler("playerJoining", function()
+        local id = tonumber(source)
+        if id then client.joined(id) end
+    end)
+    AddEventHandler("playerDropped", function()
+        local id = tonumber(source)
+        if id then client.left(id) end
+    end)
+    local command = client.command()
+    if command then
+        local ok, err = pcall(RegisterCommand, command, function(src, args)
+            if src == 0 then
+                SG.log.info("/" .. command .. " is typed by a player in game, with the code their browser shows")
+                return
+            end
+            client.linkAsync(src, Core.codeFromArgs(args), function(linked, reason)
+                SG.ui.notify(src, { title = "SCRIPT//GO", message = client.linkMessage(linked, reason) })
+            end)
+        end, false)
+        if not ok then SG.log.warn("/" .. command .. " is not registered here (" .. tostring(err) .. ")") end
+    end
+    CAPS.presence = true
+    SG.presence = {
+        status = function() return client.status() end,
+        link = function(player, code) return client.link(player, code) end,
+        linkMessage = function(ok, reason) return client.linkMessage(ok, reason) end,
+    }
+end
+-- @end
 
 -- OPEN//77-compatible names for the portable subset, as on every SCRIPT//GO host.
 SG.notifications = {

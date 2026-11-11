@@ -56,6 +56,21 @@ describe("packForFivem", () => {
     expect(r.warnings.join(" ")).toMatch(/does not list fivem/);
   });
 
+  it("keeps the shim's player match section only for a package that declares presence", () => {
+    const plain = readFileSync(join(packForFivem(readResource(join(repoRoot, "sdk", "packages", "sg_inventory")), join(tmp, "out")).dest, "scriptgo_shim.lua"), "utf8");
+    expect(plain).not.toMatch(/@capability|@include|scriptgo_presence_addr|RegisterCommand\(command/);
+    const r = packForFivem(readResource(join(repoRoot, "sdk", "conformance", "sg_probe_presence")), join(tmp, "out"));
+    const shim = readFileSync(join(r.dest, "scriptgo_shim.lua"), "utf8");
+    expect(shim).not.toMatch(/@capability|@include/);
+    expect(shim).toMatch(/function M\.codeFromArgs/); // the core's module, included word for word
+    expect(shim).toMatch(/CAPS\.presence = true/);
+    const lua = findInterpreters().find((i) => i.name === "lua54");
+    if (lua) {
+      const out = spawnSync(lua.path, ["-e", `assert(loadfile(${luaString(join(r.dest, "scriptgo_shim.lua"))}))`], { encoding: "utf8" });
+      expect(out.status, out.stderr).toBe(0);
+    }
+  });
+
   it("drops dependency ranges FiveM cannot express, with a warning", () => {
     const r = packForFivem(readResource(join(repoRoot, "sdk", "conformance", "sg_probe")), join(tmp, "out"));
     expect(r.errors).toEqual([]);

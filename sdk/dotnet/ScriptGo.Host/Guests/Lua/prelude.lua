@@ -838,7 +838,7 @@ local function presenceTick()
     if not okTok or type(token) ~= "string" or token == "" or not name then return end
     presenceCommand = name
     local ok, why = pcall(env.RegisterCommand, name, function(source, args)
-        local code = type(args) == "table" and args[1] or nil
+        local code = R("presence").codeFromArgs(args)
         if source == 0 then
             log("info", "presence: /" .. name .. " is typed by a player, in game")
             return

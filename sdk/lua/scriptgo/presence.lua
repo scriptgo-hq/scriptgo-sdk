@@ -5,8 +5,13 @@
 --    told "this player is here, from this address", as HMAC-SHA256(presenceKey, normalised address):
 --    a keyed fingerprint, never the address. The key comes from the API's answers and rotates. The
 --    raw address never leaves the server and is never logged, nor are fingerprints.
+--    Address mode (`scriptgo_presence_addr`, default off; the owner's decision is pending): on a host
+--    with no vetted HMAC, the normalised address itself is sent (`addr`) and the API fingerprints it
+--    at once and drops it. It is still never logged here. With an HMAC, fingerprints are sent anyway.
 -- 2. The code. A buyer whose browser could not be matched gets a short code on the page and types
---    `/link K7-4QX` in game; the server confirms it for the player who typed it.
+--    `/link MT4-2JF` in game; the server confirms it for the player who typed it.
+-- Every request names the environment and the adapter version, as perks checks do: the API ties the
+-- identity to `<environment>:<identifier>` and refuses a report from an unknown environment.
 --
 --   local presence = M.new(services)
 --   presence.joined(player)        a player joined: reported at once when presence is on
@@ -15,7 +20,7 @@
 --   presence.link(player, code)    -> true | false, reason      (waits for the API: call it from a thread)
 --   presence.linkAsync(player, code, done)   the same, done(ok, reason) later; never blocks
 --   presence.linkMessage(ok, reason, command) -> the plain sentence to show the player
---   presence.status()              -> { enabled, active, reason, reported, lastError, lastReportAt, rotatesAt }
+--   presence.status()              -> { enabled, active, reason, mode ("fp" | "addr"), reported, lastError, lastReportAt, rotatesAt }
 --
 -- Services (the host hands what it already has; no `os`, `io`, `debug`, `package`, `require` or
 -- `setmetatable` here, so the file runs in the OPEN//77 sandbox and in the kits as well):
@@ -23,7 +28,7 @@
 --   now()                   wall clock, Unix seconds
 --   json                    { encode, decode }
 --   config(key)             "scriptgo_api", "scriptgo_server_token", "scriptgo_presence",
---                           "scriptgo_perks_poll_seconds", "scriptgo_link_command"
+--                           "scriptgo_presence_addr", "scriptgo_perks_poll_seconds", "scriptgo_link_command"
 --   identifier(player)      the platform's identifier of a connected player, or nil
 --   name(player)            optional: the name the game shows for that player
 --   address(player)         optional: the player's address ("203.0.113.9", "203.0.113.9:30120",
@@ -32,7 +37,8 @@
 --   hmacSha256(key, msg)    optional: HMAC-SHA256 as lowercase hex, from a VETTED implementation the
 --                           host already has (a platform crypto library). Never a Lua SHA-256: the
 --                           project uses vetted cryptography only. Without it, presence is off and
---                           says why ("presence unavailable: no HMAC on this host"); the code works.
+--                           says why ("presence unavailable: no HMAC on this host"), unless the operator
+--                           turned address mode on; the code works either way.
 --   await(register)         optional: suspends the calling thread until register's callback runs (link only)
 --   log(level, message)     optional
 --   environment, adapterVersion   optional strings
@@ -164,7 +170,7 @@ end
 -- What the player reads after /link. Plain words; `command` is the command's name.
 local MESSAGES = {
     ok = "Linked: you can go back to your browser.",
-    usage = "Type the code your browser shows, for example: /%s K7-4QX",
+    usage = "Type the code your browser shows, for example: /%s MT4-2JF",
     invalid_code = "That code is not valid: it may be mistyped, already used, or older than 10 minutes. Ask the page for a new one.",
     not_linked = "This server is not linked to SCRIPT//GO, so it cannot link you. Tell the server's operator.",
     unknown_player = "This server cannot tell who you are, so it cannot link you.",
@@ -194,6 +200,18 @@ function M.normalizeCode(code)
     return code
 end
 
+-- The code from a command's arguments: every word, joined ("/link mt4 2jf" is "MT42JF").
+function M.codeFromArgs(args)
+    if type(args) == "string" then return args end
+    if type(args) ~= "table" then return nil end
+    local words = {}
+    for i = 1, #args do
+        if type(args[i]) == "string" or type(args[i]) == "number" then words[#words + 1] = tostring(args[i]) end
+    end
+    if #words == 0 then return nil end
+    return table.concat(words, " ")
+end
+
 function M.new(s)
     if not (type(s) == "table" and type(s.request) == "function" and type(s.now) == "function"
         and type(s.identifier) == "function" and type(s.json) == "table" and type(s.config) == "function") then
@@ -216,6 +234,23 @@ function M.new(s)
         local v = s.config(key)
         if type(v) == "string" and v ~= "" then return v end
         return nil
+    end
+
+    -- environment and adapterVersion, on every request body, as the API's schema accepts them.
+    local seen = {}
+    if type(s.environment) == "string" and #s.environment <= 64 and s.environment:find("^[a-z0-9][a-z0-9_%-]*$") then
+        seen.environment = s.environment
+    end
+    if type(s.adapterVersion) == "string" and s.adapterVersion ~= "" then seen.adapterVersion = s.adapterVersion:sub(1, 128) end
+    local function withSeen(body)
+        for k, v in pairs(seen) do body[k] = v end
+        return body
+    end
+    -- A report with no entries: '"players": []' spelt out (an empty Lua table encodes as {}).
+    local function emptyReport()
+        -- An empty Lua table may encode as [] or {}: only a non-empty one is spliced in.
+        if next(seen) == nil then return '{"players":[]}' end
+        return '{"players":[],' .. json.encode(withSeen({})):sub(2)
     end
 
     local function pollEvery()
@@ -271,7 +306,14 @@ function M.new(s)
         if not truthy(s.config("scriptgo_presence")) then return "off" end
         if not setting("scriptgo_server_token") then return "not_linked" end
         if type(s.address) ~= "function" then return M.NO_ADDRESS end
-        if type(s.hmacSha256) ~= "function" then return M.NO_HMAC end
+        if type(s.hmacSha256) ~= "function" and not truthy(s.config("scriptgo_presence_addr")) then return M.NO_HMAC end
+        return nil
+    end
+
+    -- "fp" (the host's HMAC) or "addr" (the normalised address, fingerprinted by the API).
+    local function mode()
+        if type(s.hmacSha256) == "function" then return "fp" end
+        if truthy(s.config("scriptgo_presence_addr")) then return "addr" end
         return nil
     end
 
@@ -283,22 +325,24 @@ function M.new(s)
     end
 
     -- One player's presence entry, or nil (no identifier, no readable address, or no fingerprint).
-    -- The address is used here and dropped; it is never stored, sent or logged.
-    local function entryFor(player, key)
+    -- The address is used here and dropped; it is never stored or logged, and sent only in address
+    -- mode (`addr`), which the operator turned on.
+    local function entryFor(player, key, how)
         local okId, id = pcall(s.identifier, player)
         if not okId or not validIdentifier(id) then return nil end
         local okAddr, raw = pcall(s.address, player)
         local normalised = okAddr and M.normalizeAddress(raw) or nil
         if not normalised then return nil end
-        local okFp, fp = pcall(s.hmacSha256, key, normalised)
-        if not okFp or type(fp) ~= "string" or not fp:find("^%x+$") or #fp ~= 64 then
-            say("presence unavailable: the host's HMAC failed")
-            return nil
-        end
         local name = id
         if s.name then
             local okName, n = pcall(s.name, player)
             if okName and type(n) == "string" and n ~= "" then name = n end
+        end
+        if how == "addr" then return { player = id, name = shortName(name), addr = { normalised } }, id end
+        local okFp, fp = pcall(s.hmacSha256, key, normalised)
+        if not okFp or type(fp) ~= "string" or not fp:find("^%x+$") or #fp ~= 64 then
+            say("presence unavailable: the host's HMAC failed")
+            return nil
         end
         return { player = id, name = shortName(name), fp = { fp:lower() } }, id
     end
@@ -321,10 +365,16 @@ function M.new(s)
             return
         end
         local key = state.key
+        local how = mode()
+        if how == "addr" and not state.toldAddr then
+            state.toldAddr = true
+            log("info", "presence in address mode (scriptgo_presence_addr): player addresses are sent to SCRIPT//GO, which fingerprints them at once")
+        end
         local entries, ids = {}, {}
-        if key then
+        -- Fingerprints need the day's key first; addresses do not.
+        if key or how == "addr" then
             for _, h in ipairs(handles or connected()) do
-                local e, id = entryFor(h, key)
+                local e, id = entryFor(h, key, how)
                 if e then
                     entries[#entries + 1] = e
                     ids[#ids + 1] = { h, id }
@@ -335,7 +385,7 @@ function M.new(s)
         state.sending = true
         -- Known from the moment it is sent, so a player who leaves before the answer is removed too.
         for _, pair in ipairs(ids) do known[pair[1]] = pair[2] end
-        local body = #entries > 0 and { players = entries } or '{"players":[]}'
+        local body = #entries > 0 and withSeen({ players = entries }) or emptyReport()
         call("POST", "/v1/presence", body, function(answer, reason)
             state.sending = false
             local now = s.now()
@@ -363,7 +413,7 @@ function M.new(s)
             if newKey and newKey ~= key then
                 state.key = newKey
                 -- Report again with the new key at once; once only, whatever the API answers then.
-                if not retried then report(handles, true) end
+                if not retried and how == "fp" then report(handles, true) end
             end
         end)
     end
@@ -373,7 +423,7 @@ function M.new(s)
     function api.joined(player)
         local why = blocked()
         if why then return end
-        if state.key then report({ player }) else state.nextRefresh = 0 end
+        if state.key or mode() == "addr" then report({ player }) else state.nextRefresh = 0 end
     end
 
     function api.left(player)
@@ -406,7 +456,7 @@ function M.new(s)
         if not typed then return done(false, (code == nil or code == "") and "usage" or "invalid_code") end
         local okId, id = pcall(s.identifier, player)
         if not okId or not validIdentifier(id) then return done(false, "unknown_player") end
-        local body = { code = typed, player = id }
+        local body = withSeen({ code = typed, player = id })
         if s.name then
             local okName, n = pcall(s.name, player)
             if okName and type(n) == "string" and n ~= "" then body.name = shortName(n) end
@@ -441,7 +491,7 @@ function M.new(s)
     function api.status()
         local why = blocked()
         return {
-            enabled = why ~= "off", active = why == nil, reason = why,
+            enabled = why ~= "off", active = why == nil, reason = why, mode = why == nil and mode() or nil,
             reported = state.reported, lastError = state.lastError,
             lastReportAt = state.lastReportAt, rotatesAt = state.rotatesAt,
         }

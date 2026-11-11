@@ -39,7 +39,7 @@ public sealed class PresenceTests
             if (request.Method == "POST" && path == "/v1/identity/codes/confirm")
             {
                 using var body = JsonDocument.Parse(request.Body!);
-                return body.RootElement.GetProperty("code").GetString() == "K7-4QX"
+                return body.RootElement.GetProperty("code").GetString()!.Replace("-", "", StringComparison.Ordinal) == "MT42JF"
                     ? new HttpResponseData(200, none, "{\"linked\":true}")
                     : new HttpResponseData(410, none, "{\"error\":{\"code\":\"code_used\",\"message\":\"x\"}}");
             }
@@ -120,6 +120,13 @@ public sealed class PresenceTests
             Assert.AreEqual("acct:ada-0003", entry.GetProperty("player").GetString());
             Assert.AreEqual("Ada", entry.GetProperty("name").GetString());
         }
+        // Every report names the environment and the adapter version, the first empty one too.
+        foreach (var r in api.Seen.Where(r => r.Method == "POST" && r.Url.EndsWith("/v1/presence", StringComparison.Ordinal)))
+        {
+            using var b = JsonDocument.Parse(r.Body!);
+            Assert.AreEqual(sb.Host.Environment, b.RootElement.GetProperty("environment").GetString(), r.Body);
+            Assert.IsFalse(string.IsNullOrEmpty(b.RootElement.GetProperty("adapterVersion").GetString()), r.Body);
+        }
         // One resource declares presence: the other one never reports.
         Assert.AreEqual(1, api.Seen.Count(r => r.Body?.Contains(expected, StringComparison.Ordinal) == true));
         Assert.IsFalse(api.Seen.Any(r => (r.Body ?? "").Contains(Address, StringComparison.Ordinal) || r.Url.Contains(Address, StringComparison.Ordinal)));
@@ -142,16 +149,19 @@ public sealed class PresenceTests
         players.Online[3] = ("Ada", Address);
         sb.Host.PlayerJoin(3, "Ada");
         Assert.IsTrue(Until(sb, () => sb.Host.CommandList().Contains("link")), sb.Log.ToString());
-        Assert.IsTrue(sb.Host.ExecuteCommand(3, "/link k7-4qx").Ok);
+        // Every word of the command is the code: "/link mt4 2jf" as typed with a space.
+        Assert.IsTrue(sb.Host.ExecuteCommand(3, "/link mt4 2jf").Ok);
         Assert.IsTrue(Until(sb, () => ui.Sent.Count > 0), sb.Log.ToString());
         Assert.AreEqual((3, "Linked: you can go back to your browser."), ui.Sent[0]);
         var confirm = api.Seen.First(r => r.Url == "http://api.test/v1/identity/codes/confirm");
         using (var body = JsonDocument.Parse(confirm.Body!))
         {
-            Assert.AreEqual("K7-4QX", body.RootElement.GetProperty("code").GetString());
+            Assert.AreEqual("MT42JF", body.RootElement.GetProperty("code").GetString());
             Assert.AreEqual("acct:ada-0003", body.RootElement.GetProperty("player").GetString());
+            Assert.AreEqual(sb.Host.Environment, body.RootElement.GetProperty("environment").GetString());
+            Assert.IsFalse(string.IsNullOrEmpty(body.RootElement.GetProperty("adapterVersion").GetString()));
         }
-        Assert.IsTrue(sb.Host.ExecuteCommand(3, "link US-ED00").Ok);
+        Assert.IsTrue(sb.Host.ExecuteCommand(3, "link USE-D99").Ok);
         Assert.IsTrue(Until(sb, () => ui.Sent.Count > 1), sb.Log.ToString());
         StringAssert.StartsWith(ui.Sent[1].Message, "That code is not valid");
     }

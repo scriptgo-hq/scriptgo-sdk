@@ -30,7 +30,7 @@ local function iso(t) return os.date("!%Y-%m-%dT%H:%M:%S.000Z", t) end
 
 -- A fake API: answers /v1/presence with the current key, records what it was told, confirms codes.
 local function fakeApi(wall)
-    local api = { key = KEY1, rotatesAt = T0 + 86400, mode = "up", calls = {}, present = {}, codes = { ["K7-4QX"] = "open" } }
+    local api = { key = KEY1, rotatesAt = T0 + 86400, mode = "up", calls = {}, present = {}, codes = { ["MT4-2JF"] = "open" } }
     function api.count(pattern)
         local n = 0
         for _, c in ipairs(api.calls) do if c.key:find(pattern, 1, true) then n = n + 1 end end
@@ -277,20 +277,126 @@ describe("presence reporting", function()
             expect(l.message:find(VECTORS[KEY1 .. "|203.0.113.9"], 1, true)).toBe(nil)
         end
     end)
+
+    test("every report names the environment and the adapter version, the empty one too", function()
+        local p, api = newClient({ services = { environment = "rust", adapterVersion = "rust-bridge-1.2.3" } })
+        p.tick()
+        expect(api.calls[1].req.body:sub(1, 14)).toBe('{"players":[],')
+        for _, c in ipairs(api.calls) do
+            expect(c.body.environment).toBe("rust")
+            expect(c.body.adapterVersion).toBe("rust-bridge-1.2.3")
+        end
+        expect(#api.calls[1].body.players).toBe(0)
+        expect(#api.calls[2].body.players).toBe(2)
+    end)
+
+    test("an environment that is not an id is left out, not sent mangled", function()
+        local p, api = newClient({ services = { environment = "Not An Id", adapterVersion = string.rep("v", 200) } })
+        p.tick()
+        expect(api.calls[1].body.environment).toBe(nil)
+        expect(#api.calls[1].body.adapterVersion).toBe(128)
+    end)
+end)
+
+describe("address mode", function()
+    local addrCfg = { scriptgo_presence_addr = "on" }
+
+    test("off by default: without an HMAC nothing is sent", function()
+        local p, api = newClient({ services = { hmacSha256 = false } })
+        p.tick()
+        expect(api.count("POST /v1/presence")).toBe(0)
+        expect(p.status().reason).toBe(presenceLib.NO_HMAC)
+    end)
+
+    test("on, with no HMAC: the normalised address is sent at once, without a key", function()
+        local p, api = newClient({ config = addrCfg, services = { hmacSha256 = false, environment = "fivem", adapterVersion = "fivem-shim-0.1.0" } })
+        p.tick()
+        expect(api.count("POST /v1/presence")).toBe(1)
+        local body = api.calls[1].body
+        expect(body.environment).toBe("fivem")
+        expect(body.adapterVersion).toBe("fivem-shim-0.1.0")
+        expect(#body.players).toBe(2)
+        expect(body.players[1].addr[1]).toBe("203.0.113.9")
+        expect(body.players[1].fp).toBe(nil)
+        expect(body.players[2].addr[1]).toBe("2001:db8:0:1::/64")
+        expect(p.status().active).toBe(true)
+        expect(p.status().mode).toBe("addr")
+        expect(p.status().reported).toBe(2)
+    end)
+
+    test("on, with an HMAC: fingerprints are sent anyway", function()
+        local p, api = newClient({ config = addrCfg })
+        p.tick()
+        local last = api.last("POST /v1/presence")
+        expect(last.body.players[1].fp[1]).toBe(VECTORS[KEY1 .. "|203.0.113.9"])
+        expect(last.body.players[1].addr).toBe(nil)
+        expect(p.status().mode).toBe("fp")
+    end)
+
+    test("a join is reported at once, a rotated key changes nothing", function()
+        local p, api, wall, cfg, players = newClient({ config = addrCfg, services = { hmacSha256 = false } })
+        p.tick()
+        local n = api.count("POST /v1/presence")
+        api.key = KEY2
+        players[3] = { id = "steam:3", name = "Cy", address = "198.51.100.23" }
+        p.joined(3)
+        expect(api.count("POST /v1/presence")).toBe(n + 1)
+        local last = api.last("POST /v1/presence")
+        expect(#last.body.players).toBe(1)
+        expect(last.body.players[1].addr[1]).toBe("198.51.100.23")
+        p.left(3)
+        expect(api.count("DELETE /v1/presence/steam%3A3")).toBe(1)
+    end)
+
+    test("the address never reaches the log", function()
+        local p, api, wall, cfg, players, logs = newClient({ config = addrCfg, services = { hmacSha256 = false } })
+        api.mode = "down"
+        p.tick()
+        p.left(1)
+        local told = 0
+        for _, l in ipairs(logs) do
+            expect(l.message:find("203.0.113", 1, true)).toBe(nil)
+            expect(l.message:find("2001:db8", 1, true)).toBe(nil)
+            if l.message:find("address mode", 1, true) then told = told + 1 end
+        end
+        -- The operator is told once that addresses leave the server.
+        expect(told).toBe(1)
+    end)
 end)
 
 describe("the link command", function()
     test("a typed code is confirmed for the player who typed it", function()
         local p, api = newClient({ config = { scriptgo_presence = false } })
-        local ok, reason = p.link(1, "k7-4qx")
+        local ok, reason = p.link(1, "mt4-2jf")
         expect(ok).toBe(true)
         expect(reason).toBe(nil)
-        expect(api.codes["K7-4QX"]).toBe("steam:1")
+        expect(api.codes["MT4-2JF"]).toBe("steam:1")
         local body = api.last("/v1/identity/codes/confirm").body
-        expect(body.code).toBe("K7-4QX")
+        expect(body.code).toBe("MT4-2JF")
         expect(body.player).toBe("steam:1")
         expect(body.name).toBe("Ada")
         expect(p.linkMessage(ok, reason)).toBe("Linked: you can go back to your browser.")
+    end)
+
+    test("a confirm names the environment and the adapter version", function()
+        local p, api = newClient({ services = { environment = "standalone", adapterVersion = "standalone-0.1.0" } })
+        expect(p.link(1, "MT4-2JF")).toBe(true)
+        local body = api.last("/v1/identity/codes/confirm").body
+        expect(body.environment).toBe("standalone")
+        expect(body.adapterVersion).toBe("standalone-0.1.0")
+    end)
+
+    test("the code is every word of the command, joined", function()
+        local from = presenceLib.codeFromArgs
+        expect(from({ "mt4", "2jf" })).toBe("mt4 2jf")
+        expect(from({ "MT4-2JF" })).toBe("MT4-2JF")
+        expect(from("mt4 2jf")).toBe("mt4 2jf")
+        expect(from({})).toBe(nil)
+        expect(from(nil)).toBe(nil)
+        expect(presenceLib.normalizeCode(from({ "mt4", "2jf" }))).toBe("MT42JF")
+        local p, api = newClient()
+        expect(p.link(1, from({ "mt4", "2jf" }))).toBe(true)
+        expect(api.codes["MT4-2JF"]).toBe("steam:1")
     end)
 
     test("refusals become plain sentences", function()
@@ -299,16 +405,16 @@ describe("the link command", function()
         expect(ok).toBe(false)
         expect(reason).toBe("unknown_code")
         expect(p.linkMessage(ok, reason)).toContain("not valid")
-        p.link(1, "K7-4QX")
-        ok, reason = p.link(2, "K7-4QX")
+        p.link(1, "MT4-2JF")
+        ok, reason = p.link(2, "MT4-2JF")
         expect(reason).toBe("code_used")
         expect(p.linkMessage(ok, reason)).toContain("Ask the page for a new one")
         ok, reason = p.link(1, nil)
         expect(reason).toBe("usage")
-        expect(p.linkMessage(ok, reason)).toBe("Type the code your browser shows, for example: /link K7-4QX")
+        expect(p.linkMessage(ok, reason)).toBe("Type the code your browser shows, for example: /link MT4-2JF")
         ok, reason = p.link(1, "<script>")
         expect(reason).toBe("invalid_code")
-        ok, reason = p.link(42, "K7-4QX")
+        ok, reason = p.link(42, "MT4-2JF")
         expect(reason).toBe("unknown_player")
         api.mode = "busy"
         ok, reason = p.link(1, "AB-CDE")
@@ -328,7 +434,7 @@ describe("the link command", function()
         expect(newClient({ config = { scriptgo_link_command = "off" } }).command()).toBe(nil)
         expect(newClient({ config = { scriptgo_link_command = "" } }).command()).toBe(nil)
         local p = newClient({ config = { scriptgo_link_command = "verify" } })
-        expect(p.linkMessage(false, "usage")).toBe("Type the code your browser shows, for example: /verify K7-4QX")
+        expect(p.linkMessage(false, "usage")).toBe("Type the code your browser shows, for example: /verify MT4-2JF")
     end)
 end)
 
@@ -367,13 +473,23 @@ describe("through a host", function()
     test("/link is a host command and answers the player", function()
         local h, api = hostWith(cfg, { hmacSha256 = hmac })
         h:join(5, "Ada", "203.0.113.9")
-        local ok = h:command(5, "/link K7-4QX")
+        local ok = h:command(5, "/link MT4-2JF")
         expect(ok).toBe(true)
-        expect(api.codes["K7-4QX"]).toBe("local:ada")
+        expect(api.codes["MT4-2JF"]).toBe("local:ada")
         local n = h.adapter.notifications[#h.adapter.notifications]
         expect(n.target).toBe(5)
         expect(n.payload.message).toBe("Linked: you can go back to your browser.")
         expect(h.host:hasCommand("link")).toBe(true)
+        local body = api.last("/v1/identity/codes/confirm").body
+        expect(body.environment).toBe("standalone")
+        expect(body.adapterVersion).toBe("testing")
+    end)
+
+    test("/link with a space in the code", function()
+        local h, api = hostWith(cfg, { hmacSha256 = hmac })
+        h:join(5, "Ada", "203.0.113.9")
+        expect(h:command(5, "/link mt4 2jf")).toBe(true)
+        expect(api.codes["MT4-2JF"]).toBe("local:ada")
     end)
 
     test("a resource's own command of that name wins", function()
@@ -385,7 +501,7 @@ describe("through a host", function()
         h:add("own")
         h:start("own")
         h:join(5, "Ada", "203.0.113.9")
-        h:command(5, "/link K7-4QX")
+        h:command(5, "/link MT4-2JF")
         expect(api.count("/v1/identity/codes/confirm")).toBe(0)
     end)
 
