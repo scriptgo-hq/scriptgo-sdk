@@ -345,11 +345,15 @@ limit is 20 minutes. Without a server folder the run is reported as skipped, nev
   by the test tools, neither about escrow: two server starts out of about twenty-five never reached
   their plugins (the wrapper now restarts once and says so), and a request sent after minutes of waiting
   failed on a connection the API had closed (the script no longer reuses connections).
-- `dotnet run --project sdk/adapters/rust/tests -c Release`: 45 bridge tests in a **plain .NET 10
-  process**. The services are fakes; the KeraLua Lua 5.4.8 VM, the portable core, this glue, the
+- `dotnet run --project sdk/adapters/rust/tests -c Release`: 50 bridge tests in a **plain .NET 10
+  process** (2026-11-11: 33 passed, 17 skipped without the native library). The services are fakes; the KeraLua Lua 5.4.8 VM, the portable core, this glue, the
   conformance probe and the official kits are the real ones. On that host, `sg_probe` passes 25/25
   SGCHECKs. This is not a Rust server and does not count as verification by itself.
-- 25 of the 45 are escrow tests. 17 of those use the real native library (`scriptgo.dll`, Windows
+- 5 of the 50 are perks tests (`perks.*`): asked at join with the `steam:` identifier, events
+  pulled, applied and acknowledged, the cache kept in the data files across a restart, an unlinked
+  server keeping nothing, no perks without http. The API there is a fake. **Perks have not run on a
+  Rust server**: no Rust server was available for a run with `sdk/conformance/sg_probe_perks`.
+- 25 of the 50 are escrow tests. 17 of those use the real native library (`scriptgo.dll`, Windows
   x64, built from `sdk/native`) and are **skipped, with a message**, when it is not found: set
   `SCRIPTGO_NATIVE_DIR`, or copy the library to `sdk/adapters/rust/native/<rid>/` (gitignored). The
   key service, the clock and the files are fakes there too. One of them runs a bundle packed by the

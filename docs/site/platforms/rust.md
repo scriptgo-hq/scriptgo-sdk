@@ -141,7 +141,7 @@ What the adapter provides. See [SDK and capabilities](/docs/sdk/capabilities) fo
 | `ui` | Fallback | Notifications are sent as colored chat lines. |
 | `http` | Partial | Oxide/Carbon web requests. Response headers are not available; httpAllowedHosts can limit the hosts. |
 | `licensing` | Supported | Over the plugin's web requests, to the scriptgo_api convar. |
-| `perks` | Supported | Implemented in the core, over the plugin's web requests; the player is steam:&lt;steamid64&gt;. The cache is kept in the plugin's data files. |
+| `perks` | Partial | Implemented in the core, over the plugin's web requests; the player is steam:&lt;steamid64&gt;. The cache is kept in the plugin's data files. Proven in the bridge's .NET test process with fake services; not run on a Rust server yet. |
 
 ## Protection
 

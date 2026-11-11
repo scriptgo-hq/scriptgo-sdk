@@ -387,7 +387,7 @@ local perks = PerksModule.new({
 |---|---|---|
 | Lua Standalone | partial | The core over curl; players are simulated (`local:<name>`): tests and tooling |
 | OPEN//77 | partial | The shim, server side, over `Open77.http.request` (the operator allows the API host); one client per packed resource. Run on a real dedicated server (`tools/perks-e2e.mjs --host open77`), without an authenticated player |
-| Rust (Oxide/Carbon) | supported | The core over the plugin's web requests; `steam:<steamid64>`. Unit-tested in the bridge; not run on a real server with a connected player |
+| Rust (Oxide/Carbon) | partial | The core over the plugin's web requests; `steam:<steamid64>`. Unit-tested in the bridge (a plain .NET process, fake services); not run on a Rust server yet |
 | .NET kit | partial | Lua guests only; JavaScript and TypeScript guests get `capability_unavailable:perks@dotnet` |
 | LÖVE, Neovim | unavailable | One local player, or no player: nobody to sell to |
 | Godot | unavailable | No HTTP in the adapter |

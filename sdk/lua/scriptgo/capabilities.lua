@@ -419,11 +419,11 @@ M.ENVIRONMENTS = {
         capabilities = {
             events = "partial", logging = "supported", storage = "supported", players = "supported",
             permissions = "supported", commands = "supported", config = "supported", ui = "fallback",
-            http = "partial", licensing = "supported", perks = "supported", presence = "supported",
+            http = "partial", licensing = "supported", perks = "partial", presence = "partial",
         },
         notes = {
-            perks = "Implemented in the core, over the plugin's web requests; the player is steam:<steamid64>. The cache is kept in the plugin's data files.",
-            presence = "Implemented in the core: the address is the player's connection address (net.connection.ipaddress), the HMAC is .NET's HMACSHA256 in the bridge. Unit-tested in the bridge; not run on a real server with a connected player.",
+            perks = "Implemented in the core, over the plugin's web requests; the player is steam:<steamid64>. The cache is kept in the plugin's data files. Proven in the bridge's .NET test process with fake services; not run on a Rust server yet.",
+            presence = "Implemented in the core: the address is the player's connection address (net.connection.ipaddress), the HMAC is .NET's HMACSHA256 in the bridge. Proven in the bridge's .NET test process with fake services; not run on a Rust server with a connected player yet.",
             events = "Server side only: Rust has no client-side plugins. Lua 5.4 runs in KeraLua inside the plugin.",
             storage = "Oxide/Carbon data files: <data>/ScriptGo/storage/<key>.json.",
             players = "BasePlayer. Steam ids get integer ids that stay stable while the plugin is loaded; identifier is steam:<steamid64>.",
