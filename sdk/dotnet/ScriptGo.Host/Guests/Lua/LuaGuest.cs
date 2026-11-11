@@ -23,6 +23,8 @@ internal sealed unsafe class LuaGuest(SideRuntime side) : Guest(side, "lua")
     private static readonly Lazy<string> CompatSource = new(() => Encoding.UTF8.GetString(Embedded("ScriptGo.Host.compat.lua")));
     // The portable core's perks module: the one implementation of ScriptGo.perks (ADR-0038).
     private static readonly Lazy<string> PerksSource = new(() => Encoding.UTF8.GetString(Embedded("ScriptGo.Host.perks.lua")));
+    // The portable core's presence module: player match (docs/spec/player-match.md).
+    private static readonly Lazy<string> PresenceSource = new(() => Encoding.UTF8.GetString(Embedded("ScriptGo.Host.presence.lua")));
 
     private Lua? _lua;
     private LuaAlloc? _alloc;
@@ -81,7 +83,7 @@ internal sealed unsafe class LuaGuest(SideRuntime side) : Guest(side, "lua")
             .Add("capabilities", SgValue.Of(SgTable.FromList(Host.CapabilitiesFor("lua").Select(SgValue.Of))))
             .Add("permissions", SgValue.Of(SgTable.FromList(res.Manifest.Permissions.Select(SgValue.Of))))
             .Add("natives", SgValue.Of(Host.NativeDescriptor()))
-            .Add("modules", SgValue.Of(new SgTable().Add("compat", SgValue.Of(CompatSource.Value)).Add("json", SgValue.Of(JsonSource.Value)).Add("perks", SgValue.Of(PerksSource.Value))));
+            .Add("modules", SgValue.Of(new SgTable().Add("compat", SgValue.Of(CompatSource.Value)).Add("json", SgValue.Of(JsonSource.Value)).Add("perks", SgValue.Of(PerksSource.Value)).Add("presence", SgValue.Of(PresenceSource.Value))));
 
         var l = _lua;
         if (l.LoadBuffer(Prelude.Value, "=scriptgo/prelude") != LuaStatus.OK)

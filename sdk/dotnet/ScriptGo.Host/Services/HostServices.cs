@@ -54,6 +54,16 @@ public interface IHostPlayers
     string? Identifier(int id);
 }
 
+/// <summary>
+/// Optional, implemented by the <see cref="IHostPlayers"/> object: a connected player's network address
+/// ("ip" or "ip:port"), for player match (docs/spec/player-match.md). Null when unknown. The address
+/// is turned into a keyed fingerprint inside the guest and is never sent, stored or logged.
+/// </summary>
+public interface IHostPlayerAddresses
+{
+    string? Address(int id);
+}
+
 public interface IHostPermissions
 {
     /// <summary>Does a player hold a host privilege (operators, ACE, privs)? The console (0) always does.</summary>

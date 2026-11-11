@@ -751,6 +751,119 @@ SG.perks = capTable("perks", {
         return perksOf().status()
     end,
 })
+-- Player match (docs/spec/player-match.md): the portable core's presence module, in the one Lua
+-- resource of the host that declares the presence capability (declare it in one resource only: each
+-- declaring resource reports, and registers the link command). The address comes from the host
+-- (IHostPlayerAddresses, or the address given to PlayerJoin) and the HMAC from .NET's HMACSHA256; both
+-- stay in the host process, only the fingerprint is sent.
+local presenceClient, presenceStarted, presenceActive
+local presenceNextTick = 0
+local function declaresPresence()
+    local ok, m = sg_call("manifest")
+    if not ok or type(m) ~= "table" then return false end
+    for _, list in ipairs({ m.capabilities or {}, m.optionalCapabilities or {} }) do
+        for _, c in ipairs(list) do if c == "presence" then return true end end
+    end
+    return false
+end
+local function presenceOf()
+    if presenceClient then return presenceClient end
+    presenceClient = R("presence").new({
+        request = function(req, done)
+            local p = newPromise()
+            pending[p.id] = p
+            perksAnswers[p.id] = done
+            local ok, why = sg_call("http", p.id, req)
+            if not ok then
+                pending[p.id], perksAnswers[p.id] = nil, nil
+                done({ status = 0, body = "", error = tostring(why) })
+            end
+        end,
+        await = function(register)
+            local p = newPromise()
+            register(function(...) p:resolve(...) end)
+            return p:await()
+        end,
+        identifier = function(id)
+            local _, v = sg_call("playerIdentifier", id)
+            return v
+        end,
+        name = function(id)
+            local _, v = sg_call("playerName", id)
+            return v
+        end,
+        address = function(id)
+            local _, v = sg_call("playerAddress", id)
+            return v
+        end,
+        players = function()
+            local ok, list = sg_call("playersList")
+            return ok and type(list) == "table" and list or {}
+        end,
+        hmacSha256 = function(key, message)
+            local ok, v = sg_call("hmacSha256", key, message)
+            return ok and v or nil
+        end,
+        now = function() return SG.time.now() end,
+        json = json,
+        config = function(key)
+            local ok, v = sg_call("convar", key)
+            if ok then return v end
+            return nil
+        end,
+        log = function(level, message) log(level, "presence: " .. tostring(message)) end,
+        environment = ENVIRONMENT,
+        adapterVersion = ctx.adapterVersion,
+    })
+    return presenceClient
+end
+-- Started on the first tick of a server guest that declares presence: join and leave handlers,
+-- then the link command once the server is linked (scriptgo_server_token).
+local function presenceStart()
+    presenceStarted = true
+    if SIDE ~= "server" or not has("presence") or not declaresPresence() then return end
+    presenceActive = true
+    local p = presenceOf()
+    env.AddEventHandler("playerJoining", function() p.joined(env.source) end)
+    env.AddEventHandler("playerDropped", function() p.left(env.source) end)
+end
+local presenceCommand
+local function presenceTick()
+    local p = presenceClient
+    if not p or not presenceActive then return end
+    p.tick()
+    if presenceCommand or not has("commands") then return end
+    local okTok, token = sg_call("convar", "scriptgo_server_token")
+    local name = p.command()
+    if not okTok or type(token) ~= "string" or token == "" or not name then return end
+    presenceCommand = name
+    local ok, why = pcall(env.RegisterCommand, name, function(source, args)
+        local code = type(args) == "table" and args[1] or nil
+        if source == 0 then
+            log("info", "presence: /" .. name .. " is typed by a player, in game")
+            return
+        end
+        local linked, reason = p.link(source, code)
+        local text = p.linkMessage(linked, reason)
+        if not (has("ui") and pcall(SG.ui.notify, source, { type = "info", title = "SCRIPT//GO", message = text })) then
+            log("info", "presence: " .. text)
+        end
+    end, false)
+    if not ok then log("warn", "presence: the /" .. name .. " command could not be registered: " .. tostring(why)) end
+end
+SG.presence = capTable("presence", {
+    status = function()
+        if SIDE ~= "server" then return nil, "presence is server-side only" end
+        return presenceOf().status()
+    end,
+    link = function(player, code)
+        inThread("ScriptGo.presence.link")
+        if SIDE ~= "server" then return false, "presence is server-side only" end
+        return presenceOf().link(player, code)
+    end,
+    linkMessage = function(ok, reason) return presenceOf().linkMessage(ok, reason) end,
+})
+
 -- OPEN//77-compatible names for the portable subset.
 SG.notifications = {
     send = function(target, payload) return SG.ui.notify(target, payload) end,
@@ -849,6 +962,12 @@ entry.tick = enter(function(n, tc)
     if perksClient and now >= perksNextTick then
         perksNextTick = now + 1
         perksClient.tick()
+    end
+    -- Player match: the same pace (the module keeps its own 30 s report cadence).
+    if not presenceStarted then presenceStart() end
+    if presenceActive and now >= presenceNextTick then
+        presenceNextTick = now + 1
+        presenceTick()
     end
     local ready = {}
     for thread in next, threads do
