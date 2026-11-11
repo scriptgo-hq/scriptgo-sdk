@@ -45,6 +45,7 @@ Optional `<world>/scriptgo.json`:
 | `config.get` / `GetConvar` | `scriptgo.json`, then the server's settings for convars |
 | `ui.notify` | A coloured chat line to the player, or to everyone for `-1` |
 | `http`, `licensing` | `core.request_http_api()` — only when the owner adds `scriptgo` to `secure.http_mods`; otherwise both capabilities are unavailable and say so |
+| `presence` | Not available. The adapter answers a player's address (`core.get_player_ip`), but Luanti has no HMAC (only hashes), perks are not switched on, and a player name is not an account other servers share. Not run |
 
 `/scriptgo` lists the resources and their state; `/scriptgo start|stop|restart <name>` needs
 `server` or `scriptgo_admin`.

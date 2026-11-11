@@ -42,6 +42,7 @@ What the adapter provides. See [SDK and capabilities](/docs/sdk/capabilities) fo
 | `http` | Partial | java.net.http, off until the operator lists hosts in scriptgo.json http.allowedHosts; redirects are never followed. |
 | `licensing` | Partial | Available exactly when http is. |
 | `perks` | Not available | Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here. |
+| `presence` | Not available | The adapter has no player address to read, and perks are not switched on. |
 
 ## Protection
 

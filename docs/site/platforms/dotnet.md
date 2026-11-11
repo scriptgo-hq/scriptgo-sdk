@@ -88,6 +88,7 @@ What the adapter provides. See [SDK and capabilities](/docs/sdk/capabilities) fo
 | `http` | Supported | HttpClient off the host thread; the answer is delivered on the next tick. |
 | `licensing` | Supported | Through the kit's HTTP, against the SCRIPT//GO API (checked against the API schemas by --stub-api). |
 | `perks` | Partial | Lua guests: the kit runs the core's perks module in the guest, over IHostHttp and IHostPlayers.Identifier. JavaScript and TypeScript guests do not have it yet (capability_unavailable). |
+| `presence` | Partial | Lua guests: the kit runs the core's presence module over IHostHttp, IHostPlayers.Identifier and the optional IHostPlayerAddresses, with .NET's HMACSHA256. JavaScript and TypeScript guests do not have it (capability_unavailable). Proven in the kit's tests with a fake API (reports, removal, /link), and by sg_probe_presence through the kit's runner against the stub API, the fingerprint equal to Node's HMAC-SHA256. One Lua resource per host should declare it. |
 
 ## Protection
 

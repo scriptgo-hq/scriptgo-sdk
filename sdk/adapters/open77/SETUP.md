@@ -63,3 +63,24 @@ that long after the payment. `onPlayerConnected` gives the player id as a string
 `tonumber(id)` to `ScriptGo.perks`, which reads a string as an identifier. To pull once for all
 your resources, let one resource relay `granted` and `removed` with `TriggerEvent`: the example is
 in `docs/spec/perks.md`, section "Several resources on one server".
+
+## Player match
+
+Player match (`ScriptGo.presence` and the `/link` command, `docs/spec/player-match.md`) ties a buyer on a shop to their player, without an account. It needs the server link of perks (`scriptgo_server_token`). Two parts:
+
+- **`/link <code>`** (name: `scriptgo_link_command`, default `link`; `off` removes it): the player types the code the sign-in page shows, and the server confirms it to SCRIPT//GO. It is registered as soon as the server is linked.
+- **Presence** (opt-in: `scriptgo_presence` `true`, default off): while a player is connected, the server tells SCRIPT//GO "this player is here" as `HMAC-SHA256(day's key, address)`, refreshed every 30 seconds and removed when they leave. The address never leaves the server and is never logged. Addresses are personal data: an operator who turns presence on says so in their own notice to players.
+
+`scriptgo pack` adds the presence module to the server shim of a resource that declares the
+`presence` capability, and only then asks for `players.identity.sensitive` (to read
+`Open77.players.endpoint`). Declare it in **one resource per server**: each declaring resource
+reports and registers `/link`. The answer to `/link` arrives in the player's chat.
+
+**What works today:** `/link`. **What does not:** presence reporting. It needs HMAC-SHA256, and
+OPEN//77 (build 2.50.0+op77.208) has no native for it; the SDK does not hash in Lua by itself. Until
+OPEN//77 adds one, `ScriptGo.presence.status()` answers `presence unavailable: no HMAC on this
+host`, and buyers use the code. Run on an OPEN//77 server (2026-11-11, `sg_probe_presence`,
+`scriptgo verify --env open77 --stub-api`): the resource packs, the server accepts the permission,
+the shim starts and reports the missing HMAC. No game client was connected, so `/link` has not been
+typed by a real player.
+

@@ -59,3 +59,21 @@ Players here are the simulated ones, so their identifiers are `local:<name>`: th
 tests and tooling (`node tools/perks-e2e.mjs`), not for real players. The cache is the file
 `storage/scriptgo.perks.json` of the data folder. `scriptgo_perks_poll_seconds` (30) sets how
 often the event queue is pulled.
+
+## Player match
+
+Player match (`ScriptGo.presence` and the `/link` command, `docs/spec/player-match.md`) ties a buyer on a shop to their player, without an account. It needs the server link of perks (`scriptgo_server_token`). Two parts:
+
+- **`/link <code>`** (name: `scriptgo_link_command`, default `link`; `off` removes it): the player types the code the sign-in page shows, and the server confirms it to SCRIPT//GO. It is registered as soon as the server is linked.
+- **Presence** (opt-in: `scriptgo_presence` `true`, default off): while a player is connected, the server tells SCRIPT//GO "this player is here" as `HMAC-SHA256(day's key, address)`, refreshed every 30 seconds and removed when they leave. The address never leaves the server and is never logged. Addresses are personal data: an operator who turns presence on says so in their own notice to players.
+
+Players are simulated, and so are their addresses: `join 2 Bob @203.0.113.7` in a run script, or
+`playerAddress` in the config for player 1 (use documentation addresses, 203.0.113.0/24 and
+2001:db8::/32). The HMAC comes from the `openssl` executable (config `openssl`, else the environment
+variable `SCRIPTGO_OPENSSL`, else the PATH); without it, `ScriptGo.presence.status()` says
+`presence unavailable: no HMAC on this host` and only `/link` works. The day's key is passed to
+`openssl` on its command line, where other users of the machine can see it while it runs. Run on
+this machine (2026-11-11) with `sdk/conformance/sg_probe_presence` and `scriptgo verify --stub-api`
+on Lua 5.4, 5.1 and LuaJIT: the fingerprints OpenSSL produced are the ones Node's HMAC-SHA256
+produces. For tests and tooling, not real players.
+

@@ -59,6 +59,7 @@ when present, replaces auto-start with an explicit list. The `scriptgo_api` conv
 | `config.get` / `GetConvar` | `config.json`, then the server's convars |
 | `ui.notify` | A chat line to the player (`ChatPrint`), or to everyone for `-1` (`PrintMessage`) |
 | `http`, `licensing` | The engine's asynchronous `HTTP()`: any method, status, body, headers. Loopback and private addresses need `-allowlocalhttp` on the srcds command line |
+| `presence` | Not available. The adapter answers a player's address (`Player:IPAddress()`), but GLua has no HMAC (only `util.SHA256`) and perks are not switched on, so player match is off; buyers on this platform cannot be matched yet. Not run |
 | Log | The server console; `-condebug` also writes `garrysmod/console.log`. `scriptgo_debug 1` shows debug lines |
 
 Console: `scriptgo` lists the resources and their state; `scriptgo start|stop|restart <name>`

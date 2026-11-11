@@ -64,6 +64,7 @@ What the adapter provides. See [SDK and capabilities](/docs/sdk/capabilities) fo
 | `http` | Partial | Needs the mod listed in secure.http_mods by the server owner. |
 | `licensing` | Partial |  |
 | `perks` | Not available | Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here. |
+| `presence` | Not available | The adapter answers a player's address (core.get_player_ip), but presence is not switched on: perks are not, Luanti has no HMAC (only hashes), and a player name is not an account other servers share. |
 
 ## Protection
 

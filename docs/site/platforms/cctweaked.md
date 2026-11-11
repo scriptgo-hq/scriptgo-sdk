@@ -86,6 +86,7 @@ What the adapter provides. See [SDK and capabilities](/docs/sdk/capabilities) fo
 | `http` | Partial | CC: Tweaked's asynchronous http API. The server owner decides in computercraft-server.toml whether it is on and which hosts answer ([[http.rules]]; private and local addresses are denied by default). Redirects are not followed. |
 | `licensing` | Not available | Not implemented: this adapter was built without a licence check, after the Minecraft Usage Guidelines, which allow a mod only if it "cannot be used to directly or indirectly verify whether a player owns or has access to out-of-game content, products, or services that affect in-game features and functions" (minecraft.net/en-us/usage-guidelines). |
 | `perks` | Not available | Not implemented, for the reason given for licensing. |
+| `presence` | Not available | Not implemented, for the reason given for licensing. |
 
 ## Protection
 

@@ -232,6 +232,7 @@
         "perks": "partial",
         "permissions": "supported",
         "players": "partial",
+        "presence": "partial",
         "storage": "supported",
         "ui": "fallback"
       },
@@ -239,6 +240,7 @@
         "http": "Uses the system curl executable when present.",
         "perks": "Implemented in the core, over curl. The players are the simulated local ones, so the identifier is local:<name>: for tests and tooling, not for real players.",
         "players": "Simulated local players (one by default).",
+        "presence": "Implemented in the core, over curl. Simulated players with simulated addresses (a run script's `join 2 Bob @203.0.113.7`); the HMAC comes from the system `openssl` executable when it is on the PATH, else presence says it is unavailable and only /link works. Proven by sg_probe_presence on Lua 5.4, 5.1 and LuaJIT against the stub API, with OpenSSL's fingerprints equal to Node's HMAC-SHA256. For tests and tooling, not real players.",
         "ui": "Notifications are printed to the console."
       },
       "setupMarkdown": "The standalone host is the `scriptgo` CLI on plain Lua 5.4, 5.1 or LuaJIT. It needs Node.js 22 or\nlater and a Lua interpreter (`lua`/`luajit` on the `PATH`).\n\n1. Install the package into `./resources`:\n\n   ```bash\n   scriptgo add scriptgo//inventory-kit\n   ```\n\n2. Run it. Without `--for` or `--script`, the host reads steps from the terminal\n   (`cmd 1 /help`, `console <cmd>`, `wait <ms>`, `quit`):\n\n   ```bash\n   scriptgo run resources/sg_inventory --search resources --realtime\n   ```\n\n3. Privileges, per-resource values and convars come from a JSON file:\n\n   ```json\n   {\n     \"permissions\": { \"1\": [\"inventory.give\"] },\n     \"resources\": { \"sg_inventory\": { \"slots\": 12 } },\n     \"convars\": { \"scriptgo_api\": \"https://api.scriptgo.dev\" }\n   }\n   ```\n\n   ```bash\n   scriptgo run resources/sg_inventory --search resources --config config.json\n   ```\n\n4. A licensed package: add a deployment on its licence page, then let the host check it. A guarded\n   resource starts only on a valid answer, is checked again every ten minutes, and stops when the\n   offline grace of its last valid answer ends (72 hours by default):\n\n   ```json\n   {\n     \"convars\": { \"scriptgo_api\": \"https://api.scriptgo.dev\" },\n     \"licenses\": { \"inventory_pro\": { \"deploymentToken\": \"sg_dep_...\", \"package\": \"kestrel//inventory-pro\" } }\n   }\n   ```\n\n   This is a licence check, not code secrecy: the host runs plain Lua, so its operator can read\n   what it loads. A protected (escrow) release arrives as an encrypted bundle; on this host\n   `scriptgo escrow load --out <dir>` opens it on your bound server and writes the copy to disk,\n   which is licence-only protection.\n\nStorage goes to `.scriptgo-data/storage/` (`--data` to change it). HTTP and licensing use the\nsystem `curl`.\n\n## Player perks\n\nPlayer perks (`ScriptGo.perks`, `docs/spec/perks.md`): the server asks SCRIPT//GO which of the operator's perks a player has. It needs the server linked to the operator's account (Dashboard, Perks, Servers) and the link's token, a secret, in the host's settings.\n\n```json\n{ \"convars\": { \"scriptgo_api\": \"https://api.scriptgo.dev\", \"scriptgo_server_token\": \"sg_srv_...\" } }\n```\n\nPlayers here are the simulated ones, so their identifiers are `local:<name>`: this host is for\ntests and tooling (`node tools/perks-e2e.mjs`), not for real players. The cache is the file\n`storage/scriptgo.perks.json` of the data folder. `scriptgo_perks_poll_seconds` (30) sets how\noften the event queue is pulled.\n",
@@ -353,6 +355,7 @@
         "perks": "unavailable",
         "permissions": "supported",
         "players": "partial",
+        "presence": "unavailable",
         "storage": "supported",
         "ui": "supported"
       },
@@ -363,6 +366,7 @@
         "perks": "Not switched on: a single local player, with no account to tie a purchase to.",
         "permissions": "Privileges per player id from the config table the game passes.",
         "players": "Single local player (id 1), the game's own client side.",
+        "presence": "A single local player: nobody to match with a buyer.",
         "storage": "JSON files in the game's save directory (scriptgo/storage/<key>.json).",
         "ui": "On-screen toasts drawn by sg:draw(); also logged. Without love.graphics (headless) they are only logged."
       },
@@ -470,6 +474,7 @@
         "perks": "unavailable",
         "permissions": "supported",
         "players": "partial",
+        "presence": "unavailable",
         "storage": "supported",
         "ui": "supported"
       },
@@ -480,6 +485,7 @@
         "perks": "Needs http, which this adapter does not have.",
         "permissions": "Privileges per player id from the config passed to ScriptGoHost.boot.",
         "players": "Single local player (id 1) joined by the scene; ScriptGoHost.join adds simulated ones.",
+        "presence": "Needs http, which this adapter does not have.",
         "storage": "JSON files at user://scriptgo/storage/<key>.json, written with FileAccess.",
         "ui": "Queued for the scene (ScriptGoHost.notified signal) and logged; the demo draws them as toasts."
       },
@@ -587,6 +593,7 @@
         "perks": "unavailable",
         "permissions": "supported",
         "players": "supported",
+        "presence": "unavailable",
         "storage": "supported",
         "ui": "fallback"
       },
@@ -597,6 +604,7 @@
         "perks": "Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here.",
         "permissions": "server or scriptgo_admin privilege, then the grants in <world>/scriptgo.json.",
         "players": "Player names get session-stable integer ids; identifier is luanti:<name>.",
+        "presence": "The adapter answers a player's address (core.get_player_ip), but presence is not switched on: perks are not, Luanti has no HMAC (only hashes), and a player name is not an account other servers share.",
         "ui": "Notifications are sent as chat messages."
       },
       "setupMarkdown": "1. Build the mod, optionally with resources bundled in:\n\n   ```bash\n   node sdk/adapters/luanti/build.mjs --with sdk/packages/sg_inventory --with sdk/packages/sg_eventbus\n   ```\n\n2. Copy `dist/luanti/scriptgo/` into the server's `mods/` folder and enable it for the world\n   (`load_mod_scriptgo = true` in `world.mt`). It is a regular mod: it needs no entry in\n   `secure.trusted_mods`.\n3. Put further resources in `<world>/scriptgo/resources/<name>/`. Every resource with\n   `auto_start true` starts with the server, dependencies first.\n4. Optional `<world>/scriptgo.json`:\n\n   ```json\n   {\n     \"resources\": { \"sg_inventory\": { \"slots\": 30 } },\n     \"convars\": { \"scriptgo_api\": \"https://api.scriptgo.dev\" },\n     \"permissions\": { \"alice\": [\"command.giveitem\"] }\n   }\n   ```\n\nOnly the server side runs. HTTP, and so online license checks, needs the mod listed in\n`secure.http_mods` by the server owner.\n",
@@ -722,6 +730,7 @@
         "perks": "partial",
         "permissions": "supported",
         "players": "supported",
+        "presence": "partial",
         "storage": "supported",
         "ui": "supported"
       },
@@ -732,6 +741,7 @@
         "perks": "Server side, in the shim: the core's perks module over Open77.http.request (the operator allows the API host) and Open77.players.identifier. The shim is packed per resource, so each resource that uses perks polls on its own; the cache is kept in the resource's kvp.",
         "permissions": "Server side: the server ACL (Open77.acl.isAllowed, permission acl.read).",
         "players": "Server side: GetPlayers, GetPlayerName, Open77.players.identifier.",
+        "presence": "Server side, in the shim: the /link command works over Open77.http.request. Presence reporting reads Open77.players.endpoint (permission players.identity.sensitive, requested in the packed manifest only for a resource that declares presence) and needs an HMAC-SHA256 native, which OPEN//77 build 2.50.0+op77.208 does not have: until it does, presence says it is unavailable and only /link works. One resource per server should declare it. Ran on an OPEN//77 server (sg_probe_presence): the shim loads, the permission is accepted, status says no HMAC; no game client was connected, so /link has not been typed by a real player.",
         "storage": "Open77.kvp on both sides, values stored as JSON text.",
         "ui": "Server: Open77.notifications; client: the open77_notifications package."
       },
@@ -781,10 +791,12 @@
       "adapterVersion": "",
       "summary": "Lua HTTP services on Nginx.",
       "capabilities": {
-        "perks": "unavailable"
+        "perks": "unavailable",
+        "presence": "unavailable"
       },
       "capabilityNotes": {
-        "perks": "No adapter yet."
+        "perks": "No adapter yet.",
+        "presence": "No adapter yet."
       },
       "setupMarkdown": "",
       "limitations": [],
@@ -823,10 +835,12 @@
       "adapterVersion": "",
       "summary": "2D games with Defold.",
       "capabilities": {
-        "perks": "unavailable"
+        "perks": "unavailable",
+        "presence": "unavailable"
       },
       "capabilityNotes": {
-        "perks": "No adapter yet."
+        "perks": "No adapter yet.",
+        "presence": "No adapter yet."
       },
       "setupMarkdown": "",
       "limitations": [],
@@ -941,6 +955,7 @@
         "perks": "unavailable",
         "permissions": "supported",
         "players": "partial",
+        "presence": "unavailable",
         "storage": "supported",
         "ui": "supported"
       },
@@ -952,6 +967,7 @@
         "perks": "Not applicable: an editor has no players to sell a perk to.",
         "permissions": "Privileges per player id from the config passed to setup().",
         "players": "Single local player (id 1), the person at the keyboard.",
+        "presence": "Not applicable: an editor has no players to match.",
         "storage": "JSON files under stdpath(\"data\")/scriptgo/storage/<key>.json.",
         "ui": "Notifications go to vim.notify; a headless run only logs them."
       },
@@ -1028,6 +1044,7 @@
         "perks": "unavailable",
         "permissions": "supported",
         "players": "partial",
+        "presence": "unavailable",
         "storage": "supported",
         "ui": "fallback"
       },
@@ -1040,6 +1057,7 @@
         "perks": "Not implemented, for the reason given for licensing.",
         "permissions": "Privileges per player id from /scriptgo/config.json.",
         "players": "One player: the person at the computer's terminal (id 1). The world's other players are not visible.",
+        "presence": "Not implemented, for the reason given for licensing.",
         "storage": "JSON files on the computer's own disk (/scriptgo/data/<key>.json), within the server's computer_space_limit (1 MB by default).",
         "ui": "Notifications are lines on the computer's terminal."
       },
@@ -1152,6 +1170,7 @@
         "perks": "partial",
         "permissions": "supported",
         "players": "partial",
+        "presence": "partial",
         "storage": "supported",
         "ui": "fallback"
       },
@@ -1160,6 +1179,7 @@
         "licensing": "Through the kit's HTTP, against the SCRIPT//GO API (checked against the API schemas by --stub-api).",
         "perks": "Lua guests: the kit runs the core's perks module in the guest, over IHostHttp and IHostPlayers.Identifier. JavaScript and TypeScript guests do not have it yet (capability_unavailable).",
         "players": "The console host simulates players; an integrating engine supplies its own through IHostPlayers.",
+        "presence": "Lua guests: the kit runs the core's presence module over IHostHttp, IHostPlayers.Identifier and the optional IHostPlayerAddresses, with .NET's HMACSHA256. JavaScript and TypeScript guests do not have it (capability_unavailable). Proven in the kit's tests with a fake API (reports, removal, /link), and by sg_probe_presence through the kit's runner against the stub API, the fingerprint equal to Node's HMAC-SHA256. One Lua resource per host should declare it.",
         "storage": "The integrator's IHostStorage; the console host keeps it in memory, or in JSON files with --data.",
         "ui": "The console host writes notifications to its log; an engine implements IHostUi."
       },
@@ -1224,6 +1244,7 @@
         "perks": "unavailable",
         "permissions": "supported",
         "players": "supported",
+        "presence": "unavailable",
         "storage": "supported",
         "ui": "fallback"
       },
@@ -1237,6 +1258,7 @@
         "perks": "Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here.",
         "permissions": "Hytale permission nodes scriptgo.admin or scriptgo.<privilege>, then the grants in scriptgo.json.",
         "players": "Connect and disconnect events; session ids, names, identifier hytale:<uuid>.",
+        "presence": "The adapter has no player address to read, and perks are not switched on.",
         "storage": "JSON files in the plugin's data folder (mods/ScriptGo_ScriptGo/storage/<key>.json).",
         "ui": "Notifications are sent as chat messages."
       },
@@ -1318,6 +1340,7 @@
         "perks": "unavailable",
         "permissions": "supported",
         "players": "supported",
+        "presence": "unavailable",
         "storage": "supported",
         "ui": "fallback"
       },
@@ -1331,6 +1354,7 @@
         "perks": "Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here.",
         "permissions": "superadmin, then CAMI (privilege scriptgo.<name>, for ULX, SAM and other admin mods), then grants by usergroup, SteamID64 or SteamID in data/scriptgo/config.json.",
         "players": "The player's UserID() is its id; identifier steam:<SteamID64>, bot:<id> for bots. Join and drop come from PlayerInitialSpawn and player_disconnect.",
+        "presence": "The adapter answers a player's address (Player:IPAddress()), but presence is not switched on: perks are not, and GLua has no HMAC (util.SHA256 only).",
         "storage": "JSON files under garrysmod/data/scriptgo/storage/.",
         "ui": "Notifications are chat lines (ChatPrint, PrintMessage)."
       },
@@ -1407,6 +1431,7 @@
         "perks": "partial",
         "permissions": "supported",
         "players": "supported",
+        "presence": "partial",
         "storage": "supported",
         "ui": "fallback"
       },
@@ -1419,6 +1444,7 @@
         "perks": "Implemented in the core, over the plugin's web requests; the player is steam:<steamid64>. The cache is kept in the plugin's data files. Proven in the bridge's .NET test process with fake services; not run on a Rust server yet.",
         "permissions": "Oxide permissions: privilege p is scriptgo.p; scriptgo.admin holds every privilege.",
         "players": "BasePlayer. Steam ids get integer ids that stay stable while the plugin is loaded; identifier is steam:<steamid64>.",
+        "presence": "Implemented in the core: the address is the player's connection address (net.connection.ipaddress), the HMAC is .NET's HMACSHA256 in the bridge. Proven in the bridge's .NET test process with fake services; not run on a Rust server with a connected player yet.",
         "storage": "Oxide/Carbon data files: <data>/ScriptGo/storage/<key>.json.",
         "ui": "Notifications are sent as colored chat lines."
       },
@@ -1482,6 +1508,7 @@
         "perks": "unavailable",
         "permissions": "supported",
         "players": "supported",
+        "presence": "unavailable",
         "storage": "supported",
         "ui": "partial"
       },
@@ -1494,6 +1521,7 @@
         "perks": "Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here.",
         "permissions": "Grants in scriptgo.json, by beammp:<account id>, or by name for players logged in to BeamMP: BeamMP has no server-side roles.",
         "players": "MP.GetPlayers and the join and disconnect events. BeamMP id n is SCRIPT//GO player n + 1 (0 is the console); identifier is beammp:<account id>, beammp-guest:<name> for guests.",
+        "presence": "The adapter answers a player's address (MP.GetPlayerIdentifiers(pid).ip), but presence is not switched on: perks are not, and BeamMP's Lua has no HMAC.",
         "storage": "JSON files in the plugin's data/storage folder (scriptgo.json dataDir), replaced atomically.",
         "ui": "MP.SendNotification (a toast in the BeamMP client); its display is not verified, as no game client runs here."
       },
@@ -1538,10 +1566,12 @@
       "adapterVersion": "",
       "summary": "A Luau compatibility layer for Roblox experiences.",
       "capabilities": {
-        "perks": "unavailable"
+        "perks": "unavailable",
+        "presence": "unavailable"
       },
       "capabilityNotes": {
-        "perks": "No adapter yet."
+        "perks": "No adapter yet.",
+        "presence": "No adapter yet."
       },
       "setupMarkdown": "",
       "limitations": [],
@@ -1593,6 +1623,7 @@
         "perks": "unavailable",
         "permissions": "supported",
         "players": "supported",
+        "presence": "unavailable",
         "storage": "supported",
         "ui": "fallback"
       },
@@ -1606,6 +1637,7 @@
         "perks": "Not switched on: the shim does not carry the core's perks module.",
         "permissions": "Server side: ACE (IsPlayerAceAllowed), granted with add_ace in server.cfg.",
         "players": "Server side: GetPlayers, GetPlayerName, and the license: identifier.",
+        "presence": "The shim answers a player's address (GetPlayerEndpoint) for later use, but it does not carry the core's perks or presence modules, and FiveM's Lua has no HMAC.",
         "storage": "Resource KVP (GetResourceKvpString / SetResourceKvp) on both sides, values stored as JSON text.",
         "ui": "Chat messages (chat:addMessage, handled by FXServer's chat system resource)."
       },
@@ -1653,10 +1685,12 @@
       "adapterVersion": "",
       "summary": "Scripts on RedM roleplay servers, the same way as on FiveM.",
       "capabilities": {
-        "perks": "unavailable"
+        "perks": "unavailable",
+        "presence": "unavailable"
       },
       "capabilityNotes": {
-        "perks": "No adapter yet."
+        "perks": "No adapter yet.",
+        "presence": "No adapter yet (RedM would read the address with GetPlayerEndpoint, as FiveM)."
       },
       "setupMarkdown": "",
       "limitations": [],
@@ -1695,10 +1729,12 @@
       "adapterVersion": "",
       "summary": "Game modes and client scripts for KCD:MP medieval roleplay servers (Kingdom Come: Deliverance II).",
       "capabilities": {
-        "perks": "unavailable"
+        "perks": "unavailable",
+        "presence": "unavailable"
       },
       "capabilityNotes": {
-        "perks": "No adapter yet."
+        "perks": "No adapter yet.",
+        "presence": "No adapter yet."
       },
       "setupMarkdown": "",
       "limitations": [],
@@ -1737,10 +1773,12 @@
       "adapterVersion": "",
       "summary": "Project Zomboid server and client mods, for survival and roleplay servers.",
       "capabilities": {
-        "perks": "unavailable"
+        "perks": "unavailable",
+        "presence": "unavailable"
       },
       "capabilityNotes": {
-        "perks": "No adapter yet."
+        "perks": "No adapter yet.",
+        "presence": "No adapter yet."
       },
       "setupMarkdown": "",
       "limitations": [],
@@ -1779,10 +1817,12 @@
       "adapterVersion": "",
       "summary": "Don't Starve Together server and client mods.",
       "capabilities": {
-        "perks": "unavailable"
+        "perks": "unavailable",
+        "presence": "unavailable"
       },
       "capabilityNotes": {
-        "perks": "No adapter yet."
+        "perks": "No adapter yet.",
+        "presence": "No adapter yet."
       },
       "setupMarkdown": "",
       "limitations": [],

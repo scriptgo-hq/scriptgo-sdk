@@ -33,6 +33,10 @@ scriptgo pack my_resource --target fivem --out dist
 (`licensed true`, or the `licensing` capability), because the shim could not enforce it. This is
 a technical limit of the adapter, not a selling rule.
 
+**No player match.** `ScriptGo.presence` raises `capability_unavailable:presence@fivem`: the shim
+does not carry the core's perks or presence modules, and FiveM's Lua has no HMAC. The shim can read
+a player's address (`GetPlayerEndpoint`) for when it does; nothing about it has run.
+
 **The platform's own rules.** Rockstar's Creator Platform License Agreement (2026-09-10, §3.1(6))
 forbids a third-party marketplace that sells or licenses server content for FiveM. SCRIPT//GO does
 not enforce a platform's rules: you answer to the platform's rights holder for what you run on

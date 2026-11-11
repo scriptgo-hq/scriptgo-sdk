@@ -1,6 +1,7 @@
 # Finding a buyer's game identity
 
-**Status: design, not built.** This page is the contract to build against. Nothing here runs yet.
+**Status: the game server side is built in the SDK (presence and `/link`, see "What each adapter
+adds"); the API and the sign-in page are being built against this page.** This page is the contract.
 
 A buyer on a seller's shop (their Tebex webstore, or a shop page on scriptgo.dev) has to be tied to a
 player of a game server, so that a perk they pay for reaches the right player. They must not need a
@@ -67,6 +68,37 @@ POST /v1/presence
 - SCRIPT//GO keeps only `{ environment, identifier, name, server link, fingerprints, lastSeen }`, in
   memory or a short-lived table, never in logs.
 
+### The presence protocol in detail
+
+The schemas are `packages/shared/src/presence.ts`; the SDK's side is `sdk/lua/scriptgo/presence.lua`.
+
+- **The key.** `presenceKey` is 16 to 128 characters of `A-Z a-z 0-9 _ -`, used as the UTF-8 bytes
+  of the string. A server that has no key yet sends `{ "players": [] }`: an empty list is valid and
+  is how it learns the key (the answer is the same `{ "accepted", "presenceKey", "rotatesAt" }`).
+  When an answer brings a key other than the one the report was hashed with, the server reports
+  again at once with the new key, once. It also reports again at `rotatesAt`.
+- **The message** hashed is the normalised address as text, the fingerprint is lowercase hex:
+
+  | Address seen by the game server | Normalised |
+  |---|---|
+  | `203.0.113.9:30120` | `203.0.113.9` |
+  | `[2001:db8:0:1:aaaa:bbbb:cccc:dddd]:28015`, `2001:0db8:0000:0001::1%eth0` | `2001:db8:0:1::/64` |
+  | `::ffff:198.51.100.23` | `198.51.100.23` |
+
+  IPv4: four decimal octets, no leading zeros. IPv6: the first four groups in lowercase hex without
+  leading zeros, then `::/64`. Brackets, zone and port are dropped. Anything else is not reported.
+  Vectors (Node `crypto.createHmac`): key `pk_test_20261111`, `203.0.113.9` →
+  `048bfae99c6a7a6e511353e1c419cb4f8d32f8ac0700067cf6b1b4170bcac946`; the other vectors are in
+  `sdk/lua/spec/presence_spec.lua`.
+- **An entry** is `{ player, name, fp }`: `name` is 1 to 64 bytes (cut at a UTF-8 character
+  boundary; the identifier when the game gives no name), `fp` holds 1 to 4 fingerprints (the SDK
+  sends one), at most 1000 entries per request.
+- **Removal.** `DELETE /v1/presence/<identifier>` with the identifier percent-encoded; it answers
+  `200 { "removed": true | false }`. The SDK removes every player it reported, including one who
+  leaves before the answer.
+- **Failures.** 401 or 403: the server is not linked, and stops reporting until it is. 429 and other
+  failures: the next report waits the poll period × 2ⁿ, at most 300 seconds.
+
 ## The sign-in page
 
 Part of the OpenID interaction (ADR on the OpenID provider): a second way to finish it, besides
@@ -93,6 +125,15 @@ POST /v1/identity/codes/confirm    (from a game server, server link token)
   player who typed it. The player sees "Linked: you can go back to your browser." The page, polling
   the code's state, continues on its own.
 - The identity confirmed is the player the game server authenticated; the code only carries it.
+- **Confirm in detail.** Body `{ "code", "player", "name"? }`: `code` is what the player typed
+  with spaces removed and upper-cased (4 to 16 of `A-Z 0-9 -`), and the API compares codes ignoring
+  case, spaces and dashes; `name` is optional, so the page can say "Continue as **name**". It answers
+  `200 { "linked": true }`. Refusals (`{ "error": { "code" } }`): 404 `unknown_code`, 410
+  `code_expired` or `code_used`, 429 `rate_limited`, 401 `unknown_server_link`, 400
+  `validation_failed`. The player reads, in plain words: "Linked: you can go back to your browser.";
+  for any refused code "That code is not valid: it may be mistyped, already used, or older than 10
+  minutes. Ask the page for a new one."; "Too many tries. Wait a minute, then try again."; and, when
+  the server is not linked or SCRIPT//GO cannot be reached, a sentence saying so.
 
 ### Remembering the browser
 
@@ -137,6 +178,12 @@ addresses" on the sign-in page, and from the account settings when signed in wit
   identity confirmed earlier from that address.
 - Confirmed addresses (API-side fingerprints, never raw) are kept 60 days after the last confirmation,
   at most 5 per identity, and can be cleared by the player.
+- A fingerprint is a pseudonym, not anonymity. Whoever holds the day's key can test candidate
+  addresses against it: the IPv4 space is small enough to try in full. The key is held by SCRIPT//GO
+  and by every server linked in that environment (it is the same for all of them, so fingerprints
+  compare). So the fingerprint keeps raw addresses out of requests, the API's storage and logs; it
+  does not hide an address from SCRIPT//GO, and a table of fingerprints that leaks with its day's
+  key is as sensitive as the addresses.
 
 ## What Tebex documents, and what to confirm with Tebex
 
@@ -154,8 +201,33 @@ To confirm:
 
 ## What each adapter adds
 
-One optional host function: `playerAddress(player) -> "ip" | nil`. OPEN//77:
-`Open77.players.endpoint(id)` (strip the port; needs `players.identity.sensitive`). FiveM / RedM:
-`GetPlayerEndpoint`. Garry's Mod: `Player:IPAddress()`. Rust (Oxide/Carbon):
-`player.net.connection.ipaddress`. The SDK core does the rest (fingerprints, presence, the `link`
-command), once for every platform.
+The SDK core does the work once, for every platform: the presence module
+(`sdk/lua/scriptgo/presence.lua`: normalisation, fingerprints, reports, removal, back-off) and the
+`/link` command (registered by the host as soon as the server is linked; `scriptgo_link_command`,
+`off` to remove it). An adapter gives it two optional things:
+
+- **`adapter.players.address(player) -> "ip" | "ip:port" | nil`**, the `playerAddress(player)` of the
+  design. The core drops the port. Without it, presence says `presence unavailable: this host cannot
+  read a player's address`.
+- **`adapter.crypto.hmacSha256(key, message) -> hex`**, from a vetted implementation of the host.
+  The core never hashes by itself. Without it, presence says `presence unavailable: no HMAC on this
+  host`, and `/link` still works.
+
+| Platform | Address | HMAC | State |
+|---|---|---|---|
+| Standalone | simulated (`join 2 Bob @203.0.113.7`) | the `openssl` executable | presence and `/link` (tests and tooling) |
+| Rust (Oxide/Carbon) | `player.net.connection.ipaddress` | .NET `HMACSHA256` in the bridge | presence and `/link`, unit-tested, not run on a Rust server |
+| .NET kit, Lua guests | `IHostPlayerAddresses.Address(id)`, or `PlayerJoin(id, name, address)` | .NET `HMACSHA256` | presence and `/link`, in the resource that declares presence |
+| OPEN//77 | `Open77.players.endpoint(id)` (`players.identity.sensitive`, asked by `pack` only for a resource that declares presence) | none in build 2.50.0+op77.208 | `/link` only, until OPEN//77 has an HMAC native |
+| Garry's Mod | `Player:IPAddress()` | none (`util.SHA256` only) | off |
+| Luanti | `core.get_player_ip(name)` | none | off |
+| BeamMP | `MP.GetPlayerIdentifiers(pid).ip` | none | off |
+| FiveM | `GetPlayerEndpoint` (in the shim, unused) | none | off: the shim carries neither perks nor presence |
+| RedM | `GetPlayerEndpoint` | | no adapter yet |
+| Hytale | none | | off |
+| LÖVE, Godot, Neovim, CC: Tweaked | | | not applicable or no http |
+
+Where the host has a hash but no HMAC (Garry's Mod, Luanti), building HMAC from SHA-256 in Lua
+(RFC 2104) is possible but would be our own composition of a primitive: it is not done, by the rule
+"vetted cryptography only". The capability is `presence` (`sdk/lua/scriptgo/capabilities.lua`), and
+`sdk/conformance/sg_probe_presence` checks it on a host against `scriptgo verify --stub-api`.
