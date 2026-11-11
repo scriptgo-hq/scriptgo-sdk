@@ -19,6 +19,28 @@ local one in development), and allow that host instead.
 
 The license key goes in the `<resource>:license_key` convar, never in the resource folder.
 
+## Protected (escrowed) scripts
+
+Code escrow is an opt-in, default-off feature of the OPEN//77 server. The server decrypts a
+protected release through a native library: the key stays in native memory and the plain code never
+reaches the disk. Only server scripts are encrypted; shared and client scripts go to game clients,
+so they stay readable.
+
+1. Install the release still encrypted:
+
+   ```bash
+   scriptgo escrow install <name>-<version>.escrow.zip --target open77 --out <resources folder> --trusted-signer <key>
+   ```
+
+2. Put the deployment token of that licence in `.open77/escrow-tokens/<resource>.token`, one line,
+   never in `server.jsonc` or in the resource folder.
+3. Turn `resourceEscrow` on in `server.jsonc` and put the escrow adapter next to the server, built
+   with `ScriptGo.Escrow` from this SDK's releases. Without the adapter, the server refuses an
+   escrowed resource with `adapter_missing`.
+
+The full procedure is in `sdk/adapters/open77/escrow/README.md`. The operator of the machine can
+still inspect their own process; that takes real effort, and the copy is traceable.
+
 ## Player perks
 
 Player perks (`ScriptGo.perks`, `docs/spec/perks.md`): the server asks SCRIPT//GO which of the operator's perks a player has. It needs the server linked to the operator's account (Dashboard, Perks, Servers) and the link's token, a secret, in the host's settings.

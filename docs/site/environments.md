@@ -1,6 +1,6 @@
 ---
 title: Environments and statuses
-description: What an environment is, how it earns its status from real runs, and how to read the directory, the protection view and the capability matrix.
+description: What an environment is, how it earns its status from real runs, and how to read the directory, and each platform in detail.
 order: 4
 ---
 
@@ -27,8 +27,8 @@ The .NET kit also runs TypeScript and JavaScript. C# is planned. See
 | Status | What it means |
 |---|---|
 | Available | The adapter is stable and the conformance suite passes |
-| Beta | The adapter is usable; conformance is partial |
-| Experimental | Integration tests or a review are still pending. Expect changes, and do not rely on it for production |
+| Beta | The adapter is usable and tested on the real runtime; conformance is partial |
+| Experimental | The first real runs passed; more of the platform is still to be measured |
 | Planned | Not usable yet. A planned environment has no install steps |
 
 A planned environment also shows the state of its adapter:
@@ -46,8 +46,8 @@ package and its README example in the real runtime and writes a report; statuses
 badges are read from those reports.
 
 Tests against mocks, stubs, emulators or a plain VM do not count as a run, and they never write a
-report. The "Proven on a real runtime" table on each environment page lists the runs that do
-count, with the runtime version, the number of checks and the date. The status moves past planned
+report. Each platform's page in these docs lists the runs that do count, under "Real runs", with
+the runtime version, the adapter version, the number of checks and the date. The status moves past planned
 only after a real run passes. See [Conformance](/docs/create-adapter#conformance).
 
 ## The protection view
@@ -73,9 +73,9 @@ built on. Each environment page notes what that rights holder says. It is the pl
 ours: whoever runs a script on that platform answers for following it. See
 [the rules](/docs/selling#the-rules).
 
-## The capability matrix
+## Capabilities
 
-The matrix shows, for each environment, whether the adapter provides each capability:
+Each platform's page below says, for each capability, whether its adapter provides it:
 
 | Support | What it means |
 |---|---|
@@ -84,9 +84,29 @@ The matrix shows, for each environment, whether the adapter provides each capabi
 | Fallback | Degrades to a simpler behaviour, for example log output |
 | Not available | The environment does not provide it |
 
-Each cell has a note from the adapter's capability registry. A package that requires a capability
+Each row has a note from the adapter's capability registry. A package that requires a capability
 an environment lacks does not start there. See
 [SDK and capabilities](/docs/sdk/capabilities).
+
+## Each platform in detail
+
+Every platform with adapter code has its own page here: how it runs, its setup, what it supports,
+its protection, its limits and its real runs. They are generated from the SDK's platform registry
+(`sdk/environments.json`) and each adapter's `SETUP.md` by `tools/gen-platform-docs.mjs`.
+
+- [.NET kit](/docs/platforms/dotnet)
+- [BeamMP](/docs/platforms/beammp)
+- [CC: Tweaked (Minecraft)](/docs/platforms/cctweaked)
+- [FiveM](/docs/platforms/fivem)
+- [Garry's Mod](/docs/platforms/garrysmod)
+- [Godot 4](/docs/platforms/godot)
+- [Hytale](/docs/platforms/hytale)
+- [LÖVE](/docs/platforms/love2d)
+- [Lua Standalone](/docs/platforms/standalone)
+- [Luanti](/docs/platforms/luanti)
+- [Neovim](/docs/platforms/neovim)
+- [OPEN//77](/docs/platforms/open77)
+- [Rust (Oxide/Carbon)](/docs/platforms/rust)
 
 ## Your platform is not listed
 

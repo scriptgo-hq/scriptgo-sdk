@@ -172,6 +172,6 @@ available only once it passes real runs.
 | Node kit | Not started (phase 4, after the C kit) | For Node, Bun and Deno servers: Lua and JavaScript in WebAssembly, isolated per resource |
 | JVM kit | Later | A general kit for Java servers. Only the Hytale plugin runs the core on a JVM today |
 | C# guests | Not started (phase 3) | A spike and a security review come first; until then a `.cs` script is refused |
-| In-memory escrow on more hosts | Planned | Today the in-memory loader is in the .NET kit. Other hosts that run compiled code are marked planned on the [environments page](/environments#protection); hosts that run plain script stay on licence and signing |
+| In-memory escrow on more hosts | Planned | Today the in-memory loader runs in the .NET kit, the Rust plugin and the OPEN//77 server. Other hosts that run compiled code are marked planned on the [environments page](/environments#protection); hosts that run plain script stay on licence and signing |
 | SDK packages on NuGet and npm | Not published | The npm packages, the CLI included, install from the tarballs of the SDK's GitHub release. Nothing is on the npm registry or on NuGet yet |
 | Linux and macOS | Partly measured | The desktop hosts (LÖVE, Godot, Neovim) were measured on Windows only. The .NET kit's test suite and the native escrow library also pass on Linux x64, in a container. Nothing was measured on macOS |

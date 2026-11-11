@@ -53,7 +53,7 @@ M.ENVIRONMENTS = {
         name = "Lua Standalone",
         status = "available",
         dialects = { "5.1", "5.4", "luajit" },
-        summary = "A command-line host. Runs resources without any engine; the reference environment for tests.",
+        summary = "Runs scripts on plain Lua, with no engine: the place to test them.",
         sides = { "server", "client" },
         capabilities = {
             events = "supported", logging = "supported", storage = "supported", players = "partial",
@@ -78,7 +78,7 @@ M.ENVIRONMENTS = {
         name = "LÖVE",
         status = "beta",
         dialects = { "luajit" },
-        summary = "2D games with LÖVE. Server and local client run in the game process.",
+        summary = "Scripts in 2D games made with LÖVE.",
         sides = { "server", "client" },
         capabilities = {
             events = "supported", logging = "supported", storage = "supported", players = "partial",
@@ -111,7 +111,7 @@ M.ENVIRONMENTS = {
         name = "Godot 4",
         status = "beta",
         dialects = { "5.4", "luajit" },
-        summary = "Godot 4 projects through the lua-gdextension bridge. Server and local client run in the game process, ticked from _process.",
+        summary = "Scripts in Godot 4 games, through a Lua add-on.",
         sides = { "server", "client" },
         capabilities = {
             events = "supported", logging = "supported", storage = "supported", players = "partial",
@@ -145,7 +145,7 @@ M.ENVIRONMENTS = {
         name = "Luanti",
         status = "beta",
         dialects = { "5.1", "luajit" },
-        summary = "Luanti (formerly Minetest) servers. Resources run inside one regular, non-trusted mod.",
+        summary = "Scripts on Luanti (formerly Minetest) servers, through one regular mod.",
         sides = { "server" },
         capabilities = {
             events = "partial", logging = "supported", storage = "supported", players = "supported",
@@ -173,16 +173,16 @@ M.ENVIRONMENTS = {
         },
     },
     open77 = {
-        protection = { tier = "escrow", state = "planned", optIn = true, note = "Code escrow as an opt-in, default-off server feature: the server decrypts through a native library, the key stays in native memory and plaintext never reaches the disk. It is built and proven on a development server, and becomes available with the server release that includes it. Until then the loader that writes the decrypted copy to disk gives licence-only protection." },
+        protection = { tier = "escrow", state = "available", optIn = true, note = "Code escrow, an opt-in server feature: a protected release is decrypted in memory, with a key released to the licensed server only. The operator of the machine can still inspect their own process; that takes real effort and the copy is traceable." },
         name = "OPEN//77",
         -- A layer on top of an existing game (players need the game); every other entry is an engine
         -- or runtime that hosts Lua itself.
         kind = "mod_platform",
-        status = "experimental",
+        status = "beta",
         platformRules = "unsettled",
-        platformRulesNote = "The game's rights holder restricts commercial use of its IP.",
+        platformRulesNote = "A script is your own code. CD PROJEKT RED's own rules cover the game's content.",
         dialects = { "5.4" },
-        summary = "Packages run on OPEN//77 servers and clients through a small shim that maps ScriptGo.* onto Open77.* (`scriptgo pack --target open77`).",
+        summary = "Scripts on OPEN//77 servers, packed as regular OPEN//77 resources.",
         sides = { "server", "client" },
         capabilities = {
             events = "supported", logging = "supported", storage = "supported", players = "supported",
@@ -200,10 +200,9 @@ M.ENVIRONMENTS = {
             licensing = "Server side, over Open77.http.request to the scriptgo_api convar; the operator allows the API host.",
         },
         limitations = {
-            "Experimental: pending technical and legal review.",
-            "Outbound HTTP, and so licensing, needs the operator's allow-list; no HTTP from the client.",
-            "No wall clock on the client: ScriptGo.time.now() is nil there.",
-            "Verified on a dedicated server (server half); the client half is not verified yet.",
+            "Outbound HTTP, and so licensing and perks, needs the server operator to allow the SCRIPT//GO API host; the client side has no HTTP.",
+            "The client side has no wall clock: ScriptGo.time.now() is nil there.",
+            "Real runs cover the server side; the client side has not been run in a verification yet.",
         },
         integration = {
             type = "shim",
@@ -218,7 +217,7 @@ M.ENVIRONMENTS = {
         name = "Neovim",
         status = "beta",
         dialects = { "luajit" },
-        summary = "Neovim plugins. Server and local client run inside the editor, ticked by a libuv timer on the main loop.",
+        summary = "Scripts inside the Neovim editor, as an ordinary plugin.",
         sides = { "server", "client" },
         capabilities = {
             events = "supported", logging = "supported", storage = "supported", players = "partial",
@@ -257,7 +256,7 @@ M.ENVIRONMENTS = {
         platformRules = "restricts_paid",
         platformRulesNote = "The Minecraft EULA lets you do what you want with your mods \"as long as you don't sell them for money\" (minecraft.net/en-us/eula).",
         dialects = { "5.2" },
-        summary = "Packages run on a ComputerCraft computer in a Minecraft: Java Edition world, through the CC: Tweaked mod. Not an official Minecraft product; not approved by or associated with Mojang or Microsoft.",
+        summary = "Scripts on a ComputerCraft computer in a Minecraft: Java Edition world, through the CC: Tweaked mod. Not an official Minecraft product; not approved by or associated with Mojang or Microsoft.",
         sides = { "server", "client" },
         capabilities = {
             events = "supported", logging = "supported", storage = "supported", players = "partial",
@@ -297,7 +296,7 @@ M.ENVIRONMENTS = {
         status = "experimental",
         dialects = { "5.4" },
         languages = { "lua", "ts", "js" },
-        summary = "The SCRIPT//GO sandbox as a .NET 10 library (sdk/dotnet) for engines and servers written in C#: Lua guests on KeraLua, TypeScript and JavaScript guests on Jint, one VM per resource and language. Verified through its console host.",
+        summary = "A library that C# engines and servers embed to run Lua, TypeScript and JavaScript scripts.",
         sides = { "server", "client" },
         capabilities = {
             events = "supported", logging = "supported", storage = "supported", players = "partial",
@@ -332,7 +331,7 @@ M.ENVIRONMENTS = {
         -- The plugin is built (sdk/adapters/hytale, ADR-0017) but has not run on a real Hytale server:
         -- the server files need the owner's Hytale account. Planned until a real run passes.
         name = "Hytale", kind = "mod_platform", status = "planned", dialects = { "5.2" }, sides = { "server" },
-        summary = "A server plugin that runs SCRIPT//GO packages on Hytale servers; players install nothing.",
+        summary = "Scripts on Hytale servers, through one server plugin. Players install nothing.",
         platformRules = "no_restriction", platformRulesNote = "The game's terms allow paid mods and plugins.",
         capabilities = {
             events = "partial", logging = "supported", storage = "supported", players = "supported",
@@ -369,7 +368,7 @@ M.ENVIRONMENTS = {
     garrysmod = {
         protection = { tier = "license", state = "available", note = "Licence check and signed releases. The host runs plain script, so its operator can read what it loads: no code-secrecy claim." },
         name = "Garry's Mod", kind = "mod_platform", status = "beta", dialects = { "luajit" }, sides = { "server" },
-        summary = "Packages on Garry's Mod dedicated servers (roleplay, sandbox, game modes): one server addon runs them in GLua (`scriptgo pack --target garrysmod`).",
+        summary = "Scripts on Garry's Mod servers (roleplay, sandbox, game modes), through one server addon.",
         platformRules = "no_restriction", platformRulesNote = "The developer allows selling mods you own, outside the Steam Workshop.",
         capabilities = {
             events = "partial", logging = "supported", storage = "supported", players = "supported",
@@ -404,7 +403,7 @@ M.ENVIRONMENTS = {
     rust = {
         protection = { tier = "escrow", state = "available", note = "Code escrow: the compiled bridge next to the plugin has the native loader decrypt in memory, with a key released to this server only. It is off until the operator turns it on in the plugin config. Measured on Windows servers with Oxide and with Carbon, and on a Linux server with Oxide in a container. The operator of the machine can still inspect their own process; that takes real effort and the copy is traceable." },
         name = "Rust (Oxide/Carbon)", kind = "mod_platform", status = "experimental", dialects = { "5.4" }, sides = { "server" },
-        summary = "An Oxide/Carbon plugin that runs SCRIPT//GO packages on Rust servers through an embedded Lua VM.",
+        summary = "Scripts on Rust servers, through one Oxide or Carbon plugin.",
         platformRules = "no_restriction", platformRulesNote = "The developer allows selling mods you own.",
         capabilities = {
             events = "partial", logging = "supported", storage = "supported", players = "supported",
@@ -440,7 +439,7 @@ M.ENVIRONMENTS = {
     beammp = {
         protection = { tier = "license", state = "planned", note = "Licence check and signed releases, once the adapter has passed a run on a real server. The server plugin is plain Lua, so the operator can read what it loads: no code-secrecy claim." },
         name = "BeamMP", kind = "mod_platform", status = "planned", dialects = { "5.3" }, sides = { "server" },
-        summary = "One BeamMP server plugin runs SCRIPT//GO packages on BeamMP servers (BeamNG.drive multiplayer), for driving and roleplay servers.",
+        summary = "Scripts on BeamMP servers (BeamNG.drive multiplayer), through one server plugin.",
         platformRules = "unsettled", platformRulesNote = "Neither BeamNG nor BeamMP publishes a rule on selling mods.",
         capabilities = {
             events = "partial", logging = "supported", storage = "supported", players = "supported",
@@ -484,7 +483,7 @@ M.ENVIRONMENTS = {
         -- stub of the natives; planned until a real FXServer run passes (it needs the owner's
         -- Cfx.re registration key).
         name = "FiveM", kind = "mod_platform", status = "planned", dialects = { "5.4" }, sides = { "server", "client" },
-        summary = "A shim that runs SCRIPT//GO packages on FiveM servers, with the same threads, events and exports model.",
+        summary = "Scripts on FiveM servers, packed as regular FiveM resources.",
         platformRules = "restricts_paid", platformRulesNote = "The platform's creator terms keep paid server content on its own marketplace (Rockstar Games Creator Platform License Agreement, 2026-09-10, §3.1(6)).",
         capabilities = {
             events = "supported", logging = "supported", storage = "supported", players = "supported",
@@ -522,7 +521,7 @@ M.ENVIRONMENTS = {
     redm = {
         protection = { tier = "none", state = "available", note = "It would run the FiveM shim, which has no licence check, so a package runs there without one. Releases are still signed." },
         name = "RedM", kind = "mod_platform", status = "planned", dialects = { "5.4" }, sides = { "server", "client" },
-        summary = "The same shim on RedM roleplay servers.",
+        summary = "Scripts on RedM roleplay servers, the same way as on FiveM.",
         platformRules = "restricts_paid", platformRulesNote = "The platform's creator terms keep paid server content on its own marketplace (Rockstar Games Creator Platform License Agreement, 2026-09-10, §3.1(6)).",
         capabilities = { perks = "unavailable" }, notes = { perks = "No adapter yet." }, limitations = {},
     },
