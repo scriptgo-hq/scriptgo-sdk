@@ -60,13 +60,16 @@ export function releaseArchive(): { zip: Buffer; preload: Buffer } {
   return { zip, preload };
 }
 
+/** Where an OPEN//77 preload carries its fingerprint (@scriptgo/manifest fingerprintEntryPath("open77", ...)). */
+export const OPEN77_PRELOAD_ENTRY = "archive/pc/mod/night_market.scriptgo-fingerprint.json";
+
 export function assetVectors(): Record<string, unknown> {
   const { zip, preload } = releaseArchive();
   const identity = { package: "kestrel//night-market", version: "2.0.0", release: "rel_01", licence: "lic_42", deployment: "dep_7" };
   const build = buildFingerprinted({
     zip,
     root: "night_market/",
-    containers: ["night_market/dist/night_market.zip"],
+    containers: [{ path: "night_market/dist/night_market.zip", entry: OPEN77_PRELOAD_ENTRY }],
     identity,
     secret: MATERIAL.fingerprintSecret,
     signerSeed: MATERIAL.fingerprintSignerSeed,
@@ -93,7 +96,7 @@ export function assetVectors(): Record<string, unknown> {
       signerSeed: MATERIAL.fingerprintSignerSeed.toString("base64"),
       signerPublicKey: ed25519FromSeed(MATERIAL.fingerprintSignerSeed).publicKey.toString("base64url"),
       root: "night_market/",
-      containers: ["night_market/dist/night_market.zip"],
+      containers: [{ path: "night_market/dist/night_market.zip", entry: OPEN77_PRELOAD_ENTRY }],
       input: { zipBase64: zip.toString("base64"), sha256: sha(zip), preloadSha256: sha(preload) },
       output: { zipBase64: build.zip.toString("base64"), sha256: build.sha256, marker: build.marker, containers: build.containers },
     },

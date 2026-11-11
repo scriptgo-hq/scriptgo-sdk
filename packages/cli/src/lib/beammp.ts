@@ -12,7 +12,7 @@
 // variable) and never written to a report. Without a server binary or a key the run is skipped.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { validateResourceFiles, type ParsedManifest } from "@scriptgo/manifest";
@@ -20,6 +20,7 @@ import { validateResourceFiles, type ParsedManifest } from "@scriptgo/manifest";
 import { buildPlugin } from "../../../../sdk/adapters/beammp/build.mjs";
 import { apiChecks } from "../commands/verify.ts";
 import type { ReadmeExample } from "./readme-example.ts";
+import { baseName, describePlan, flatNameClashes, hasScripts, planAssets, type AssetPlan } from "./assets.ts";
 import { defaultSearchPaths, listFiles, readResource, repoRoot, sdkRoot, type LoadedResource } from "./sdk.ts";
 import type { StubRequest } from "./stub-api.ts";
 
@@ -369,13 +370,39 @@ export async function verifyBeamMP(
 }
 
 /** `scriptgo pack <dir> --target beammp`: prints warnings and errors, returns the exit code. */
-export function packBeamMPCommand(res: LoadedResource, out: string): number {
-  const search = [resolve(res.root, ".."), ...defaultSearchPaths()];
-  const r = packForBeamMP(res, out, search);
-  for (const w of r.warnings) console.log(`warning ${w}`);
-  for (const e of r.errors) console.error(`error ${e.code}: ${e.message}`);
-  if (r.errors.length > 0) return 1;
-  console.log(`packed for BeamMP (${r.resources.join(", ")}) -> ${r.dest}`);
+/**
+ * BeamMP client mods: `environment_asset "beammp"` .zip files copied to `<out>/Resources/Client/`.
+ * BeamMP-Server sends every .zip of that folder to each player at join. The folder is flat, so two
+ * mods with one name are refused. A buyer's copy carries its fingerprint inside each zip (docs/spec/assets.md).
+ */
+export function packBeamMPClient(res: LoadedResource, out: string, plan: AssetPlan): { dest: string; files: string[]; errors: { code: string; message: string }[] } {
+  const errors = flatNameClashes(plan.native, "BeamMP's Resources/Client");
+  if (errors.length > 0 || plan.native.length === 0) return { dest: "", files: [], errors };
+  const dest = join(out, "Resources", "Client");
+  mkdirSync(dest, { recursive: true });
+  for (const f of plan.native) copyFileSync(join(res.root, ...f.split("/")), join(dest, baseName(f)));
+  return { dest, files: plan.native.map(baseName), errors: [] };
+}
+
+export function packBeamMPCommand(res: LoadedResource, out: string, opts: { withoutAssets?: boolean } = {}): number {
+  const plan = planAssets(res, "beammp", { withoutAssets: opts.withoutAssets });
+  for (const w of plan.warnings) console.log(`warning ${w}`);
+  for (const e of plan.errors) console.error(`error ${e.code}: ${e.message}`);
+  if (plan.errors.length > 0) return 1;
+  const scripts = res.result.ok && hasScripts(res.result.manifest);
+  if (scripts) {
+    const search = [resolve(res.root, ".."), ...defaultSearchPaths()];
+    const r = packForBeamMP(res, out, search);
+    for (const w of r.warnings) console.log(`warning ${w}`);
+    for (const e of r.errors) console.error(`error ${e.code}: ${e.message}`);
+    if (r.errors.length > 0) return 1;
+    console.log(`packed for BeamMP (${r.resources.join(", ")}) -> ${r.dest}`);
+  }
+  const client = packBeamMPClient(res, out, plan);
+  for (const e of client.errors) console.error(`error ${e.code}: ${e.message}`);
+  if (client.errors.length > 0) return 1;
+  for (const line of describePlan(plan, "beammp")) console.log(line);
+  if (client.files.length > 0) console.log(`client mods (${client.files.join(", ")}) -> ${client.dest}; every player downloads them at join`);
   console.log("copy the Resources folder over the server's folder; the plugin starts with the server");
   return 0;
 }

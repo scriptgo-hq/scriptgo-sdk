@@ -218,6 +218,33 @@ export interface AssetReport {
   totalBytes: number;
   /** Per environment that receives assets. */
   environments: Record<string, AssetEnvironmentReport>;
+  /**
+   * Containers that already carry a per-buyer fingerprint (`.scriptgo/fingerprint.json`): normal in
+   * a buyer's copy, refused by the platform in an upload (the stamper adds it, once).
+   */
+  fingerprinted: string[];
+}
+
+/** The per-buyer fingerprint entry, at the root of a release and of each container. */
+export const FINGERPRINT_ENTRY_PATH = ".scriptgo/fingerprint.json";
+/** Suffix of a fingerprint entry put under a fixed root (OPEN//77 preloads). */
+export const FINGERPRINT_ENTRY_SUFFIX = ".scriptgo-fingerprint.json";
+
+/** True for a fingerprint entry's name (same rule as @scriptgo/escrow `isFingerprintEntryName`). */
+export function isFingerprintEntryName(name: string): boolean {
+  return name === FINGERPRINT_ENTRY_PATH || name.endsWith(`/${FINGERPRINT_ENTRY_PATH}`) || (name.endsWith(FINGERPRINT_ENTRY_SUFFIX) && name.length > FINGERPRINT_ENTRY_SUFFIX.length);
+}
+
+/**
+ * Where the per-buyer fingerprint goes inside one container of `environment`. OPEN//77 takes a
+ * preload's files under its mod roots only (a file anywhere else refuses the whole package), so
+ * there it is `archive/pc/mod/<stem>.scriptgo-fingerprint.json`: an inert file the game does not
+ * load (it mounts .archive files; ArchiveXL reads .xl files). Elsewhere `.scriptgo/fingerprint.json`.
+ */
+export function fingerprintEntryPath(environment: string, containerPath: string): string {
+  if (environment !== "open77") return FINGERPRINT_ENTRY_PATH;
+  const base = containerPath.slice(containerPath.lastIndexOf("/") + 1).replace(/\.zip$/i, "");
+  return `archive/pc/mod/${base.replace(/[^A-Za-z0-9_.-]/g, "_") || "package"}${FINGERPRINT_ENTRY_SUFFIX}`;
 }
 
 /** Generic asset files: `assets` globs expanded against the listing. */
@@ -261,6 +288,7 @@ const rootOf = (p: string): string => (p.includes("/") ? p.slice(0, p.indexOf("/
 interface Ctx {
   errors: Diagnostic[];
   warnings: Diagnostic[];
+  fingerprinted: string[];
 }
 const err = (c: Ctx, code: string, message: string): void => void c.errors.push({ code, message });
 const warn = (c: Ctx, code: string, message: string): void => void c.warnings.push({ code, message });
@@ -285,6 +313,12 @@ function inspectContainer(
     if (expanded > ASSET_LIMITS.maxExpandedBytes) {
       err(c, "asset_container_too_large", `${path}: expands to more than ${ASSET_LIMITS.maxExpandedBytes} bytes`);
       return null;
+    }
+    if (isFingerprintEntryName(entry.name)) {
+      // A buyer's copy: the stamper's entry is not an asset. Its record is checked by
+      // `scriptgo assets fingerprint`; an upload that carries one is refused by the platform.
+      c.fingerprinted.push(path);
+      continue;
     }
     if (entry.name.startsWith(".scriptgo/")) {
       err(c, "reserved_path", `${path}: ${entry.name}: .scriptgo/ is reserved for the per-buyer fingerprint`);
@@ -322,8 +356,8 @@ export function inspectAssets(opts: {
 }): AssetReport {
   const m = opts.manifest;
   const listing = opts.files.map((f) => f.replace(/\\/g, "/").replace(/^\.\//, ""));
-  const c: Ctx = { errors: [], warnings: [] };
-  const report: AssetReport = { errors: c.errors, warnings: c.warnings, files: [], totalBytes: 0, environments: {} };
+  const c: Ctx = { errors: [], warnings: [], fingerprinted: [] };
+  const report: AssetReport = { errors: c.errors, warnings: c.warnings, files: [], totalBytes: 0, environments: {}, fingerprinted: c.fingerprinted };
   if (!hasAssets(m)) return report;
 
   for (const p of m.assets) if (expandGlob(p, listing).length === 0) err(c, "pattern_empty", `assets pattern '${p}' matches no file.`);

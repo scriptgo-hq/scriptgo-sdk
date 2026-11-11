@@ -21,6 +21,7 @@ import { Category } from "@scriptgo/shared";
 import { parseArgs } from "../lib/args.ts";
 import { buildEscrow } from "../lib/escrow-pack.ts";
 import { keyIdOf } from "../lib/release-signature.ts";
+import { uploadAssetErrors } from "../lib/assets.ts";
 import { listFiles, readResource } from "../lib/sdk.ts";
 import { scriptgoArchive } from "./pack.ts";
 import { ApiClient, ApiError, describeError } from "./_api-client.ts";
@@ -48,6 +49,9 @@ export async function buildArchive(dir: string) {
   const res = readResource(dir);
   if (!res.result.ok) throw new Error(res.result.errors.map((e) => `${e.code}: ${e.message}`).join("\n"));
   const m = res.result.manifest;
+  // Assets: data only, sizes, delivery rules; never a buyer's fingerprinted copy (lib/assets.ts).
+  const assetErrors = uploadAssetErrors(res).errors;
+  if (assetErrors.length > 0) throw new Error(assetErrors.map((e) => `${e.code}: ${e.message}`).join("\n"));
   const { zip, files, errors } = await scriptgoArchive(m, listFiles(res.root), res.root, res.manifestFile);
   if (errors.length > 0) throw new Error(errors.map((e) => `${e.code}: ${e.message}`).join("\n"));
   return { zip, name: m.name, version: m.version, title: m.title, description: m.description, category: m.category, license: m.license, files, manifest: m, manifestFile: res.manifestFile };

@@ -25,7 +25,7 @@ import {
   verifyFingerprintRecord,
   wrapAssetKeyForClient,
 } from "../src/index.ts";
-import { assetVectors, MATERIAL, releaseArchive } from "./vectors/build.ts";
+import { assetVectors, MATERIAL, OPEN77_PRELOAD_ENTRY, releaseArchive } from "./vectors/build.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const identity = { package: "kestrel//night-market", version: "2.0.0", release: "rel_01", licence: "lic_42", deployment: "dep_7" };
@@ -42,7 +42,7 @@ describe("per-buyer fingerprinted builds", () => {
   const { zip, preload } = releaseArchive();
   const build = (licence: string) =>
     buildFingerprinted({
-      zip, root: "night_market/", containers: ["night_market/dist/night_market.zip"],
+      zip, root: "night_market/", containers: [{ path: "night_market/dist/night_market.zip", entry: OPEN77_PRELOAD_ENTRY }],
       identity: { ...identity, licence }, secret: MATERIAL.fingerprintSecret, signerSeed: MATERIAL.fingerprintSignerSeed,
     });
 
@@ -65,10 +65,11 @@ describe("per-buyer fingerprinted builds", () => {
     const inner = unzipSync(files["night_market/dist/night_market.zip"]!);
     const innerOriginal = unzipSync(preload);
     for (const [k, v] of Object.entries(innerOriginal)) expect(Buffer.from(inner[k]!).equals(Buffer.from(v))).toBe(true);
-    expect(Object.keys(inner)).toContain(FINGERPRINT_ENTRY);
+    expect(Object.keys(inner)).toContain(OPEN77_PRELOAD_ENTRY);
+    expect(Object.keys(inner).every((k) => k.startsWith("archive/pc/mod/"))).toBe(true); // OPEN//77 takes its mod roots only
     const found = findFingerprints(out.zip);
     expect(found.map((f) => [f.where, f.ok, f.record?.container])).toEqual([
-      ["night_market/dist/night_market.zip!.scriptgo/fingerprint.json", true, "night_market/dist/night_market.zip"],
+      [`night_market/dist/night_market.zip!${OPEN77_PRELOAD_ENTRY}`, true, "night_market/dist/night_market.zip"],
       ["night_market/.scriptgo/fingerprint.json", true, ""],
     ]);
     expect(found[1]!.record!.licence).toBe("lic_42");
@@ -84,6 +85,10 @@ describe("per-buyer fingerprinted builds", () => {
   it("refuses an archive that already carries a fingerprint, and a forged record", () => {
     const once = appendStoredEntry(preload, FINGERPRINT_ENTRY, Buffer.from("{}"));
     expect(() => appendStoredEntry(once, FINGERPRINT_ENTRY, Buffer.from("{}"))).toThrow(/already holds/);
+    // A container stamped once (under any fingerprint name) is not stamped again.
+    const stampedZip = Buffer.from(zipSync({ "r/scriptgo.lua": Buffer.from("x"), "r/p.zip": [new Uint8Array(once), { level: 0 }] }));
+    expect(() => buildFingerprinted({ zip: stampedZip, root: "r/", containers: [{ path: "r/p.zip", entry: "archive/pc/mod/p.scriptgo-fingerprint.json" }], identity, secret: MATERIAL.fingerprintSecret, signerSeed: MATERIAL.fingerprintSignerSeed })).toThrow(/already holds/);
+    expect(() => buildFingerprinted({ zip: stampedZip, root: "r/", containers: [{ path: "r/p.zip", entry: "archive/pc/mod/evil.archive" }], identity, secret: MATERIAL.fingerprintSecret, signerSeed: MATERIAL.fingerprintSignerSeed })).toThrow(/not a fingerprint entry/);
     const { record } = fingerprintEntry(identity, "", MATERIAL.fingerprintSecret, MATERIAL.fingerprintSignerSeed);
     expect(verifyFingerprintRecord(record).ok).toBe(true);
     expect(verifyFingerprintRecord({ ...record, licence: "lic_other" }).ok).toBe(false);

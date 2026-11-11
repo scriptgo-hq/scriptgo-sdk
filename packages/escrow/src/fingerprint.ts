@@ -16,6 +16,17 @@ import { readZip, readZipEntry, ZipError, type ZipEntry } from "./zip.ts";
 export const FINGERPRINT_FORMAT = "scriptgo-asset-fingerprint/1";
 /** The entry's path inside a container; inside the release archive it is `<resource>/` + this. */
 export const FINGERPRINT_ENTRY = ".scriptgo/fingerprint.json";
+/**
+ * The entry's name suffix where a container format only takes files under fixed roots (an OPEN//77
+ * preload: `archive/pc/mod/<stem>.scriptgo-fingerprint.json`). The platform picks the entry path
+ * per environment (@scriptgo/manifest `fingerprintEntryPath`).
+ */
+export const FINGERPRINT_SUFFIX = ".scriptgo-fingerprint.json";
+
+/** True for a fingerprint entry's name, at a container's root, a release's resource root, or a fixed root. */
+export function isFingerprintEntryName(name: string): boolean {
+  return name === FINGERPRINT_ENTRY || name.endsWith(`/${FINGERPRINT_ENTRY}`) || (name.endsWith(FINGERPRINT_SUFFIX) && name.length > FINGERPRINT_SUFFIX.length);
+}
 const MARKER_LABEL = "scriptgo.asset-fingerprint.v1";
 /** 1980-01-01 00:00:00, the earliest DOS date: every entry this module writes carries it. */
 const DOS_DATE = 0x0021;
@@ -224,7 +235,8 @@ const sha256 = (b: Uint8Array): string => createHash("sha256").update(b).digest(
 /**
  * Builds one buyer's copy of a release archive (docs/spec/assets.md, "The algorithm"):
  *  1. stamp each container (the release's environment-asset .zip files, by their path in the
- *     archive) with `.scriptgo/fingerprint.json` (container = its path);
+ *     archive) with a fingerprint entry (container = its path): `.scriptgo/fingerprint.json`, or
+ *     the entry path given for that container (`{ path, entry }`, from `fingerprintEntryPath`);
  *  2. put the stamped containers back with `replaceEntries`;
  *  3. stamp the release archive itself with `<root>.scriptgo/fingerprint.json` (container = "").
  * `root` is the resource folder every entry of the release archive sits in (`<resource>/`).
@@ -232,7 +244,7 @@ const sha256 = (b: Uint8Array): string => createHash("sha256").update(b).digest(
 export function buildFingerprinted(opts: {
   zip: Uint8Array;
   root: string;
-  containers: string[];
+  containers: Array<string | { path: string; entry: string }>;
   identity: FingerprintIdentity;
   secret: Buffer;
   signerSeed: Buffer;
@@ -241,11 +253,18 @@ export function buildFingerprinted(opts: {
   const archive = readZip(src);
   const replacements = new Map<string, Buffer>();
   const containers: FingerprintedBuild["containers"] = [];
-  for (const path of [...new Set(opts.containers)].sort()) {
+  const wanted = new Map<string, string>();
+  for (const c of opts.containers) {
+    const [path, name] = typeof c === "string" ? [c, FINGERPRINT_ENTRY] : [c.path, c.entry];
+    if (!isFingerprintEntryName(name)) throw new ZipError("bad_entry", `${name}: not a fingerprint entry name`);
+    wanted.set(path, name);
+  }
+  for (const path of [...wanted.keys()].sort()) {
     const entry = archive.entries.find((e) => e.name === path);
     if (!entry) throw new ZipError("missing_entry", `${path}: not in the release archive`);
     const inner = entry.method === 0 ? Buffer.from(src.subarray(entry.dataOffset, entry.dataOffset + entry.compressedSize)) : readEntry(src, entry);
-    const stamped = appendStoredEntry(inner, FINGERPRINT_ENTRY, fingerprintEntry(opts.identity, path, opts.secret, opts.signerSeed).bytes);
+    if (readZip(inner).entries.some((e) => isFingerprintEntryName(e.name))) throw new ZipError("already_stamped", `${path}: already holds a fingerprint entry`);
+    const stamped = appendStoredEntry(inner, wanted.get(path)!, fingerprintEntry(opts.identity, path, opts.secret, opts.signerSeed).bytes);
     replacements.set(path, stamped);
     containers.push({ path, sha256: sha256(stamped), bytes: stamped.length });
   }
@@ -271,7 +290,7 @@ export function findFingerprints(zip: Uint8Array, trustedSigner?: string): Array
     for (const e of archive.entries) {
       if (e.isDirectory) continue;
       const bytes = () => (e.method === 0 ? Buffer.from(data.subarray(e.dataOffset, e.dataOffset + e.compressedSize)) : readEntry(data, e));
-      if (e.name === FINGERPRINT_ENTRY || e.name.endsWith(`/${FINGERPRINT_ENTRY}`)) {
+      if (isFingerprintEntryName(e.name)) {
         try {
           const v = verifyFingerprintRecord(JSON.parse(bytes().toString("utf8")), trustedSigner);
           out.push(v.ok ? { where: `${where}${e.name}`, ok: true, record: v.record } : { where: `${where}${e.name}`, ok: false, reason: v.reason });
