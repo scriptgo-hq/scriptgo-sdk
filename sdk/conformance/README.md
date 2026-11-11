@@ -46,6 +46,22 @@ with a loopback stub holding fixed data and checking every body against the API'
 scriptgo verify sdk/conformance/sg_probe_perks --env all --stub-api --open77-server <Open77.Server.exe>
 ```
 
+## sg_probe_presence
+
+`sg_probe_presence` checks player match (`docs/spec/player-match.md`) on a host: presence enabled
+and active (a server link, a readable address, an HMAC), a report accepted by the API, then
+`ScriptGo.presence.link` with a code that links, a used one, an expired one, an unknown one and a
+malformed one. It needs a connected player: the standalone verify joins one at the documentation
+address `203.0.113.10`, and adds `api:presence_fingerprint`, which checks that every fingerprint the
+host sent is Node's HMAC-SHA256 of that address under the key of the time. `scriptgo verify
+--stub-api` sets `scriptgo_presence` for it (`packages/cli/src/lib/stub-presence.ts`). On a host
+without an HMAC (OPEN//77 today), `presence.active` fails with the reason, which is the expected
+answer there.
+
+```bash
+scriptgo verify sdk/conformance/sg_probe_presence --env standalone --stub-api
+```
+
 ## sg_probe_ts
 
 The same checks as `sg_probe`, written in TypeScript (`server/probe.ts`), with the same check

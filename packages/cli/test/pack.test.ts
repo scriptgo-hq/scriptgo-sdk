@@ -115,6 +115,26 @@ describe("packForOpen77", () => {
     expect(readFileSync(join(plain.dest, "scriptgo_shim_server.lua"), "utf8")).not.toMatch(/purchaseLink|scriptgo_server_token/);
   });
 
+  it("ships the presence module and asks for players.identity.sensitive only for a resource that declares presence", () => {
+    const core = readFileSync(join(repoRoot, "sdk", "lua", "scriptgo", "presence.lua"), "utf8").replace(/\r\n/g, "\n").trimEnd();
+    const res = readResource(join(repoRoot, "sdk", "conformance", "sg_probe_presence"));
+    const r = packForOpen77(res, tmp);
+    expect(r.errors).toEqual([]);
+    const server = readFileSync(join(r.dest, "scriptgo_shim_server.lua"), "utf8");
+    expect(server).toContain(core);
+    expect(server).toMatch(/O\.caps\.presence = true/);
+    expect(scanSource(server, "scriptgo_shim_server.lua", "server")).toEqual([]);
+    const manifest = readFileSync(join(r.dest, "open77.lua"), "utf8");
+    expect(manifest).toMatch(/"players\.identity\.sensitive"/);
+    expect(manifest).toMatch(/"http\.request"/);
+    expect(r.warnings.join(" ")).toMatch(/one resource per server/);
+    expect(r.warnings.join(" ")).toMatch(/HMAC/);
+    // A perks resource reads identifiers, never addresses: no sensitive permission, no presence code.
+    const perks = packForOpen77(readResource(join(repoRoot, "examples", "packages", "vip_perks")), tmp);
+    expect(readFileSync(join(perks.dest, "open77.lua"), "utf8")).not.toMatch(/identity\.sensitive/);
+    expect(readFileSync(join(perks.dest, "scriptgo_shim_server.lua"), "utf8")).not.toMatch(/players\.endpoint|codes\/confirm/);
+  });
+
   it("refuses code that cannot run in the OPEN//77 sandbox unless forced", () => {
     const dir = mkdtempSync(join(tmpdir(), "scriptgo-unportable-"));
     try {

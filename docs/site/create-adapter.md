@@ -200,7 +200,9 @@ The conformance probes in `sdk/conformance/` are the reference workload. `sg_pro
 `capability_unavailable` refusal, permissions, config, promises, exports, and the official
 EventBus and Permissions kits), and `scriptgo verify` turns those lines into checks of its
 report. `sg_probe_net` checks `ScriptGo.http` and `ScriptGo.licensing` against an API, and
-`sg_probe_perks` checks `ScriptGo.perks` (check, cache, catalog, purchase links, the event queue).
+`sg_probe_perks` checks `ScriptGo.perks` (check, cache, catalog, purchase links, the event queue),
+and `sg_probe_presence` checks player match (`ScriptGo.presence`: a report, the link codes; the
+standalone run also compares the host's fingerprint with Node's HMAC-SHA256).
 The
 official packages (`scriptgo//event-bus`, `scriptgo//inventory-kit`,
 `scriptgo//permissions-kit`) add more workload. A host that does not use the CLI writes the same

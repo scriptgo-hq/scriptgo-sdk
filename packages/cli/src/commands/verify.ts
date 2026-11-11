@@ -60,7 +60,7 @@
 // --api <url> --license-key <key> does the same against a real SCRIPT//GO API (no api:* checks:
 // only the stub sees the requests).
 import { spawn, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 // @ts-expect-error plain ESM build script without type declarations
 import { buildMod } from "../../../../sdk/adapters/luanti/build.mjs";
@@ -72,6 +72,7 @@ import { parseArgs } from "../lib/args.ts";
 import { defaultSearchPaths, findManifestFile, fromCheckout, listFiles, pickInterpreters, readResource, repoRoot, standaloneMain, type LoadedResource } from "../lib/sdk.ts";
 import { writeReadmeExample, type ReadmeExample } from "../lib/readme-example.ts";
 import { startStubApi, type StubRequest } from "../lib/stub-api.ts";
+import type { StubPresence } from "../lib/stub-presence.ts";
 import { acceptMinecraftEula, verifyCcTweaked } from "../lib/cctweaked.ts";
 import { findDotnet, ensureDotnetHost } from "../lib/dotnet.ts";
 import { compileTypeScript, ESBUILD_VERSION } from "../lib/typescript.ts";
@@ -114,12 +115,19 @@ interface ApiTarget {
   serverToken?: string;
   /** Requests the stub saw; always empty for a real API. */
   requests: StubRequest[];
+  /** The stub's player match routes, to compare what was reported; absent for a real API. */
+  presence?: StubPresence;
   label: string;
 }
 
-/** The perks link token as the convar every host reads (docs/spec/perks.md), when there is one. */
-export function serverTokenConvar(api?: { serverToken?: string }): Record<string, string> {
-  return api?.serverToken ? { scriptgo_server_token: api.serverToken } : {};
+/**
+ * The server link token as the convar every host reads (docs/spec/perks.md), when there is one;
+ * with it, `scriptgo_presence` on for a package that declares presence (docs/spec/player-match.md).
+ */
+export function serverTokenConvar(api?: { serverToken?: string }, m?: { capabilities: string[]; optionalCapabilities?: string[] }): Record<string, string> {
+  if (!api?.serverToken) return {};
+  const presence = m && (m.capabilities.includes("presence") || (m.optionalCapabilities ?? []).includes("presence"));
+  return { scriptgo_server_token: api.serverToken, ...(presence ? { scriptgo_presence: "true" } : {}) };
 }
 
 /** The adapter version the OPEN//77 shim reports at runtime (and sends to the licensing API). */
@@ -164,7 +172,28 @@ export function apiChecks(requests: StubRequest[], from: number, environment: st
       { name: "api:perks_environment", status: wrongEnv || checks.length === 0 ? "failed" : "passed", message: wrongEnv ? `sent '${wrongEnv.environment}'` : checks.length === 0 ? "no perks check" : environment },
     );
   }
+  // Player match (lib/stub-presence.ts): every body matched its schema, so fingerprints only.
+  const match = requests.slice(from).filter((r) => r.path.startsWith("/v1/presence") || r.path.startsWith("/v1/identity/"));
+  if (match.length > 0) {
+    const bad = match.find((r) => r.bodyError !== null);
+    out.push({ name: "api:presence_bodies_valid", status: bad ? "failed" : "passed", message: bad ? `${bad.path}: ${bad.bodyError}` : `${match.length} player match requests` });
+  }
   return out;
+}
+
+/** The standalone verifier's simulated address: a documentation address (RFC 5737). */
+export const VERIFIER_ADDRESS = "203.0.113.10";
+
+/**
+ * Player match: the host's fingerprint of the verifier is HMAC-SHA256(key, address) as Node's crypto
+ * computes it, so the host's HMAC and normalisation agree with the API's (docs/spec/player-match.md).
+ */
+export function fingerprintCheck(reports: { fp: string[]; key: string }[], address: string): Check {
+  if (reports.length === 0) return { name: "api:presence_fingerprint", status: "failed", message: "no presence entry reported" };
+  const bad = reports.find((r) => r.fp[0] !== createHmac("sha256", r.key).update(address).digest("hex"));
+  return bad
+    ? { name: "api:presence_fingerprint", status: "failed", message: `${bad.fp[0]!.slice(0, 12)}… is not HMAC-SHA256(key, address)` }
+    : { name: "api:presence_fingerprint", status: "passed", message: `${reports.length} entries match Node's HMAC-SHA256` };
 }
 
 /**
@@ -303,11 +332,14 @@ async function verifyStandalone(
   for (const s of search) argv.push("--search", s);
   if (example) argv.push("--with", example.dir);
   const firstRequest = stub?.requests.length ?? 0;
+  const firstReport = stub?.presence?.reports().length ?? 0;
   if (stub) {
     const config = join(tmp, "config.json");
     writeFileSync(config, JSON.stringify({
       resources: { [m.name]: { api: stub.url, license_key: stub.licenseKey } },
-      convars: { scriptgo_api: stub.url, ...serverTokenConvar(stub) },
+      convars: { scriptgo_api: stub.url, ...serverTokenConvar(stub, m) },
+      // The simulated verifier's address, for a player-match probe: a documentation address.
+      verifierAddress: VERIFIER_ADDRESS,
     }));
     argv.push("--config", config);
   }
@@ -324,6 +356,9 @@ async function verifyStandalone(
   }
   report.checks.push(...selfChecks(report.log));
   if (stub) report.checks.push(...apiChecks(stub.requests, firstRequest, "standalone", report.adapterVersion));
+  if (stub?.presence && serverTokenConvar(stub, m).scriptgo_presence) {
+    report.checks.push(fingerprintCheck(stub.presence.reports().slice(firstReport), VERIFIER_ADDRESS));
+  }
   if (m.testScripts.length > 0) {
     const targv = [standaloneMain, "test", dir];
     for (const s of search) targv.push("--search", s);
@@ -421,7 +456,7 @@ async function verifyOpen77(
   const extra = stub
     ? {
         http: { enabled: true, allowedHosts: [new URL(stub.url).hostname], timeoutSeconds: 10 },
-        convars: { scriptgo_api: stub.url, ...serverTokenConvar(stub), [`${m.name}:api`]: stub.url, [`${m.name}:license_key`]: stub.licenseKey },
+        convars: { scriptgo_api: stub.url, ...serverTokenConvar(stub, m), [`${m.name}:api`]: stub.url, [`${m.name}:license_key`]: stub.licenseKey },
       }
     : {};
   writeFileSync(join(run, "server.jsonc"), serverConfig(opts.port, extra));
@@ -528,7 +563,7 @@ async function verifyLuanti(res: LoadedResource, m: ParsedManifest, search: stri
   if (stub) {
     writeFileSync(join(world, "scriptgo.json"), JSON.stringify({
       resources: { [m.name]: { api: apiUrl, license_key: stub.licenseKey } },
-      convars: { scriptgo_api: apiUrl, ...serverTokenConvar(stub) },
+      convars: { scriptgo_api: apiUrl, ...serverTokenConvar(stub, m) },
     }));
   }
   writeFileSync(join(world, "world.mt"), "gameid = sgverify\nbackend = sqlite3\nplayer_backend = sqlite3\nauth_backend = sqlite3\nmod_storage_backend = sqlite3\n");
@@ -638,11 +673,13 @@ async function verifyDotnet(
   const argv = [host.dll, "verify", join(stage, m.name), "--search", stage, "--report", reportFile, "--settle", "2000", "--lang", opts.lang];
   if (exampleDir) argv.push("--with", exampleDir);
   const firstRequest = opts.stub?.requests.length ?? 0;
+  const firstReport = opts.stub?.presence?.reports().length ?? 0;
   if (opts.stub) {
     const config = join(tmp, "config.json");
     writeFileSync(config, JSON.stringify({
       resources: { [m.name]: { api: opts.stub.url, license_key: opts.stub.licenseKey } },
-      convars: { scriptgo_api: opts.stub.url, ...serverTokenConvar(opts.stub) },
+      convars: { scriptgo_api: opts.stub.url, ...serverTokenConvar(opts.stub, m) },
+      verifierAddress: VERIFIER_ADDRESS,
     }));
     argv.push("--config", config);
   }
@@ -657,6 +694,9 @@ async function verifyDotnet(
   report.checks.push(...tsChecks, ...selfChecks(report.log));
   if (opts.stub) {
     report.checks.push(...apiChecks(opts.stub.requests, firstRequest, "dotnet", report.adapterVersion));
+    if (opts.stub.presence && serverTokenConvar(opts.stub, m).scriptgo_presence) {
+      report.checks.push(fingerprintCheck(opts.stub.presence.reports().slice(firstReport), VERIFIER_ADDRESS));
+    }
     report.log = report.log.split(opts.stub.licenseKey).join("<license_key>").split(opts.stub.url).join("<stub-api>");
   }
   report.environment = "dotnet";
@@ -751,7 +791,7 @@ async function verifyEngine(
     const config = join(tmp, "config.json");
     writeFileSync(config, JSON.stringify({
       resources: { [m.name]: { api: stub.url, license_key: stub.licenseKey } },
-      convars: { scriptgo_api: stub.url, ...serverTokenConvar(stub) },
+      convars: { scriptgo_api: stub.url, ...serverTokenConvar(stub, m) },
     }));
     verifyArgs.push("--config", config);
   }
@@ -822,7 +862,7 @@ export async function run(args: string[]): Promise<number> {
   const stubServer = a.bools.has("stub-api") ? await startStubApi({ packages: stubPackages(m) }) : undefined;
   let stub: ApiTarget | undefined;
   if (stubServer) {
-    stub = { url: stubServer.url, licenseKey: stubServer.licenseKey, serverToken: stubServer.serverToken, requests: stubServer.requests, label: "stub-api (loopback, schema-checked)" };
+    stub = { url: stubServer.url, licenseKey: stubServer.licenseKey, serverToken: stubServer.serverToken, requests: stubServer.requests, presence: stubServer.presence, label: "stub-api (loopback, schema-checked)" };
   } else if (a.flags.api) {
     const key = a.flags["license-key"] ?? process.env.SCRIPTGO_LICENSE_KEY ?? "";
     const serverToken = a.flags["server-token"] ?? process.env.SCRIPTGO_SERVER_TOKEN;

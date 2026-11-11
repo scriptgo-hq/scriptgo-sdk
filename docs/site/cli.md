@@ -131,8 +131,9 @@ own (`ts` when it has TypeScript scripts). The `dotnet` reports are tagged per l
 (`dotnet-lua`, `dotnet-ts`); every other environment runs Lua only and skips another language.
 
 Without the server binary, Docker or the engine, that run is reported as skipped and writes no
-report. `--stub-api` starts a local stand-in for the licensing and perks API and gives the resource
-its URL, a valid key and a server link token (`scriptgo_server_token`), on every run that has HTTP
+report. `--stub-api` starts a local stand-in for the licensing, perks and player match API and gives the
+resource its URL, a valid key and a server link token (`scriptgo_server_token`), plus
+`scriptgo_presence` for a package that declares presence, on every run that has HTTP
 (standalone, LÖVE, Neovim, Luanti, OPEN//77, the .NET kit, Garry's Mod, Rust); `--api <url> --license-key <key>
 [--server-token <sg_srv_...>]` uses a real API instead.
 
