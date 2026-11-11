@@ -129,6 +129,9 @@ export const CreateAssetReportBody = z.object({
   version: z.string().trim().max(64).optional(),
   evidence: z.array(AssetEvidence).min(1).max(20),
   description: z.string().trim().min(10).max(10_000),
+  /** The statements every report carries (POST /v1/reports): both must be true. */
+  goodFaith: z.literal(true),
+  accuracy: z.literal(true),
 });
 export type CreateAssetReportBody = z.infer<typeof CreateAssetReportBody>;
 

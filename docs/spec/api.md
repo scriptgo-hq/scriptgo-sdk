@@ -640,7 +640,8 @@ GET  /v1/packages/:creator/:name/versions/:version/download
                                        X-ScriptGo-Artifact: plain, X-ScriptGo-Fingerprint: <marker>, the copy's signature
                                        (payload adds release: { sha256 } and fingerprint), Cache-Control: private, no-store.
 POST /v1/creator/assets/lookup  { sha256 } | { record }   → AssetLookupResult   (own packages; account = null)
-POST /v1/assets/reports         CreateAssetReportBody     → 201 AssetReportRow  (signed in; opens a compliance case)
+POST /v1/assets/reports         CreateAssetReportBody     → 201 AssetReportRow  (signed in; goodFaith and accuracy
+                                       statements required; opens a compliance case)
 GET  /v1/admin/assets/reports?status=open|actioned|rejected|all  (staff) → AssetReportRow[]
 GET  /v1/admin/assets/reports/:id                         (staff) → AssetReportRow
 POST /v1/admin/assets/lookup    { sha256 } | { record }   (staff) → AssetLookupResult   (audited)

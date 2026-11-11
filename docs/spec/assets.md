@@ -184,9 +184,12 @@ The registry signs every published release (ADR-0028): ed25519 over
 `{ v, package, version, sha256, size, escrow, publishedAt }`, checked by `scriptgo add` before a
 file is written. A per-buyer copy has its own bytes, so for a release with assets **the platform
 signs each delivered copy**: the same payload with the copy's `sha256` and `size`, plus
-`release: { sha256 }` (the published archive) and `fingerprint: <marker>`. `scriptgo add` already
-checks `package`, `version` and `sha256` against the downloaded bytes and ignores extra fields, so
-it verifies a copy unchanged. Each fingerprint record is also signed (below).
+`release: { sha256 }` (the published archive) and `fingerprint: <marker>`, and sends the marker as
+`X-ScriptGo-Fingerprint`. `scriptgo add` checks `package`, `version` and `sha256` against the
+downloaded bytes as for any release; for a copy (the header present) it also requires the signature,
+checks that the signed `fingerprint` is the header's and that `release.sha256` is the version the
+registry lists, instead of comparing the listed hash with the copy's. Each fingerprint record is
+also signed (below).
 
 ## Per-buyer builds (fingerprint `scriptgo-asset-fingerprint/1`)
 
