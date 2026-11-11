@@ -64,7 +64,7 @@ What the adapter provides. See [SDK and capabilities](/docs/sdk/capabilities) fo
 | `http` | Partial | Needs the mod listed in secure.http_mods by the server owner. |
 | `licensing` | Partial |  |
 | `perks` | Not available | Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here. |
-| `presence` | Not available | The adapter answers a player's address (core.get_player_ip), but presence is not switched on: perks are not, Luanti has no HMAC (only hashes), and a player name is not an account other servers share. |
+| `presence` | Partial | With http: /link works, and presence reports only in address mode (`scriptgo_presence_addr`, default off; the owner's decision on it is pending): the normalised address is sent and SCRIPT//GO fingerprints it at once, from core.get_player_ip; Luanti has no HMAC. The identifier is the player name, which is not an account other servers share. Unit-tested through the core; not run on a Luanti server with a connected player. |
 
 ## Protection
 

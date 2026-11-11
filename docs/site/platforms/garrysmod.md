@@ -87,7 +87,7 @@ What the adapter provides. See [SDK and capabilities](/docs/sdk/capabilities) fo
 | `http` | Supported | The engine's asynchronous HTTP(): any method, status, body and headers. Loopback and private addresses need srcds -allowlocalhttp. |
 | `licensing` | Supported | Over HTTP() to the scriptgo_api convar (default https://api.scriptgo.dev). |
 | `perks` | Not available | Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here. |
-| `presence` | Not available | The adapter answers a player's address (Player:IPAddress()), but presence is not switched on: perks are not, and GLua has no HMAC (util.SHA256 only). |
+| `presence` | Partial | With HTTP(): /link works, and presence reports only in address mode (`scriptgo_presence_addr`, default off; the owner's decision on it is pending): the normalised address is sent and SCRIPT//GO fingerprints it at once, from Player:IPAddress(); GLua has no HMAC (util.SHA256 only). Unit-tested against a mock GLua; not run on a srcds server with a connected player. |
 
 ## Protection
 

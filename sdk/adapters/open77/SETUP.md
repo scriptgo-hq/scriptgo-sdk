@@ -76,11 +76,24 @@ Player match (`ScriptGo.presence` and the `/link` command, `docs/spec/player-mat
 `Open77.players.endpoint`). Declare it in **one resource per server**: each declaring resource
 reports and registers `/link`. The answer to `/link` arrives in the player's chat.
 
-**What works today:** `/link`. **What does not:** presence reporting. It needs HMAC-SHA256, and
-OPEN//77 (build 2.50.0+op77.208) has no native for it; the SDK does not hash in Lua by itself. Until
-OPEN//77 adds one, `ScriptGo.presence.status()` answers `presence unavailable: no HMAC on this
-host`, and buyers use the code. Run on an OPEN//77 server (2026-11-11, `sg_probe_presence`,
-`scriptgo verify --env open77 --stub-api`): the resource packs, the server accepts the permission,
-the shim starts and reports the missing HMAC. No game client was connected, so `/link` has not been
-typed by a real player.
+**What works today:** `/link` (every word after the command is the code: `/link mt4 2jf` works).
+Presence with fingerprints needs HMAC-SHA256, and OPEN//77 (build 2.50.0+op77.208) has no native for
+it; the SDK does not hash in Lua by itself. So `ScriptGo.presence.status()` answers `presence
+unavailable: no HMAC on this host`, and buyers use the code, unless the operator turns **address
+mode** on:
+
+```
+set scriptgo_presence_addr true
+```
+
+In address mode (default off; whether it is offered is the owner's decision, still pending) the
+shim sends the player's normalised address (IPv4, or the IPv6 `/64`), and SCRIPT//GO fingerprints it
+at once and keeps only the fingerprint. The shim never logs it; it logs once that address mode is on.
+Every request also says `environment: "open77"` and the shim's version.
+
+Run on an OPEN//77 server (2026-11-11, `sg_probe_presence`, `scriptgo verify --env open77
+--stub-api`): the resource packs, the server accepts the permission, the shim starts and reports
+the missing HMAC. No game client was connected, so neither `/link` nor address mode has run with a
+real player; address mode and `/link` with a space are unit-tested against stub natives
+(`sdk/lua/spec/open77_shim_perks_spec.lua`).
 

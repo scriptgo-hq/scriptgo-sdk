@@ -43,7 +43,7 @@
     "http": "Outbound HTTP requests from the server side.",
     "licensing": "License activation and verification against the SCRIPT//GO API.",
     "perks": "Player perks: what the operator sold to a player from their own store, asked from the SCRIPT//GO API.",
-    "presence": "Player match: tells SCRIPT//GO which players are connected, as keyed fingerprints of their addresses (opt-in), and serves the /link command, so a buyer on a shop is tied to their player."
+    "presence": "Player match: tells SCRIPT//GO which players are connected (opt-in), as keyed fingerprints of their addresses, or on a host with no HMAC in address mode (a second opt-in), and serves the /link command, so a buyer on a shop is tied to their player."
   },
   "types": {
     "value": { "kind": "primitive", "doc": "Any value the codec copies: nil, boolean, integer, number (finite), string, or an acyclic table with string or integer keys (see codec)." },

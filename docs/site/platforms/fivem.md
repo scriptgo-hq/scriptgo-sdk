@@ -42,7 +42,7 @@ What the adapter provides. See [SDK and capabilities](/docs/sdk/capabilities) fo
 | `http` | Partial | Server side, through PerformHttpRequest; redirects are not followed. No host allow-list: the server owner decides what a resource may call. |
 | `licensing` | Not available | Not implemented: the shim has no licence check. It was written without one after Rockstar's Creator Platform License Agreement (2026-09-10, §3.1(6)), which forbids a third-party marketplace that sells or licenses server content. |
 | `perks` | Not available | Not switched on: the shim does not carry the core's perks module. |
-| `presence` | Not available | The shim answers a player's address (GetPlayerEndpoint) for later use, but it does not carry the core's perks or presence modules, and FiveM's Lua has no HMAC. |
+| `presence` | Partial | Server side, in a resource that declares presence: `scriptgo pack --target fivem` keeps the shim's player match section, with the core's presence module included word for word. /link works over PerformHttpRequest; presence reports only in address mode (`scriptgo_presence_addr`, default off; the owner's decision on it is pending), from GetPlayerEndpoint, since FiveM's Lua has no HMAC. Unit-tested against stub natives; not run on an FXServer with a connected player. |
 
 ## Protection
 

@@ -33,9 +33,17 @@ scriptgo pack my_resource --target fivem --out dist
 (`licensed true`, or the `licensing` capability), because the shim could not enforce it. This is
 a technical limit of the adapter, not a selling rule.
 
-**No player match.** `ScriptGo.presence` raises `capability_unavailable:presence@fivem`: the shim
-does not carry the core's perks or presence modules, and FiveM's Lua has no HMAC. The shim can read
-a player's address (`GetPlayerEndpoint`) for when it does; nothing about it has run.
+**Player match, in one resource.** In a resource that declares the `presence` capability,
+`scriptgo pack --target fivem` keeps the shim's player match section, with the core's presence
+module included word for word; elsewhere `ScriptGo.presence` raises
+`capability_unavailable:presence@fivem`. Declare it in one resource per server. With
+`scriptgo_server_token` set, `/link <code>` (convar `scriptgo_link_command`, default `link`) confirms
+the code a player types, for their `license:` identifier, and answers with a notification. FiveM's
+Lua has no HMAC, so presence (`scriptgo_presence`) reports only in address mode
+(`set scriptgo_presence_addr true`, default off; the owner's decision on it is pending): the
+normalised address from `GetPlayerEndpoint` is sent, and SCRIPT//GO fingerprints it at once. It is
+never logged. Unit-tested against stub natives (`sdk/lua/spec/fivem_shim_spec.lua`); not run on an
+FXServer with a connected player.
 
 **The platform's own rules.** Rockstar's Creator Platform License Agreement (2026-09-10, §3.1(6))
 forbids a third-party marketplace that sells or licenses server content for FiveM. SCRIPT//GO does

@@ -102,7 +102,7 @@ What the adapter provides. See [SDK and capabilities](/docs/sdk/capabilities) fo
 | `http` | Partial | Uses the system curl executable when present. |
 | `licensing` | Supported |  |
 | `perks` | Partial | Implemented in the core, over curl. The players are the simulated local ones, so the identifier is local:&lt;name&gt;: for tests and tooling, not for real players. |
-| `presence` | Partial | Implemented in the core, over curl. Simulated players with simulated addresses (a run script's `join 2 Bob @203.0.113.7`); the HMAC comes from the system `openssl` executable when it is on the PATH, else presence says it is unavailable and only /link works. Proven by sg_probe_presence on Lua 5.4, 5.1 and LuaJIT against the stub API, with OpenSSL's fingerprints equal to Node's HMAC-SHA256. For tests and tooling, not real players. |
+| `presence` | Partial | Implemented in the core, over curl. Simulated players with simulated addresses (a run script's `join 2 Bob @203.0.113.7`); the HMAC comes from the system `openssl` executable when it is on the PATH, else presence says it is unavailable and only /link works. Proven by sg_probe_presence on Lua 5.4, 5.1 and LuaJIT against the stub API, with OpenSSL's fingerprints equal to Node's HMAC-SHA256, and against the platform's player match end-to-end run (real API, site and browsers), with fingerprints and, with OpenSSL withheld, in address mode (`scriptgo_presence_addr`, default off; the owner's decision on it is pending): the normalised address is sent and SCRIPT//GO fingerprints it at once. For tests and tooling, not real players. |
 
 ## Protection
 

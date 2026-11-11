@@ -18,7 +18,7 @@ M.DESCRIPTIONS = {
     http = "Outbound HTTP requests from the server side.",
     licensing = "License activation and verification against the SCRIPT//GO API.",
     perks = "Player perks: what the operator sold to a player from their own store, asked from the SCRIPT//GO API.",
-    presence = "Player match: tells SCRIPT//GO which players are connected, as keyed fingerprints of their addresses (opt-in), and serves the /link command, so a buyer on a shop is tied to their player.",
+    presence = "Player match: tells SCRIPT//GO which players are connected (opt-in), as keyed fingerprints of their addresses, or on a host with no HMAC in address mode (a second opt-in), and serves the /link command, so a buyer on a shop is tied to their player.",
 }
 
 function M.unavailable(cap, environment)
@@ -63,7 +63,7 @@ M.ENVIRONMENTS = {
         },
         notes = {
             perks = "Implemented in the core, over curl. The players are the simulated local ones, so the identifier is local:<name>: for tests and tooling, not for real players.",
-            presence = "Implemented in the core, over curl. Simulated players with simulated addresses (a run script's `join 2 Bob @203.0.113.7`); the HMAC comes from the system `openssl` executable when it is on the PATH, else presence says it is unavailable and only /link works. Proven by sg_probe_presence on Lua 5.4, 5.1 and LuaJIT against the stub API, with OpenSSL's fingerprints equal to Node's HMAC-SHA256. For tests and tooling, not real players.",
+            presence = "Implemented in the core, over curl. Simulated players with simulated addresses (a run script's `join 2 Bob @203.0.113.7`); the HMAC comes from the system `openssl` executable when it is on the PATH, else presence says it is unavailable and only /link works. Proven by sg_probe_presence on Lua 5.4, 5.1 and LuaJIT against the stub API, with OpenSSL's fingerprints equal to Node's HMAC-SHA256, and against the platform's player match end-to-end run (real API, site and browsers), with fingerprints and, with OpenSSL withheld, in address mode (`scriptgo_presence_addr`, default off; the owner's decision on it is pending): the normalised address is sent and SCRIPT//GO fingerprints it at once. For tests and tooling, not real players.",
             players = "Simulated local players (one by default).",
             ui = "Notifications are printed to the console.",
             http = "Uses the system curl executable when present.",
@@ -154,11 +154,11 @@ M.ENVIRONMENTS = {
         capabilities = {
             events = "partial", logging = "supported", storage = "supported", players = "supported",
             permissions = "supported", commands = "supported", config = "supported", ui = "fallback",
-            http = "partial", licensing = "partial", perks = "unavailable", presence = "unavailable",
+            http = "partial", licensing = "partial", perks = "unavailable", presence = "partial",
         },
         notes = {
             perks = "Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here.",
-            presence = "The adapter answers a player's address (core.get_player_ip), but presence is not switched on: perks are not, Luanti has no HMAC (only hashes), and a player name is not an account other servers share.",
+            presence = "With http: /link works, and presence reports only in address mode (`scriptgo_presence_addr`, default off; the owner's decision on it is pending): the normalised address is sent and SCRIPT//GO fingerprints it at once, from core.get_player_ip; Luanti has no HMAC. The identifier is the player name, which is not an account other servers share. Unit-tested through the core; not run on a Luanti server with a connected player.",
             events = "Server side only; client scripts do not run (Luanti mods are server-side).",
             players = "Player names get session-stable integer ids; identifier is luanti:<name>.",
             permissions = "server or scriptgo_admin privilege, then the grants in <world>/scriptgo.json.",
@@ -196,7 +196,7 @@ M.ENVIRONMENTS = {
         },
         notes = {
             perks = "Server side, in the shim: the core's perks module over Open77.http.request (the operator allows the API host) and Open77.players.identifier. The shim is packed per resource, so each resource that uses perks polls on its own; the cache is kept in the resource's kvp.",
-            presence = "Server side, in the shim: the /link command works over Open77.http.request. Presence reporting reads Open77.players.endpoint (permission players.identity.sensitive, requested in the packed manifest only for a resource that declares presence) and needs an HMAC-SHA256 native, which OPEN//77 build 2.50.0+op77.208 does not have: until it does, presence says it is unavailable and only /link works. One resource per server should declare it. Ran on an OPEN//77 server (sg_probe_presence): the shim loads, the permission is accepted, status says no HMAC; no game client was connected, so /link has not been typed by a real player.",
+            presence = "Server side, in the shim: the /link command works over Open77.http.request. Presence reporting reads Open77.players.endpoint (permission players.identity.sensitive, requested in the packed manifest only for a resource that declares presence) and needs an HMAC-SHA256 native, which OPEN//77 build 2.50.0+op77.208 does not have: until it does, presence reports only in address mode (`scriptgo_presence_addr`, default off; the owner's decision on it is pending): the normalised address is sent and SCRIPT//GO fingerprints it at once; otherwise it says it is unavailable and only /link works. One resource per server should declare it. Ran on an OPEN//77 server (sg_probe_presence): the shim loads, the permission is accepted, status says no HMAC; no game client was connected, so neither /link nor address mode has run with a real player (address mode is unit-tested against stub natives).",
             storage = "Open77.kvp on both sides, values stored as JSON text.",
             players = "Server side: GetPlayers, GetPlayerName, Open77.players.identifier.",
             permissions = "Server side: the server ACL (Open77.acl.isAllowed, permission acl.read).",
@@ -383,11 +383,11 @@ M.ENVIRONMENTS = {
         capabilities = {
             events = "partial", logging = "supported", storage = "supported", players = "supported",
             permissions = "supported", commands = "supported", config = "supported", ui = "fallback",
-            http = "supported", licensing = "supported", perks = "unavailable", presence = "unavailable",
+            http = "supported", licensing = "supported", perks = "unavailable", presence = "partial",
         },
         notes = {
             perks = "Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here.",
-            presence = "The adapter answers a player's address (Player:IPAddress()), but presence is not switched on: perks are not, and GLua has no HMAC (util.SHA256 only).",
+            presence = "With HTTP(): /link works, and presence reports only in address mode (`scriptgo_presence_addr`, default off; the owner's decision on it is pending): the normalised address is sent and SCRIPT//GO fingerprints it at once, from Player:IPAddress(); GLua has no HMAC (util.SHA256 only). Unit-tested against a mock GLua; not run on a srcds server with a connected player.",
             events = "Server side only; client scripts do not run yet. The scheduler ticks on the Think hook, every server frame.",
             logging = "The server console (and garrysmod/console.log with -condebug).",
             storage = "JSON files under garrysmod/data/scriptgo/storage/.",
@@ -456,11 +456,11 @@ M.ENVIRONMENTS = {
         capabilities = {
             events = "partial", logging = "supported", storage = "supported", players = "supported",
             permissions = "supported", commands = "supported", config = "supported", ui = "partial",
-            http = "partial", licensing = "partial", perks = "unavailable", presence = "unavailable",
+            http = "partial", licensing = "partial", perks = "unavailable", presence = "partial",
         },
         notes = {
             perks = "Not switched on: the core implements perks over http and the player identifier, which this adapter has, but it has not been wired or run here.",
-            presence = "The adapter answers a player's address (MP.GetPlayerIdentifiers(pid).ip), but presence is not switched on: perks are not, and BeamMP's Lua has no HMAC.",
+            presence = "With curl: /link works, and presence reports only in address mode (`scriptgo_presence_addr`, default off; the owner's decision on it is pending): the normalised address is sent and SCRIPT//GO fingerprints it at once, from MP.GetPlayerIdentifiers(pid).ip; BeamMP's Lua has no HMAC. Not run on a BeamMP server with a connected player.",
             events = "Server side only: the plugin runs no client scripts, and TriggerClientEvent answers network_unavailable.",
             storage = "JSON files in the plugin's data/storage folder (scriptgo.json dataDir), replaced atomically.",
             players = "MP.GetPlayers and the join and disconnect events. BeamMP id n is SCRIPT//GO player n + 1 (0 is the console); identifier is beammp:<account id>, beammp-guest:<name> for guests.",
@@ -501,11 +501,11 @@ M.ENVIRONMENTS = {
         capabilities = {
             events = "supported", logging = "supported", storage = "supported", players = "supported",
             permissions = "supported", commands = "supported", config = "supported", ui = "fallback",
-            http = "partial", licensing = "unavailable", perks = "unavailable", presence = "unavailable",
+            http = "partial", licensing = "unavailable", perks = "unavailable", presence = "partial",
         },
         notes = {
             perks = "Not switched on: the shim does not carry the core's perks module.",
-            presence = "The shim answers a player's address (GetPlayerEndpoint) for later use, but it does not carry the core's perks or presence modules, and FiveM's Lua has no HMAC.",
+            presence = "Server side, in a resource that declares presence: `scriptgo pack --target fivem` keeps the shim's player match section, with the core's presence module included word for word. /link works over PerformHttpRequest; presence reports only in address mode (`scriptgo_presence_addr`, default off; the owner's decision on it is pending), from GetPlayerEndpoint, since FiveM's Lua has no HMAC. Unit-tested against stub natives; not run on an FXServer with a connected player.",
             events = "FiveM's own events and exports; TriggerEvent runs its handlers at once instead of on the next tick.",
             logging = "print to the server console (channel script:<resource>) or the client console, with the level in front.",
             storage = "Resource KVP (GetResourceKvpString / SetResourceKvp) on both sides, values stored as JSON text.",

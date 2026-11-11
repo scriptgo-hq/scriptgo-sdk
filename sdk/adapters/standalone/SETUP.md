@@ -71,9 +71,13 @@ Players are simulated, and so are their addresses: `join 2 Bob @203.0.113.7` in 
 `playerAddress` in the config for player 1 (use documentation addresses, 203.0.113.0/24 and
 2001:db8::/32). The HMAC comes from the `openssl` executable (config `openssl`, else the environment
 variable `SCRIPTGO_OPENSSL`, else the PATH); without it, `ScriptGo.presence.status()` says
-`presence unavailable: no HMAC on this host` and only `/link` works. The day's key is passed to
-`openssl` on its command line, where other users of the machine can see it while it runs. Run on
-this machine (2026-11-11) with `sdk/conformance/sg_probe_presence` and `scriptgo verify --stub-api`
-on Lua 5.4, 5.1 and LuaJIT: the fingerprints OpenSSL produced are the ones Node's HMAC-SHA256
-produces. For tests and tooling, not real players.
+`presence unavailable: no HMAC on this host` and only `/link` works, unless address mode is on
+(`scriptgo_presence_addr` `true`, default off): then the normalised address is sent and SCRIPT//GO
+fingerprints it at once. The day's key is passed to `openssl` on its command line, where other users
+of the machine can see it while it runs. Run on this machine (2026-11-11) with
+`sdk/conformance/sg_probe_presence` and `scriptgo verify --stub-api` on Lua 5.4, 5.1 and LuaJIT: the
+fingerprints OpenSSL produced are the ones Node's HMAC-SHA256 produces. Also run against the
+platform's player match end-to-end test (a real API, site and Chrome, 2026-11-11): with OpenSSL, and
+again with OpenSSL withheld and address mode on, the page offered the connected player and `/link`
+typed with a space linked the code. For tests and tooling, not real players.
 

@@ -69,7 +69,8 @@ adapter's SETUP says what has run there. The protocol is in `docs/spec/perks.md`
 A buyer who is not signed in to SCRIPT//GO is tied to their player by **player match**
 (`docs/spec/player-match.md`): the player types `/link <code>` in game, and a server whose operator
 turns presence on (`scriptgo_presence`) lets the sign-in page recognise a connected player from a
-keyed fingerprint of their address, never the address itself. Each adapter's SETUP says where it is
+keyed fingerprint of their address (on a host with no HMAC, only in address mode, a second opt-in,
+where SCRIPT//GO fingerprints the address on arrival). Each adapter's SETUP says where it is
 wired and what has run. The sign-in page side is not live yet.
 
 What is sold: a feature of the operator's own code. Not the game, not its content, not access to
