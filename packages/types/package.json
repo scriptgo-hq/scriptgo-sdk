@@ -1,6 +1,6 @@
 {
   "name": "@scriptgo/types",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "TypeScript declarations of the SCRIPT//GO runtime API, for scripts written in TypeScript.",
   "license": "MIT",
   "type": "module",

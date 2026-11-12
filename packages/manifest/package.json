@@ -1,6 +1,6 @@
 {
   "name": "@scriptgo/manifest",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "SCRIPT//GO manifest parser and validator (scriptgo.toml), with the package file rules.",
   "license": "MIT",
   "type": "module",

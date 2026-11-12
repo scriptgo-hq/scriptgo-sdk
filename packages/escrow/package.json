@@ -1,6 +1,6 @@
 {
   "name": "@scriptgo/escrow",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "SCRIPT//GO protected releases: the release format, signing, sealing and watermarking (Node crypto).",
   "license": "MIT",
   "type": "module",
