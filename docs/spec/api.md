@@ -242,6 +242,12 @@ POST /v1/creator/packages/:name/releases  (multipart: archive=zip)  → Release 
            escrow_nothing_to_encrypt | escrow_reserved_file | invalid_allowlist | signer_retired
 GET  /v1/creator/packages/:name/key-activity?days=30  → KeyActivity   (counts from the key endpoint's log)
 GET  /v1/creator/releases/:id                    → Release with validation report
+GET  /v1/creator/releases/:id/client-lines       → ClientLineMap (scriptgo-client-escrow-lines/1; the release's
+                                                 client chunks, position → source line; `cache-control: private,
+                                                 no-store`; 404 not_escrowed without client code escrow). The
+                                                 creator's own release only, never shipped to a client:
+                                                 `scriptgo escrow lines <file> "<message>"` resolves an error's
+                                                 `:pos:<n>` positions (docs/spec/client-escrow.md)
 POST /v1/creator/releases/:id/rights { ownsCode, targetsProprietaryGame, thirdPartyAssets[] }
 POST /v1/creator/releases/:id/publish            → Release (409 publish_blocked, details.blockers: string[])
                                                  (publishing puts the package's paid offers on the rights declaration of the new release:
@@ -383,7 +389,7 @@ POST /v1/licenses/verify     { licenseKey | deploymentToken, package, environmen
                                      activationStatus: ActivationStatus | null, expiresAt, offlineGraceUntil,
                                      environments: string[], token: string }   // ed25519-signed, short-lived
 POST /v1/licenses/key        { licenseKey | deploymentToken, package, version?, environment, adapterVersion, serverPublicKey?,
-                               kind?: "code" | "assets" }
+                               kind?: "code" | "assets" | "client" }
                              → 200 { valid, reason: KeyReleaseFailureReason | null, final: boolean,
                                      wrappedKey: {epk,nonce,wrapped} | null,
                                      aad, signerPublicKey, deliveryWatermark, offlineGraceUntil, expiresAt,
@@ -392,6 +398,10 @@ POST /v1/licenses/key        { licenseKey | deploymentToken, package, version?, 
                                // release, for the token's deployment, wrapped with the server aad of
                                // docs/spec/assets.md "Asset escrow"; keyId names it. Same checks and order;
                                // not_escrowed when the release has no asset escrow. Logged with kind assets.
+                               // kind "client": the client-code key of a release with client code escrow, for
+                               // the token's deployment, wrapped with the server aad of docs/spec/client-escrow.md;
+                               // keyId names it. Same checks and order; not_escrowed when the release has no
+                               // client escrow. Logged with kind client.
                                // final: true on revoked | refunded | expired | deactivated (the right to run is
                                // over: a loader stops at once); false otherwise (the offline grace applies).
                                // escrow: content key wrapped to the bound server. Gated like verify, plus binding +
@@ -652,6 +662,13 @@ POST /v1/creator/packages/:name/releases   (multipart, unchanged) — a release 
                                        Content-Length first), inspected entry by entry (data only, sizes, delivery rules)
                                        and refused with every inspection error in its checks; a buyer's fingerprinted
                                        copy is refused (asset_fingerprinted). Release.assets carries the report.
+                                       Fields assetEscrow=true (OPEN//77 preloads sealed per deployment) and
+                                       clientEscrow=true [clientStrip=full|names] (client code escrow,
+                                       docs/spec/client-escrow.md: an OPEN//77-only release whose client_scripts the
+                                       platform compiles from source to stripped Lua 5.4.8 bytecode and seals per
+                                       deployment in <root>clientcode.sgce; a script that does not compile fails the
+                                       upload's checks). Client escrow makes a release a copy-per-buyer release even
+                                       without assets; it cannot be combined with escrow=true / contentKey (422).
 POST /v1/creator/releases/:id/rights { ownsCode, targetsProprietaryGame, thirdPartyAssets, assetRights }
                                        assetRights: "original" | "game_edits" | "game_extracted"; publishing a release
                                        with assets needs it (a blocker, not a review).
@@ -661,6 +678,8 @@ GET  /v1/packages/:creator/:name/versions/:version/download
                                        license_required. The creator and staff get a copy fingerprinted to their own
                                        account; staff may ask ?variant=original (audited). Headers: X-Sha256 (the copy),
                                        X-ScriptGo-Artifact: plain, X-ScriptGo-Fingerprint: <marker>, the copy's signature
+                                       (a licence's copy with client escrow: stubs at the client scripts' paths, the
+                                       container at the root, X-ScriptGo-Client-Escrow: <keyId>)
                                        (payload adds release: { sha256 } and fingerprint), Cache-Control: private, no-store.
 POST /v1/creator/assets/lookup  { sha256 } | { record }   → AssetLookupResult   (own packages; account = null)
 POST /v1/assets/reports         CreateAssetReportBody     → 201 AssetReportRow  (signed in; goodFaith and accuracy

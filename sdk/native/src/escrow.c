@@ -78,6 +78,10 @@ const char* SG_CALL sg_strerror(int code)
     case SG_ERR_UNSUPPORTED: return "the archive uses an unsupported zip feature";
     case SG_ERR_INSECURE_PERMISSIONS: return "the identity file is readable by other users";
     case SG_ERR_EXISTS: return "the file already exists";
+    case SG_ERR_BAD_CONTAINER: return "the container is malformed";
+    case SG_ERR_KEY_MISMATCH: return "the key is not this container's key";
+    case SG_ERR_UNTRUSTED_SIGNER: return "the container is signed by another key than the pinned one";
+    case SG_ERR_TARGET_MISMATCH: return "the client code was compiled for another Lua VM";
     default: return "unknown error";
     }
 }

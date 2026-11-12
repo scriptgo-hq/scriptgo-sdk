@@ -47,6 +47,7 @@ import { packBeamMPCommand } from "../lib/beammp.ts";
 import { packEscrow } from "../lib/escrow-pack.ts";
 import { copyFiles, copyFingerprint, describePlan, planAssets, uploadAssetErrors, type AssetPlan } from "../lib/assets.ts";
 import { packAssetTargetCommand } from "../lib/asset-targets.ts";
+import { CLIENT_ESCROW_ENTRY } from "@scriptgo/escrow";
 
 export const summary = "Package a resource: a publishable .zip, or a folder for OPEN//77, Garry's Mod, BeamMP or FiveM";
 
@@ -133,6 +134,9 @@ export function packForOpen77(
     return { dest: "", warnings, errors: foreign.map((p) => ({ code: "open77_lua_only", message: `${p}: OPEN//77 runs Lua scripts only.` })) };
   }
   const dest = join(parent, m.name);
+  // A buyer's copy of a release with client code escrow: stubs at the client scripts' paths and the
+  // encrypted container at the root, which every player receives as a resource file.
+  const clientEscrow = files.includes(CLIENT_ESCROW_ENTRY) ? [CLIENT_ESCROW_ENTRY] : [];
   const included = referencedFiles(m, files, res.manifestFile);
   if (existsSync(dest)) rmSync(dest, { recursive: true });
   mkdirSync(dest, { recursive: true });
@@ -148,7 +152,8 @@ export function packForOpen77(
       rmSync(dest, { recursive: true });
       return { dest: "", warnings, errors: missing.map((p) => ({ code: "missing_file", message: `preload_mod '${p}' does not exist in the resource.` })) };
     }
-    copyFiles(res.root, dest, [...new Set([...included, ...preloads])].sort());
+    // A client-code-escrow copy's container travels with the resource (the OPEN//77 server delivers it).
+    copyFiles(res.root, dest, [...new Set([...included, ...preloads, ...clientEscrow])].sort());
     copyFingerprint(assets, dest);
     return { dest, warnings, errors: [], assets };
   }
@@ -166,10 +171,11 @@ export function packForOpen77(
   // Generic assets go to every player's client cache as resource files; preload packages are
   // mounted by the game (open77Manifest writes preload_mod lines and the archivexl dependency).
   copyFiles(res.root, dest, assets.delivered);
+  copyFiles(res.root, dest, clientEscrow);
   copyFingerprint(assets, dest);
   for (const [to, data] of open77ShimFiles(m, join(sdkRoot, "adapters", "open77"))) writeFileSync(join(dest, to), data);
   const needs = assets.report.environments["open77"]?.needs ?? [];
-  const manifestText = open77Manifest(m, warnings, res.manifestFile, { needs, preloads: assets.native });
+  const manifestText = open77Manifest(m, warnings, res.manifestFile, { needs, preloads: assets.native }, clientEscrow);
   writeFileSync(join(dest, "open77.lua"), manifestText);
   // Re-check the generated resource with the same parser OPEN//77 rules are encoded in.
   const check = parseManifest(manifestText, { fileName: "open77.lua" });

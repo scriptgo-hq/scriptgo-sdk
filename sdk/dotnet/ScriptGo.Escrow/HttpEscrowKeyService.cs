@@ -144,6 +144,17 @@ public sealed class HttpEscrowKeyService : IEscrowKeyService
         return SendAsync(version, "assets", identity, cancellation);
     }
 
+    /// <summary>Asks for the client-code key of <paramref name="version"/> (<c>kind: "client"</c>,
+    /// docs/spec/client-escrow.md), wrapped to <paramref name="identity"/> with the server aad. Same answers as
+    /// <see cref="RequestAssetKeyAsync"/>. Check <see cref="EscrowKeyResult.Aad"/> against
+    /// <see cref="ClientEscrowFormat.ServerAad"/>, then unwrap with <see cref="AssetKey.UnwrapClientCodeForServer"/>.</summary>
+    public Task<EscrowKeyResult> RequestClientKeyAsync(string version, EscrowIdentity identity, CancellationToken cancellation = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(version);
+        ArgumentNullException.ThrowIfNull(identity);
+        return SendAsync(version, "client", identity, cancellation);
+    }
+
     private async Task<EscrowKeyResult> SendAsync(string version, string? kind, EscrowIdentity identity, CancellationToken cancellation)
     {
         Options options;

@@ -238,4 +238,35 @@ if(SG_BUILD_TESTS)
     add_test(NAME ${case} COMMAND sg_asset_tests ${case})
     set_tests_properties(${case} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   endforeach()
+
+  # Client code escrow (docs/spec/client-escrow.md), against tests/client_vector.h. Keep in step with tests/test_clink.c.
+  add_executable(sg_clink_tests tests/test_clink.c)
+  target_link_libraries(sg_clink_tests PRIVATE scriptgo)
+  if(SG_SANITIZE)
+    target_compile_options(sg_clink_tests PRIVATE ${SG_SANITIZE_COMPILE})
+    target_link_options(sg_clink_tests PRIVATE ${SG_SANITIZE_LINK})
+  endif()
+  if(MSVC)
+    target_compile_options(sg_clink_tests PRIVATE /W4 /WX /utf-8)
+    target_compile_definitions(sg_clink_tests PRIVATE _CRT_SECURE_NO_WARNINGS)
+  else()
+    target_compile_options(sg_clink_tests PRIVATE -Wall -Wextra)
+    target_link_libraries(sg_clink_tests PRIVATE ${CMAKE_DL_LIBS})
+  endif()
+  set(SG_CLINK_TEST_CASES
+    clink_keys_unwrap_and_rewrap
+    clink_container_good_path
+    clink_refuses_other_keys
+    clink_refuses_tampering
+    clink_refuses_other_targets
+    clink_container_survives_mutations
+    clink_lua_load_through_real_lua
+    clink_handles_reject_misuse)
+  foreach(case IN LISTS SG_CLINK_TEST_CASES)
+    add_test(NAME ${case} COMMAND sg_clink_tests ${case})
+    set_tests_properties(${case} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  endforeach()
+  if(SG_TEST_LUA_LIBRARY)
+    set_tests_properties(clink_lua_load_through_real_lua PROPERTIES ENVIRONMENT "SG_TEST_LUA_LIBRARY=${SG_TEST_LUA_LIBRARY}")
+  endif()
 endif()

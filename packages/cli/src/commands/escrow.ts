@@ -1,6 +1,7 @@
 // scriptgo escrow inspect  <bundle.escrow.zip> [--trusted-signer <key>]
 // scriptgo escrow install  <bundle.escrow.zip> --target open77 --out <resources folder> [--trusted-signer <key>] [--force]
 // scriptgo escrow identity --identity <file>
+// scriptgo escrow lines    <file.client-lines.json> [message | -]
 // scriptgo escrow load     --bundle <file> --master <url> --deployment-token <sg_dep_...> --package <creator//name>
 //                          --environment <env> --identity <file> [--trusted-signer <key>] [--version <v>]
 //                          [--once] [--out <dir>] [--lua lua54|lua51|luajit|<path>] [--recheck <seconds>]
@@ -16,13 +17,18 @@
 // stays up, asks again before each answer expires, and stops when the offline grace of its last
 // valid answer runs out.
 //
+// lines reads the line map `publish --client-escrow` wrote (client code escrow, never shipped to a
+// player) and rewrites the synthetic positions of a fully stripped client chunk in an error message or
+// traceback (`night-market@2.0.0/client/hud.lua:pos:12:`) to source lines (`client/hud.lua:31:`).
+//
 // Exit codes of `load`: 0 loaded (and ran); 1 refused (the master said no, or the bundle does not
 // verify); 2 usage; 3 stopped at the end of offline grace; 4 the master could not answer at start.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { readBundle, verifyManifest } from "@scriptgo/escrow";
+import { readBundle, resolveClientMessage, verifyManifest } from "@scriptgo/escrow";
+import { readClientLineMap } from "../lib/client-escrow.ts";
 import { MANIFEST_FILES, parseManifest } from "@scriptgo/manifest";
 import { parseArgs, type ParsedArgs } from "../lib/args.ts";
 import {
@@ -45,6 +51,7 @@ export const summary = "Protected (escrow) releases: inspect a bundle, install i
 const USAGE = `scriptgo escrow inspect <bundle.escrow.zip> [--trusted-signer <ed25519 public key>]
 scriptgo escrow install <bundle.escrow.zip> --target open77|rust --out <resources folder> [--trusted-signer <key>] [--force]
 scriptgo escrow identity --identity <file>
+scriptgo escrow lines <file.client-lines.json> [message | -]   resolve a client-escrow error's positions
 scriptgo escrow load --bundle <file.escrow.zip> --package <creator//name> --environment <env>
     --deployment-token <sg_dep_...> --identity <file> [--master <url>] [--trusted-signer <base64url key>]
     [--version <v>] [--once] [--out <dir>] [--lua lua54|lua51|luajit|<path>] [--recheck <seconds>]
@@ -216,7 +223,7 @@ async function load(a: ParsedArgs): Promise<number> {
 export async function run(args: string[]): Promise<number> {
   const [sub, ...rest] = args;
   const a = parseArgs(rest, { booleans: ["help", "once", "force"] });
-  const known = ["inspect", "install", "identity", "load"];
+  const known = ["inspect", "install", "identity", "lines", "load"];
   if (!sub || sub === "--help" || a.bools.has("help") || !known.includes(sub)) {
     (sub && sub !== "--help" && !a.bools.has("help") ? console.error : console.log)(USAGE);
     return sub === "--help" || a.bools.has("help") ? 0 : 2;
@@ -231,6 +238,8 @@ export async function run(args: string[]): Promise<number> {
     return sub === "inspect" ? inspect(file, a.flags["trusted-signer"]) : install(file, a);
   }
 
+  if (sub === "lines") return lines(a.positional[0], a.positional[1]);
+
   if (!a.flags.identity) {
     console.error(`scriptgo escrow ${sub}: --identity <file> is required\n${USAGE}`);
     return 2;
@@ -244,6 +253,30 @@ export async function run(args: string[]): Promise<number> {
     return 0;
   }
   return load(a);
+}
+
+/** `escrow lines`: the message given (or read from stdin with "-"), positions resolved; without one, the map's summary. */
+function lines(file: string | undefined, message: string | undefined): number {
+  if (!file) {
+    console.error(`scriptgo escrow lines: give the line map file\n${USAGE}`);
+    return 2;
+  }
+  let map;
+  try {
+    map = readClientLineMap(file);
+  } catch (e) {
+    console.error(`scriptgo escrow lines: ${(e as Error).message}`);
+    return 1;
+  }
+  if (message === undefined) {
+    console.log(`${map.package}@${map.version}, ${map.strip} strip`);
+    for (const [path, c] of Object.entries(map.chunks)) console.log(`  ${path}: ${c.lines.length} positions, lines ${Math.min(...c.lines)}-${Math.max(...c.lines)}`);
+    if (Object.keys(map.chunks).length === 0) console.log("  no position table: a names strip keeps the line numbers in the bytecode itself");
+    return 0;
+  }
+  const text = message === "-" ? readFileSync(0, "utf8") : message;
+  process.stdout.write(resolveClientMessage(map, text) + (text.endsWith("\n") ? "" : "\n"));
+  return 0;
 }
 
 // Exported for tests.

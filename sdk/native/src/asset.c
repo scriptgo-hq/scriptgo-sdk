@@ -35,10 +35,16 @@ static const char KDF[] = "HKDF-SHA256+X25519";
 static const char SERVER_WRAP_INFO[] = "scriptgo.escrow.keywrap.v1";
 static const char CLIENT_WRAP_INFO[] = "scriptgo.asset-escrow.client-keywrap.v1";
 static const char KEY_ID_LABEL[] = "scriptgo.asset-escrow.keyid.v1";
+static const char CLINK_SESSION_WRAP_INFO[] = "scriptgo.client-escrow.client-keywrap.v1";
+static const char CLINK_KEY_ID_LABEL[] = "scriptgo.client-escrow.keyid.v1";
+
+/* What a key opens: an asset container, or client code. The id and the session wrap differ by domain. */
+enum { KEY_DOMAIN_ASSET = 0, KEY_DOMAIN_CLIENT_CODE = 1 };
 static const uint8_t EMPTY_AAD[1] = { 0 };
 
 struct sg_asset_key {
     uint32_t magic;
+    int domain;   /* KEY_DOMAIN_* */
     uint8_t* key; /* sodium_malloc(32), read-only */
     char id[SG_ASSET_KEY_ID_CHARS + 1];
 };
@@ -85,12 +91,15 @@ static int ensure_ready(void)
     return sg_init(); /* includes SG_ERR_NO_AES */
 }
 
-static void key_id_of(const uint8_t key[SG_ASSET_KEY_BYTES], char out[SG_ASSET_KEY_ID_CHARS + 1])
+static void key_id_of(int domain, const uint8_t key[SG_ASSET_KEY_BYTES], char out[SG_ASSET_KEY_ID_CHARS + 1])
 {
     crypto_hash_sha256_state st;
     uint8_t digest[crypto_hash_sha256_BYTES];
     crypto_hash_sha256_init(&st);
-    crypto_hash_sha256_update(&st, (const uint8_t*)KEY_ID_LABEL, sizeof KEY_ID_LABEL - 1);
+    if (domain == KEY_DOMAIN_CLIENT_CODE)
+        crypto_hash_sha256_update(&st, (const uint8_t*)CLINK_KEY_ID_LABEL, sizeof CLINK_KEY_ID_LABEL - 1);
+    else
+        crypto_hash_sha256_update(&st, (const uint8_t*)KEY_ID_LABEL, sizeof KEY_ID_LABEL - 1);
     crypto_hash_sha256_update(&st, key, SG_ASSET_KEY_BYTES);
     crypto_hash_sha256_final(&st, digest);
     sodium_bin2base64(out, SG_ASSET_KEY_ID_CHARS + 1, digest, KEY_ID_RAW_BYTES, sodium_base64_VARIANT_URLSAFE_NO_PADDING);
@@ -613,6 +622,7 @@ int SG_CALL sg_asset_container_bind(sg_asset_container* c, const sg_asset_key* k
 {
     uint8_t* copy;
     if (!container_ok(c) || !key_ok(key) || c->key != NULL) return SG_ERR_INVALID_ARGUMENT;
+    if (key->domain != KEY_DOMAIN_ASSET) return SG_ERR_KEY_MISMATCH; /* a client-code key never opens assets */
     if (sodium_memcmp(key->id, c->fields[F_KEY_ID], SG_ASSET_KEY_ID_CHARS) != 0) return SG_ERR_KEY_MISMATCH;
     copy = (uint8_t*)sodium_malloc(SG_ASSET_KEY_BYTES);
     if (copy == NULL) return SG_ERR_NO_MEMORY;
@@ -753,8 +763,15 @@ typedef struct wrap_secrets {
 static int derive_kek(wrap_secrets* s, int kind, const uint8_t epk[SG_PUBLIC_KEY_BYTES], const uint8_t recipient_public[SG_PUBLIC_KEY_BYTES])
 {
     uint8_t salt[SG_PUBLIC_KEY_BYTES * 2];
-    const char* info = kind == SG_ASSET_WRAP_SERVER ? SERVER_WRAP_INFO : CLIENT_WRAP_INFO;
-    size_t info_len = kind == SG_ASSET_WRAP_SERVER ? sizeof SERVER_WRAP_INFO - 1 : sizeof CLIENT_WRAP_INFO - 1;
+    const char* info;
+    size_t info_len;
+    switch (kind) {
+    case SG_ASSET_WRAP_SERVER:
+    case SG_CLIENT_WRAP_SERVER: info = SERVER_WRAP_INFO; info_len = sizeof SERVER_WRAP_INFO - 1; break;
+    case SG_ASSET_WRAP_CLIENT: info = CLIENT_WRAP_INFO; info_len = sizeof CLIENT_WRAP_INFO - 1; break;
+    case SG_CLIENT_WRAP_SESSION: info = CLINK_SESSION_WRAP_INFO; info_len = sizeof CLINK_SESSION_WRAP_INFO - 1; break;
+    default: return SG_ERR_UNWRAP;
+    }
     memcpy(salt, epk, SG_PUBLIC_KEY_BYTES);
     memcpy(salt + SG_PUBLIC_KEY_BYTES, recipient_public, SG_PUBLIC_KEY_BYTES);
     crypto_kdf_hkdf_sha256_extract(s->prk, salt, sizeof salt, s->shared, sizeof s->shared);
@@ -775,7 +792,7 @@ int SG_CALL sg_asset_key_unwrap(const sg_identity* identity, int kind,
     *out_key = NULL;
     if (identity == NULL || identity->magic != SG_IDENTITY_MAGIC || identity->private_key == NULL || epk == NULL || wrap_nonce == NULL
         || wrapped == NULL || wrapped_len != SG_WRAPPED_KEY_BYTES || (aad == NULL && aad_len > 0)
-        || (kind != SG_ASSET_WRAP_SERVER && kind != SG_ASSET_WRAP_CLIENT))
+        || (kind != SG_ASSET_WRAP_SERVER && kind != SG_ASSET_WRAP_CLIENT && kind != SG_CLIENT_WRAP_SERVER && kind != SG_CLIENT_WRAP_SESSION))
         return SG_ERR_INVALID_ARGUMENT;
     rc = ensure_ready();
     if (rc != SG_OK) return rc;
@@ -790,7 +807,8 @@ int SG_CALL sg_asset_key_unwrap(const sg_identity* identity, int kind,
     if (crypto_aead_aes256gcm_decrypt(key, &got, NULL, wrapped, wrapped_len, aad, aad_len, wrap_nonce, s->kek) != 0
         || got != SG_ASSET_KEY_BYTES)
         goto done;
-    key_id_of(key, k->id);
+    k->domain = (kind == SG_CLIENT_WRAP_SERVER || kind == SG_CLIENT_WRAP_SESSION) ? KEY_DOMAIN_CLIENT_CODE : KEY_DOMAIN_ASSET;
+    key_id_of(k->domain, key, k->id);
     sodium_mprotect_readonly(key);
     k->key = key;
     k->magic = SG_ASSET_KEY_MAGIC;
@@ -824,7 +842,7 @@ int SG_CALL sg_asset_key_wrap(const sg_asset_key* key, const uint8_t client_publ
     crypto_scalarmult_base(out_epk, s->ephemeral);
     /* A small-order client key gives an all-zero secret, which crypto_scalarmult refuses. */
     if (crypto_scalarmult(s->shared, s->ephemeral, client_public_key) != 0) goto done;
-    if (derive_kek(s, SG_ASSET_WRAP_CLIENT, out_epk, client_public_key) != SG_OK) goto done;
+    if (derive_kek(s, key->domain == KEY_DOMAIN_CLIENT_CODE ? SG_CLIENT_WRAP_SESSION : SG_ASSET_WRAP_CLIENT, out_epk, client_public_key) != SG_OK) goto done;
     randombytes_buf(out_wrap_nonce, SG_NONCE_BYTES);
     crypto_aead_aes256gcm_encrypt(out_wrapped, &out_len, key->key, SG_ASSET_KEY_BYTES, aad, aad_len, NULL, out_wrap_nonce, s->kek);
     rc = out_len == SG_WRAPPED_KEY_BYTES ? SG_OK : SG_ERR_INIT;
@@ -847,4 +865,357 @@ void SG_CALL sg_asset_key_free(sg_asset_key* key)
     if (key->key != NULL) sodium_free(key->key);
     sodium_memzero(key, sizeof *key);
     free(key);
+}
+
+/* =============================================================================== client code escrow */
+/*
+ * `scriptgo-client-escrow/1` (docs/spec/client-escrow.md): one AES-256-GCM chunk of stripped Lua
+ * bytecode per client script. The reader shares the canonical-JSON parser and the key handling above;
+ * the reference implementation is packages/escrow/src/client-escrow.ts, and tests/test_clink.c holds
+ * both to the same vector. There is no call that returns decrypted bytecode: sg_clink_lua_load is
+ * the only way out, and it goes into a lua_State, with mode "b".
+ */
+
+#define SG_CLINK_MAGIC 0x5347434cu /* "SGCL" */
+
+static const char CLINK_FORMAT[] = "scriptgo-client-escrow/1";
+static const char CLINK_CIPHER[] = "AES-256-GCM";
+
+typedef struct clink_chunk {
+    char* path;
+    uint64_t bytes;
+    uint64_t offset;
+    uint64_t length;
+    uint8_t nonce[SG_NONCE_BYTES];
+    uint8_t sha256[crypto_hash_sha256_BYTES];
+} clink_chunk;
+
+enum { C_PACKAGE, C_VERSION, C_RELEASE, C_DEPLOYMENT, C_KEY_ID, C_SIGNER, C_STRIP, C_LUA, C_FINGERPRINT, C_COUNT };
+static const char* const CLINK_FIELD_NAMES[C_COUNT] = { "package", "version", "release", "deployment", "keyId", "signerPublicKey", "strip", "lua", "fingerprint" };
+
+struct sg_clink {
+    uint32_t magic;
+    const uint8_t* body;
+    char* fields[C_COUNT];
+    uint8_t luac_header[SG_CLINK_LUAC_HEADER_BYTES];
+    int target_ok; /* sg_clink_target_check succeeded */
+    clink_chunk* chunks;
+    size_t count;
+    uint8_t* key;  /* sodium_malloc(32), NULL until bound */
+};
+
+typedef struct clink_header_ctx {
+    sg_clink* c;
+    char* format;
+    char* cipher;
+    char* kdf;
+    char* signature;
+    char* luac_hex;
+    uint64_t perm_generation;
+    int have_perm, have_chunks, have_target;
+    int have_fields[C_COUNT];
+    size_t sig_start, sig_end;
+    size_t cap;
+} clink_header_ctx;
+
+typedef struct clink_chunk_ctx {
+    clink_chunk* ch;
+    char* nonce;
+    char* sha;
+    unsigned seen;
+} clink_chunk_ctx;
+
+static int on_clink_chunk_key(jp* p, const char* key, void* raw)
+{
+    clink_chunk_ctx* cc = (clink_chunk_ctx*)raw;
+    if (strcmp(key, "bytes") == 0) { cc->seen |= 1u; return jp_uint(p, &cc->ch->bytes); }
+    if (strcmp(key, "length") == 0) { cc->seen |= 2u; return jp_uint(p, &cc->ch->length); }
+    if (strcmp(key, "nonce") == 0) { cc->seen |= 4u; return jp_string(p, &cc->nonce, NULL, NULL); }
+    if (strcmp(key, "offset") == 0) { cc->seen |= 8u; return jp_uint(p, &cc->ch->offset); }
+    if (strcmp(key, "path") == 0) { cc->seen |= 16u; return jp_string(p, &cc->ch->path, NULL, NULL); }
+    if (strcmp(key, "sha256") == 0) { cc->seen |= 32u; return jp_string(p, &cc->sha, NULL, NULL); }
+    return 0; /* a chunk entry has exactly these keys */
+}
+
+static int parse_clink_chunks(jp* p, clink_header_ctx* h)
+{
+    sg_clink* c = h->c;
+    if (jp_peek(p) != '[') return 0;
+    p->i++;
+    if (jp_peek(p) == ']') return 0; /* at least one chunk */
+    for (;;) {
+        clink_chunk_ctx cc;
+        int ok;
+        if (c->count == SG_CLINK_MAX_CHUNKS) return 0;
+        if (c->count == h->cap) {
+            size_t cap = h->cap ? h->cap * 2 : 16;
+            clink_chunk* grown = (clink_chunk*)realloc(c->chunks, cap * sizeof *grown);
+            if (grown == NULL) return 0;
+            c->chunks = grown;
+            h->cap = cap;
+        }
+        memset(&c->chunks[c->count], 0, sizeof c->chunks[0]);
+        memset(&cc, 0, sizeof cc);
+        cc.ch = &c->chunks[c->count];
+        c->count++;
+        ok = jp_object(p, 2, on_clink_chunk_key, &cc) && cc.seen == 63u
+             && b64url_exact(cc.nonce, cc.ch->nonce, SG_NONCE_BYTES)
+             && hex_exact(cc.sha, cc.ch->sha256, sizeof cc.ch->sha256);
+        free(cc.nonce);
+        free(cc.sha);
+        if (!ok) return 0;
+        if (jp_peek(p) == ',') { p->i++; continue; }
+        if (jp_peek(p) == ']') { p->i++; return 1; }
+        return 0;
+    }
+}
+
+static int on_target_key(jp* p, const char* key, void* raw)
+{
+    clink_header_ctx* h = (clink_header_ctx*)raw;
+    if (strcmp(key, "lua") == 0) { h->have_fields[C_LUA] = 1; return jp_string(p, &h->c->fields[C_LUA], NULL, NULL); }
+    if (strcmp(key, "luacHeader") == 0) return jp_string(p, &h->luac_hex, NULL, NULL);
+    return 0;
+}
+
+static int clink_string_field(jp* p, clink_header_ctx* h, int field)
+{
+    h->have_fields[field] = 1;
+    return jp_string(p, &h->c->fields[field], NULL, NULL);
+}
+
+static int on_clink_header_key(jp* p, const char* key, void* raw)
+{
+    clink_header_ctx* h = (clink_header_ctx*)raw;
+    if (strcmp(key, "chunks") == 0) { h->have_chunks = 1; return parse_clink_chunks(p, h); }
+    if (strcmp(key, "cipher") == 0) return jp_string(p, &h->cipher, NULL, NULL);
+    if (strcmp(key, "deployment") == 0) return clink_string_field(p, h, C_DEPLOYMENT);
+    if (strcmp(key, "fingerprint") == 0) {
+        h->have_fields[C_FINGERPRINT] = 1;
+        if (jp_lit(p, "null")) return 1;
+        return jp_string(p, &h->c->fields[C_FINGERPRINT], NULL, NULL);
+    }
+    if (strcmp(key, "format") == 0) return jp_string(p, &h->format, NULL, NULL);
+    if (strcmp(key, "kdf") == 0) return jp_string(p, &h->kdf, NULL, NULL);
+    if (strcmp(key, "keyId") == 0) return clink_string_field(p, h, C_KEY_ID);
+    if (strcmp(key, "package") == 0) return clink_string_field(p, h, C_PACKAGE);
+    if (strcmp(key, "permGeneration") == 0) { h->have_perm = 1; return jp_uint(p, &h->perm_generation); }
+    if (strcmp(key, "release") == 0) return clink_string_field(p, h, C_RELEASE);
+    if (strcmp(key, "signature") == 0) return jp_string(p, &h->signature, &h->sig_start, &h->sig_end);
+    if (strcmp(key, "signerPublicKey") == 0) return clink_string_field(p, h, C_SIGNER);
+    if (strcmp(key, "strip") == 0) return clink_string_field(p, h, C_STRIP);
+    if (strcmp(key, "target") == 0) { h->have_target = 1; return jp_object(p, 1, on_target_key, h); }
+    if (strcmp(key, "version") == 0) return clink_string_field(p, h, C_VERSION);
+    return jp_skip_value(p, 1);
+}
+
+static int clink_ok(const sg_clink* c) { return c != NULL && c->magic == SG_CLINK_MAGIC; }
+
+static void clink_release(sg_clink* c)
+{
+    size_t i;
+    for (i = 0; i < C_COUNT; i++) free(c->fields[i]);
+    for (i = 0; i < c->count; i++) free(c->chunks[i].path);
+    free(c->chunks);
+    if (c->key != NULL) sodium_free(c->key);
+    sodium_memzero(c, sizeof *c);
+    free(c);
+}
+
+int SG_CALL sg_clink_container_open(const uint8_t* data, size_t len, const uint8_t* trusted_signer, sg_clink** out_container)
+{
+    sg_clink* c = NULL;
+    clink_header_ctx h;
+    jp p;
+    uint32_t header_len;
+    uint8_t signer[SG_PUBLIC_KEY_BYTES];
+    uint8_t signature[SG_SIGNATURE_BYTES];
+    uint64_t expected = 0;
+    size_t i, j;
+    int rc;
+
+    if (out_container == NULL) return SG_ERR_INVALID_ARGUMENT;
+    *out_container = NULL;
+    if (data == NULL) return SG_ERR_INVALID_ARGUMENT;
+    rc = ensure_ready();
+    if (rc != SG_OK) return rc;
+    memset(&h, 0, sizeof h);
+
+    if (len < PREAMBLE_BYTES || memcmp(data, "SGCE", 4) != 0 || data[4] != 1 || data[5] != 0 || data[6] != 0 || data[7] != 0)
+        return SG_ERR_BAD_CONTAINER;
+    header_len = (uint32_t)data[8] | ((uint32_t)data[9] << 8) | ((uint32_t)data[10] << 16) | ((uint32_t)data[11] << 24);
+    if (header_len == 0 || header_len > SG_ASSET_MAX_HEADER_BYTES || header_len > len - PREAMBLE_BYTES) return SG_ERR_BAD_CONTAINER;
+
+    c = (sg_clink*)calloc(1, sizeof *c);
+    if (c == NULL) return SG_ERR_NO_MEMORY;
+    h.c = c;
+    p.s = data + PREAMBLE_BYTES;
+    p.n = header_len;
+    p.i = 0;
+
+    rc = SG_ERR_BAD_CONTAINER;
+    if (!jp_object(&p, 0, on_clink_header_key, &h) || p.i != p.n) goto done;
+    if (h.format == NULL || strcmp(h.format, CLINK_FORMAT) != 0 || h.cipher == NULL || strcmp(h.cipher, CLINK_CIPHER) != 0
+        || h.kdf == NULL || strcmp(h.kdf, KDF) != 0)
+        goto done;
+    for (i = 0; i < C_COUNT; i++) if (!h.have_fields[i]) goto done;
+    if (!h.have_chunks || !h.have_target || !h.have_perm || h.signature == NULL) goto done;
+    /* Opcode permutation is specified, not built: only generation 0 (stock Lua 5.4 opcodes) loads. */
+    if (h.perm_generation != 0) goto done;
+    if (strcmp(c->fields[C_STRIP], "full") != 0 && strcmp(c->fields[C_STRIP], "names") != 0) goto done;
+    if (!hex_exact(h.luac_hex, c->luac_header, sizeof c->luac_header)) goto done;
+    if (strlen(c->fields[C_KEY_ID]) != SG_ASSET_KEY_ID_CHARS) goto done;
+
+    if (!b64url_exact(c->fields[C_SIGNER], signer, sizeof signer) || !b64url_exact(h.signature, signature, sizeof signature)) goto done;
+    if (trusted_signer != NULL && sodium_memcmp(trusted_signer, signer, sizeof signer) != 0) { rc = SG_ERR_UNTRUSTED_SIGNER; goto done; }
+    {
+        size_t signed_len = header_len - (h.sig_end - h.sig_start);
+        uint8_t* message = (uint8_t*)malloc(signed_len);
+        int verified;
+        if (message == NULL) { rc = SG_ERR_NO_MEMORY; goto done; }
+        memcpy(message, p.s, h.sig_start);
+        memcpy(message + h.sig_start, p.s + h.sig_end, header_len - h.sig_end);
+        verified = crypto_sign_verify_detached(signature, message, signed_len, signer) == 0;
+        free(message);
+        if (!verified) { rc = SG_ERR_BAD_SIGNATURE; goto done; }
+    }
+
+    /* The chunk table: safe unique paths, sizes and contiguous ranges. */
+    for (i = 0; i < c->count; i++) {
+        clink_chunk* ch = &c->chunks[i];
+        if (!sg_path_is_safe(ch->path, strlen(ch->path))) { rc = SG_ERR_UNSAFE_PATH; goto done; }
+        if (ch->bytes < SG_CLINK_LUAC_HEADER_BYTES || ch->bytes > SG_CLINK_MAX_CHUNK_BYTES) goto done;
+        if (ch->offset != expected || ch->length != ch->bytes + SG_TAG_BYTES) goto done;
+        for (j = 0; j < i; j++) if (strcmp(c->chunks[j].path, ch->path) == 0) goto done;
+        expected += ch->length;
+    }
+    if (expected != (uint64_t)(len - PREAMBLE_BYTES - header_len)) goto done;
+    c->body = data + PREAMBLE_BYTES + header_len;
+
+    c->magic = SG_CLINK_MAGIC;
+    *out_container = c;
+    c = NULL;
+    rc = SG_OK;
+done:
+    free(h.format);
+    free(h.cipher);
+    free(h.kdf);
+    free(h.signature);
+    free(h.luac_hex);
+    if (c != NULL) clink_release(c);
+    return rc;
+}
+
+int SG_CALL sg_clink_target_check(sg_clink* c, const uint8_t* luac_header, size_t len)
+{
+    if (!clink_ok(c) || luac_header == NULL || len < SG_CLINK_LUAC_HEADER_BYTES) return SG_ERR_INVALID_ARGUMENT;
+    if (memcmp(c->luac_header, luac_header, SG_CLINK_LUAC_HEADER_BYTES) != 0) {
+        c->target_ok = 0;
+        return SG_ERR_TARGET_MISMATCH;
+    }
+    c->target_ok = 1;
+    return SG_OK;
+}
+
+int SG_CALL sg_clink_container_field(const sg_clink* c, const char* name, const char** out_value)
+{
+    size_t i;
+    if (!clink_ok(c) || name == NULL || out_value == NULL) return SG_ERR_INVALID_ARGUMENT;
+    for (i = 0; i < C_COUNT; i++) {
+        if (strcmp(name, CLINK_FIELD_NAMES[i]) == 0) {
+            if (c->fields[i] == NULL) return SG_ERR_NOT_FOUND;
+            *out_value = c->fields[i];
+            return SG_OK;
+        }
+    }
+    return SG_ERR_NOT_FOUND;
+}
+
+int SG_CALL sg_clink_chunk_count(const sg_clink* c, size_t* out_count)
+{
+    if (!clink_ok(c) || out_count == NULL) return SG_ERR_INVALID_ARGUMENT;
+    *out_count = c->count;
+    return SG_OK;
+}
+
+int SG_CALL sg_clink_chunk_at(const sg_clink* c, size_t index, const char** out_path, size_t* out_size)
+{
+    if (!clink_ok(c)) return SG_ERR_INVALID_ARGUMENT;
+    if (index >= c->count) return SG_ERR_NOT_FOUND;
+    if (out_path != NULL) *out_path = c->chunks[index].path;
+    if (out_size != NULL) *out_size = (size_t)c->chunks[index].bytes;
+    return SG_OK;
+}
+
+int SG_CALL sg_clink_container_bind(sg_clink* c, const sg_asset_key* key)
+{
+    uint8_t* copy;
+    if (!clink_ok(c) || !key_ok(key) || c->key != NULL) return SG_ERR_INVALID_ARGUMENT;
+    if (key->domain != KEY_DOMAIN_CLIENT_CODE) return SG_ERR_KEY_MISMATCH; /* an asset key never opens client code */
+    if (sodium_memcmp(key->id, c->fields[C_KEY_ID], SG_ASSET_KEY_ID_CHARS) != 0) return SG_ERR_KEY_MISMATCH;
+    copy = (uint8_t*)sodium_malloc(SG_ASSET_KEY_BYTES);
+    if (copy == NULL) return SG_ERR_NO_MEMORY;
+    memcpy(copy, key->key, SG_ASSET_KEY_BYTES);
+    sodium_mprotect_readonly(copy);
+    c->key = copy;
+    return SG_OK;
+}
+
+int SG_CALL sg_clink_lua_load(const sg_clink* c, const char* path, void* lua_state, sg_lua_loadbufferx_fn loadbufferx, int* out_lua_status)
+{
+    const clink_chunk* ch = NULL;
+    uint8_t* plain = NULL;
+    uint8_t* aad = NULL;
+    char* name = NULL;
+    uint8_t digest[crypto_hash_sha256_BYTES];
+    unsigned long long got = 0;
+    size_t i, a, pk, v, pa, o = 0;
+    int rc, status;
+
+    if (out_lua_status != NULL) *out_lua_status = 0;
+    if (!clink_ok(c) || path == NULL || lua_state == NULL || loadbufferx == NULL) return SG_ERR_INVALID_ARGUMENT;
+    if (c->key == NULL || !c->target_ok) return SG_ERR_INVALID_ARGUMENT;
+    for (i = 0; i < c->count; i++) {
+        if (strcmp(c->chunks[i].path, path) == 0) { ch = &c->chunks[i]; break; }
+    }
+    if (ch == NULL) return SG_ERR_NOT_FOUND;
+
+    /* aad = "scriptgo-client-escrow/1\n" package "@" version "\n" path */
+    a = sizeof CLINK_FORMAT - 1; pk = strlen(c->fields[C_PACKAGE]); v = strlen(c->fields[C_VERSION]); pa = strlen(ch->path);
+    aad = (uint8_t*)malloc(a + 1 + pk + 1 + v + 1 + pa);
+    name = (char*)malloc(pa + 2);
+    plain = (uint8_t*)sodium_malloc((size_t)ch->bytes);
+    if (aad == NULL || name == NULL || plain == NULL) { rc = SG_ERR_NO_MEMORY; goto done; }
+    memcpy(aad + o, CLINK_FORMAT, a); o += a; aad[o++] = '\n';
+    memcpy(aad + o, c->fields[C_PACKAGE], pk); o += pk; aad[o++] = '@';
+    memcpy(aad + o, c->fields[C_VERSION], v); o += v; aad[o++] = '\n';
+    memcpy(aad + o, ch->path, pa); o += pa;
+    name[0] = '=';
+    memcpy(name + 1, ch->path, pa + 1);
+
+    if (crypto_aead_aes256gcm_decrypt(plain, &got, NULL, c->body + ch->offset, (unsigned long long)ch->length, aad, o, ch->nonce, c->key) != 0
+        || got != ch->bytes) {
+        rc = SG_ERR_DECRYPT;
+        goto done;
+    }
+    crypto_hash_sha256(digest, plain, (unsigned long long)ch->bytes);
+    if (sodium_memcmp(digest, ch->sha256, sizeof digest) != 0) { rc = SG_ERR_PAYLOAD_HASH; goto done; }
+    /* Only bytecode for the VM that was checked ever reaches luaL_loadbufferx. */
+    if (memcmp(plain, c->luac_header, SG_CLINK_LUAC_HEADER_BYTES) != 0) { rc = SG_ERR_TARGET_MISMATCH; goto done; }
+
+    status = loadbufferx(lua_state, (const char*)plain, (size_t)ch->bytes, name, "b");
+    if (out_lua_status != NULL) *out_lua_status = status;
+    rc = status == 0 ? SG_OK : SG_ERR_LUA_LOAD;
+done:
+    if (plain != NULL) sodium_free(plain); /* wipes */
+    free(aad);
+    free(name);
+    sodium_memzero(digest, sizeof digest);
+    return rc;
+}
+
+void SG_CALL sg_clink_container_free(sg_clink* c)
+{
+    if (!clink_ok(c)) return;
+    clink_release(c);
 }

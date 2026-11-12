@@ -1,6 +1,7 @@
 // scriptgo publish [dir] [--package <slug>] --owns-code [--targets-proprietary-game] [--dry-run]
 //                  [--escrow [--escrow-ignore <glob>]...] [--asset-rights original|game-edits|game-extracted]
-//                  [--asset-escrow] [--private | --visibility public|unlisted|private]
+//                  [--asset-escrow] [--client-escrow [--client-strip full|names] [--client-lines <file>]]
+//                  [--private | --visibility public|unlisted|private]
 // scriptgo publish --bundle <file.escrow.zip> --escrow-key <file.json> --package <slug> --owns-code
 //
 // --escrow publishes a PROTECTED release: the CLI builds the encrypted bundle here, signs its
@@ -25,7 +26,15 @@
 // sealed in a `scriptgo-asset-escrow/1` container under a key per deployment; the key goes to the
 // licensed, bound server only, which hands it to each player's session (docs/spec/assets.md, "Asset
 // escrow"). Encrypted at rest and in transit, revocable; a player's game still holds what it draws.
-import { existsSync, readFileSync } from "node:fs";
+// --client-escrow (OPEN//77 releases): every deployment's copy carries its client_scripts as stripped
+// Lua bytecode sealed in a `scriptgo-client-escrow/1` container (`clientcode.sgce`), a stub at each
+// script's path; the key goes to the licensed, bound server only, which hands it to each player's
+// session (docs/spec/client-escrow.md). The platform compiles from the uploaded source; this command
+// compiles the same scripts first to refuse an error early and writes your line map (--client-lines,
+// default ./<slug>-<version>.client-lines.json), which `scriptgo escrow lines` uses to turn an error's
+// positions back into source lines. A player can still read their own memory and decompile the
+// bytecode into de-identified logic: deterrence, licence binding and traceability, not secrecy.
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { readBundle } from "@scriptgo/escrow";
 import { Category } from "@scriptgo/shared";
@@ -35,6 +44,7 @@ import { keyIdOf } from "../lib/release-signature.ts";
 import { uploadAssetErrors } from "../lib/assets.ts";
 import { hasAssets } from "@scriptgo/manifest";
 import { listFiles, readResource } from "../lib/sdk.ts";
+import { buildClientLineMap } from "../lib/client-escrow.ts";
 import { scriptgoArchive } from "./pack.ts";
 import { ApiClient, ApiError, describeError } from "./_api-client.ts";
 
@@ -66,7 +76,7 @@ export async function buildArchive(dir: string) {
   if (assetErrors.length > 0) throw new Error(assetErrors.map((e) => `${e.code}: ${e.message}`).join("\n"));
   const { zip, files, errors } = await scriptgoArchive(m, listFiles(res.root), res.root, res.manifestFile);
   if (errors.length > 0) throw new Error(errors.map((e) => `${e.code}: ${e.message}`).join("\n"));
-  return { zip, name: m.name, version: m.version, title: m.title, description: m.description, category: m.category, license: m.license, files, manifest: m, manifestFile: res.manifestFile };
+  return { zip, name: m.name, version: m.version, title: m.title, description: m.description, category: m.category, license: m.license, files, manifest: m, manifestFile: res.manifestFile, root: res.root, all: listFiles(res.root) };
 }
 
 interface Upload {
@@ -92,12 +102,15 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const VISIBILITIES = ["public", "unlisted", "private"];
 
 export async function run(args: string[]): Promise<number> {
-  const a = parseArgs(args, { booleans: ["help", "owns-code", "targets-proprietary-game", "dry-run", "escrow", "asset-escrow", "private"], repeatable: ["escrow-ignore"] });
+  const a = parseArgs(args, { booleans: ["help", "owns-code", "targets-proprietary-game", "dry-run", "escrow", "asset-escrow", "client-escrow", "private"], repeatable: ["escrow-ignore"] });
   if (a.bools.has("help")) {
     console.log(
       "scriptgo publish [resourceDir] [--package <slug>] --owns-code [--targets-proprietary-game] [--dry-run] [--timeout <seconds>]\n" +
         "                 [--escrow [--escrow-ignore <glob>]...]   protect the release: encrypted bundle, key handed to the master\n" +
         "                 [--asset-rights original|game-edits|game-extracted]   required for a release with assets\n" +
+        "                 [--asset-escrow]   seal an OPEN//77 release's preloads per deployment\n" +
+        "                 [--client-escrow [--client-strip full|names] [--client-lines <file>]]   ship an OPEN//77 release's\n" +
+        "                                    client_scripts as encrypted, stripped bytecode; writes your line map\n" +
         "                 [--private | --visibility public|unlisted|private]   who sees the package (set before the upload)\n" +
         "scriptgo publish --bundle <file.escrow.zip> --escrow-key <file.json> --package <slug> --owns-code",
     );
@@ -122,6 +135,19 @@ export async function run(args: string[]): Promise<number> {
     console.error(`scriptgo publish: --asset-rights takes ${Object.keys(ASSET_RIGHTS).join(", ")}`);
     return 2;
   }
+  const clientStrip = a.flags["client-strip"] ?? "full";
+  if (clientStrip !== "full" && clientStrip !== "names") {
+    console.error("scriptgo publish: --client-strip takes full (default: no names, no lines) or names (names stripped, lines kept)");
+    return 2;
+  }
+  if ((a.flags["client-strip"] || a.flags["client-lines"]) && !a.bools.has("client-escrow")) {
+    console.error("scriptgo publish: --client-strip and --client-lines go with --client-escrow");
+    return 2;
+  }
+  if (prebuilt && a.bools.has("client-escrow")) {
+    console.error("scriptgo publish: --client-escrow publishes from the resource folder, not from a prebuilt --bundle");
+    return 2;
+  }
   const dir = a.positional[0] ?? ".";
   if (!prebuilt && !existsSync(dir)) {
     console.error(`scriptgo publish: ${dir} does not exist`);
@@ -140,10 +166,40 @@ export async function run(args: string[]): Promise<number> {
       console.error("scriptgo publish: --asset-escrow and --escrow cannot be combined: a release with assets is delivered per buyer, its server code is not escrowed");
       return 2;
     }
-    if (a.bools.has("dry-run") && !a.bools.has("escrow")) return 0;
+    if (a.bools.has("client-escrow") && a.bools.has("escrow")) {
+      console.error("scriptgo publish: --client-escrow and --escrow cannot be combined in v1: a release with client escrow is delivered per buyer, its server code is not escrowed");
+      return 2;
+    }
   }
 
   const api = ApiClient.fromEnvironment({ requireToken: !a.bools.has("dry-run") });
+  // Client escrow: compile the client scripts as the platform will, before anything is uploaded.
+  let clientLines: string | null = null;
+  if (pack && a.bools.has("client-escrow")) {
+    let username = pack.manifest.author ?? "creator";
+    if (!a.bools.has("dry-run")) {
+      try {
+        const me = (await api.get<{ creatorProfile: { username: string } | null }>("/v1/me")).data;
+        if (!me.creatorProfile?.username) throw new Error("you have no creator profile yet: create one on the website (Dashboard) before publishing");
+        username = me.creatorProfile.username;
+      } catch (e) {
+        console.error(`scriptgo publish: ${describeError(e)}`);
+        return 1;
+      }
+    }
+    const built = buildClientLineMap(pack.root, pack.manifest, pack.all, { package: `${username}//${slug}`, strip: clientStrip });
+    if (built.errors.length > 0) {
+      for (const e of built.errors) console.error(`error ${e.code}: ${e.message}`);
+      return 1;
+    }
+    clientLines = a.flags["client-lines"] ?? `${slug}-${pack.version}.client-lines.json`;
+    writeFileSync(clientLines, JSON.stringify(built.lines, null, 2) + "\n");
+    const bytes = built.compiled.reduce((n, c) => n + c.bytecode.length, 0);
+    console.log(`client escrow (${clientStrip} strip): ${built.scripts.length} client script(s) compiled, ${bytes} bytes of bytecode: ${built.scripts.join(", ")}`);
+    console.log(`  line map ${clientLines}${clientStrip === "names" ? " (a names strip keeps line numbers in the bytecode: the map is informational)" : ""}; keep it, it is not uploaded`);
+  }
+  if (pack && a.bools.has("dry-run") && !a.bools.has("escrow")) return 0;
+
   try {
     // What gets uploaded: the plain archive, a bundle built now, or a bundle packed earlier.
     let upload: Upload;
@@ -203,6 +259,10 @@ export async function run(args: string[]): Promise<number> {
     // The content key travels once, in this authenticated request; the master seals it at rest.
     if (upload.contentKey) form.append("contentKey", upload.contentKey);
     if (a.bools.has("asset-escrow")) form.append("assetEscrow", "true");
+    if (a.bools.has("client-escrow")) {
+      form.append("clientEscrow", "true");
+      form.append("clientStrip", clientStrip);
+    }
     let release = (await api.request<Release>("POST", `/v1/creator/packages/${encodeURIComponent(slug)}/releases`, { form })).data;
     upload.contentKey = null;
     // A release that failed validation stores nothing, so its hash is only checked when it is kept.
@@ -241,6 +301,10 @@ export async function run(args: string[]): Promise<number> {
     const published = (await api.post<Release>(`/v1/creator/releases/${release.id}/publish`)).data;
     const me = (await api.get<{ creatorProfile: { username: string } | null }>("/v1/me")).data;
     console.log(`published ${me.creatorProfile?.username ?? "?"}//${slug}@${published.version} (sha256 ${published.sha256})`);
+    if (clientLines) {
+      console.log(`client escrow: every copy carries the client scripts as encrypted bytecode (clientcode.sgce); resolve an error's positions with: scriptgo escrow lines ${clientLines} "<message>"`);
+      console.log("a player's game runs the bytecode, so a player who reads their own memory can decompile it into de-identified logic: this is deterrence and traceability, not secrecy.");
+    }
     if (upload.escrowSummary) {
       console.log(`protected release: ${upload.escrowSummary}; the content key is sealed on the master and was not written to disk here`);
       console.log("buyers get the encrypted bundle; a server gets the key only when licensed and bound. This is deterrence and traceability, not a guarantee against the operator of a licensed host.");

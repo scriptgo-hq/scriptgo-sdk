@@ -29,9 +29,12 @@ internal static partial class EscrowNative
     internal const int ErrBadContainer = -21;
     internal const int ErrKeyMismatch = -22;
     internal const int ErrUntrustedSigner = -23;
+    internal const int ErrTargetMismatch = -24;
 
     internal const int AssetWrapServer = 1;
     internal const int AssetWrapClient = 2;
+    internal const int ClientWrapServer = 3;
+    internal const int ClientWrapSession = 4;
 
     // The resolver must be in place before the first call into the library: a static constructor
     // runs before any member of this class is used.
@@ -153,6 +156,32 @@ internal static partial class EscrowNative
     [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     internal static partial void sg_asset_reader_free(IntPtr reader);
 
+    // ---------------------------------------------------------------- client code escrow (scriptgo-client-escrow/1)
+
+    [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static unsafe partial int sg_clink_container_open(byte* data, nuint length, byte* trustedSigner, out IntPtr container);
+
+    [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static unsafe partial int sg_clink_target_check(ClientCodeContainerHandle container, byte* luacHeader, nuint length);
+
+    [LibraryImport(Library, StringMarshalling = StringMarshalling.Utf8), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial int sg_clink_container_field(ClientCodeContainerHandle container, string name, out IntPtr value);
+
+    [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial int sg_clink_chunk_count(ClientCodeContainerHandle container, out nuint count);
+
+    [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial int sg_clink_chunk_at(ClientCodeContainerHandle container, nuint index, out IntPtr path, out nuint size);
+
+    [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial int sg_clink_container_bind(ClientCodeContainerHandle container, AssetKeyHandle key);
+
+    [LibraryImport(Library, StringMarshalling = StringMarshalling.Utf8), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial int sg_clink_lua_load(ClientCodeContainerHandle container, string path, IntPtr luaState, IntPtr loadBufferX, out int luaStatus);
+
+    [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial void sg_clink_container_free(IntPtr container);
+
     internal static string ErrorText(int code) => Marshal.PtrToStringUTF8(sg_strerror(code)) ?? $"error {code}";
 }
 
@@ -211,6 +240,25 @@ internal sealed unsafe class AssetContainerHandle : SafeHandle
     protected override bool ReleaseHandle()
     {
         EscrowNative.sg_asset_container_free(handle); // wipes the key, frees the container
+        if (_data != IntPtr.Zero) NativeMemory.Free((void*)_data);
+        return true;
+    }
+}
+
+/// <summary>Owns an sg_clink container and the unmanaged copy of the bytes it borrows.</summary>
+internal sealed unsafe class ClientCodeContainerHandle : SafeHandle
+{
+    private readonly IntPtr _data;
+    public ClientCodeContainerHandle() : base(IntPtr.Zero, ownsHandle: true) { }
+    public ClientCodeContainerHandle(IntPtr handle, IntPtr data) : base(IntPtr.Zero, ownsHandle: true)
+    {
+        _data = data;
+        SetHandle(handle);
+    }
+    public override bool IsInvalid => handle == IntPtr.Zero;
+    protected override bool ReleaseHandle()
+    {
+        EscrowNative.sg_clink_container_free(handle); // wipes the key, frees the container
         if (_data != IntPtr.Zero) NativeMemory.Free((void*)_data);
         return true;
     }

@@ -203,8 +203,11 @@ export const KeyReleaseBody = z
      * `assets`: the content key of this deployment's copy of a release whose OPEN//77 preloads are
      * escrowed (assets.md, "Asset escrow"), wrapped to the bound server with the server aad; the
      * server re-wraps it to each player's session. Needs a deployment token.
+     * `client`: the client-code key of this deployment's copy of a release with client code escrow
+     * (client-escrow.md): the same shape and checks as `assets`, the client-escrow server aad, a key
+     * in its own domain. The server re-wraps it to each player's session.
      */
-    kind: z.enum(["code", "assets"]).default("code"),
+    kind: z.enum(["code", "assets", "client"]).default("code"),
   })
   .refine((b) => Boolean(b.licenseKey) !== Boolean(b.deploymentToken), {
     message: "Send exactly one of licenseKey or deploymentToken.",
@@ -234,7 +237,7 @@ export const KeyReleaseResult = z.object({
   /** When this wrapped key stops being accepted; the loader re-fetches before it. */
   expiresAt: Timestamp.nullable(),
   /**
-   * `kind: "assets"` only (absent for code): the id of the content key (`keyId` of every container
+   * `kind: "assets"` and `"client"` only (absent for code): the id of the content key (`keyId` of every container
    * of this deployment's copy), and the version the key belongs to. A server checks the key it
    * unwraps has this id before it hands it to any player.
    */

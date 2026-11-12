@@ -159,6 +159,18 @@ export function appendStoredEntry(zip: Uint8Array, path: string, data: Buffer): 
   const archive = readZip(src);
   const dir = path.slice(0, path.lastIndexOf(".scriptgo/"));
   if (archive.entries.some((e) => e.name.startsWith(`${dir}.scriptgo/`))) throw new ZipError("reserved_path", `the archive already holds ${dir}.scriptgo/`);
+  return appendEntry(src, archive, path, data);
+}
+
+/** Appends one stored entry the archive does not already hold (same layout as `appendStoredEntry`). */
+export function appendNewStoredEntry(zip: Uint8Array, path: string, data: Buffer): Buffer {
+  const src = Buffer.from(zip.buffer, zip.byteOffset, zip.byteLength);
+  const archive = readZip(src);
+  if (archive.entries.some((e) => e.name === path)) throw new ZipError("reserved_path", `the archive already holds ${path}`);
+  return appendEntry(src, archive, path, data);
+}
+
+function appendEntry(src: Buffer, archive: ReturnType<typeof readZip>, path: string, data: Buffer): Buffer {
   if (archive.entries.length + 1 >= 0xffff) throw new ZipError("too_many_entries", "too many entries to add one");
   const name = Buffer.from(path, "utf8");
   const crc = crc32(data);
@@ -228,6 +240,8 @@ export interface FingerprintedBuild {
   marker: string;
   /** Every stamped container, with the SHA-256 it has in this build (what players' copies carry). */
   containers: Array<{ path: string; sha256: string; bytes: number }>;
+  /** The client-escrow container of this copy, when the release escrows client scripts. */
+  clientEscrow?: { path: string; sha256: string; bytes: number };
 }
 
 const sha256 = (b: Uint8Array): string => createHash("sha256").update(b).digest("hex");
@@ -253,6 +267,13 @@ export function buildFingerprinted(opts: {
    * OPEN//77 preload into its escrowed form). Returns the bytes to stamp; called in path order.
    */
   transform?: (container: { path: string; entry: string; data: Buffer }) => Buffer;
+  /**
+   * Client code escrow (client-escrow.ts `clientEscrowCopy`): given this copy's marker and a reader
+   * of the release archive's entries, returns the stubs that replace the escrowed client scripts and
+   * the container entry, which is appended after the stamped containers and before the archive's own
+   * fingerprint entry.
+   */
+  clientEscrow?: (ctx: { marker: string; read: (entry: string) => Buffer }) => { stubs: Map<string, Buffer>; entry: { path: string; data: Buffer } };
 }): FingerprintedBuild {
   const src = Buffer.from(opts.zip.buffer, opts.zip.byteOffset, opts.zip.byteLength);
   const archive = readZip(src);
@@ -274,9 +295,28 @@ export function buildFingerprinted(opts: {
     replacements.set(path, stamped);
     containers.push({ path, sha256: sha256(stamped), bytes: stamped.length });
   }
-  const withContainers = replacements.size > 0 ? replaceEntries(src, replacements) : src;
-  const zip = appendStoredEntry(withContainers, `${opts.root}${FINGERPRINT_ENTRY}`, fingerprintEntry(opts.identity, "", opts.secret, opts.signerSeed).bytes);
-  return { zip, sha256: sha256(zip), marker: fingerprintMarker(opts.identity, opts.secret), containers };
+  const marker = fingerprintMarker(opts.identity, opts.secret);
+  let client: { stubs: Map<string, Buffer>; entry: { path: string; data: Buffer } } | null = null;
+  if (opts.clientEscrow) {
+    client = opts.clientEscrow({
+      marker,
+      read: (name) => {
+        const e = archive.entries.find((x) => x.name === name);
+        if (!e) throw new ZipError("missing_entry", `${name}: not in the release archive`);
+        return readEntry(src, e);
+      },
+    });
+    for (const [name, stub] of client.stubs) {
+      if (replacements.has(name)) throw new ZipError("bad_entry", `${name}: both a container and an escrowed client script`);
+      replacements.set(name, stub);
+    }
+  }
+  let built = replacements.size > 0 ? replaceEntries(src, replacements) : src;
+  if (client) built = appendNewStoredEntry(built, client.entry.path, client.entry.data);
+  const zip = appendStoredEntry(built, `${opts.root}${FINGERPRINT_ENTRY}`, fingerprintEntry(opts.identity, "", opts.secret, opts.signerSeed).bytes);
+  const out: FingerprintedBuild = { zip, sha256: sha256(zip), marker, containers };
+  if (client) out.clientEscrow = { path: client.entry.path, sha256: sha256(client.entry.data), bytes: client.entry.data.length };
+  return out;
 }
 
 function readEntry(src: Buffer, entry: ZipEntry): Buffer {

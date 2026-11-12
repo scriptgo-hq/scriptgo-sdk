@@ -1,0 +1,94 @@
+{
+  "note": "Test-only material. Every value is reproduced by packages/escrow/test/client-escrow.test.ts; see docs/spec/client-escrow.md.",
+  "package": "kestrel//night-market",
+  "version": "2.0.0",
+  "deployment": "dep_7",
+  "target": {
+    "lua": "5.4.8",
+    "luacHeader": "1b4c7561540019930d0a1a0a04080878560000000000000000000000287740"
+  },
+  "sources": {
+    "client/main.lua": "-- the vector's client entry script\nSGCE_LOADED = (SGCE_LOADED or 0) + 1\nlocal tag = \"sgce-vector-constant\"\nreturn { answer = 6 * 7, tag = tag }\n",
+    "client/fail.lua": "local function deep(t)\n  return t.missing.field\nend\nreturn deep\n"
+  },
+  "chunks": [
+    {
+      "path": "client/fail.lua",
+      "bytes": 158,
+      "sha256": "31da0c38daa2d522ea7a15f204fd64be5eaa869f32a3d77aa90790a1b6487c11",
+      "bytecodeBase64": "G0x1YVQAGZMNChoKBAgIeFYAAAAAAAAAAAAAACh3QAGoPW5pZ2h0LW1hcmtldEAyLjAuMC9jbGllbnQvZmFpbC5sdWE6cG9zgIQAAQKEUQAAAE8AAABGAAIBxgABAYCBAQAAgYCEiAEAAoSOAAAAjgABAcgAAgDHAAEAggSIbWlzc2luZwSGZmllbGSAgIQBAQEBgICAhAEBAQGAgIA=",
+      "lines": [
+        1,
+        3,
+        4,
+        4,
+        2,
+        2,
+        2,
+        3
+      ]
+    },
+    {
+      "path": "client/main.lua",
+      "bytes": 220,
+      "sha256": "9c8f88eea015367a3f814c1f3ac2456ca2e05c2be0338e5cd173ccdd975e0107",
+      "bytecodeBase64": "G0x1YVQAGZMNChoKBAgIeFYAAAAAAAAAAAAAACh3QAGoPW5pZ2h0LW1hcmtldEAyLjAuMC9jbGllbnQvbWFpbi5sdWE6cG9zgI8AAQKPUQAAAAsAAABCgAAAOAAAgAGA/38VAACALwCABg8AAAADgAAAkwACAFIAAACSgAIDkgAEAMYAAgHGAAEBhQSMU0dDRV9MT0FERUQElXNnY2UtdmVjdG9yLWNvbnN0YW50BIdhbnN3ZXIDKgAAAAAAAAAEhHRhZ4EBAACAjwEBAQEBAQEBAQEBAQEBAYCAgA==",
+      "lines": [
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        3,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4
+      ]
+    }
+  ],
+  "releaseSecret": "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY=",
+  "contentKey": "dh8Y94bpkoH+VIJvWjKf+xzaMFu8pyoix8cpusRnAhk=",
+  "keyId": "GvQ0yNgbxj_goxHLm14Qig",
+  "signerPublicKey": "xoImN8fTEOxXYnvgC6JZ0lN0n0qvZERwz_vlOjX3MkI",
+  "containerBase64": "U0dDRQEAAAB8AwAAeyJjaHVua3MiOlt7ImJ5dGVzIjoxNTgsImxlbmd0aCI6MTc0LCJub25jZSI6Im01VTJsblRzcVFhWmROS0IiLCJvZmZzZXQiOjAsInBhdGgiOiJjbGllbnQvZmFpbC5sdWEiLCJzaGEyNTYiOiIzMWRhMGMzOGRhYTJkNTIyZWE3YTE1ZjIwNGZkNjRiZTVlYWE4NjlmMzJhM2Q3N2FhOTA3OTBhMWI2NDg3YzExIn0seyJieXRlcyI6MjIwLCJsZW5ndGgiOjIzNiwibm9uY2UiOiI1WnBTOGR6ejhITVpGYUJxIiwib2Zmc2V0IjoxNzQsInBhdGgiOiJjbGllbnQvbWFpbi5sdWEiLCJzaGEyNTYiOiI5YzhmODhlZWEwMTUzNjdhM2Y4MTRjMWYzYWMyNDU2Y2EyZTA1YzJiZTAzMzhlNWNkMTczY2NkZDk3NWUwMTA3In1dLCJjaXBoZXIiOiJBRVMtMjU2LUdDTSIsImRlcGxveW1lbnQiOiJkZXBfNyIsImZpbmdlcnByaW50IjoiZnBfdmVjdG9yX21hcmtlciIsImZvcm1hdCI6InNjcmlwdGdvLWNsaWVudC1lc2Nyb3cvMSIsImtkZiI6IkhLREYtU0hBMjU2K1gyNTUxOSIsImtleUlkIjoiR3ZRMHlOZ2J4al9nb3hITG0xNFFpZyIsInBhY2thZ2UiOiJrZXN0cmVsLy9uaWdodC1tYXJrZXQiLCJwZXJtR2VuZXJhdGlvbiI6MCwicmVsZWFzZSI6InJlbF8wMSIsInNpZ25hdHVyZSI6IkhKUlN3d3RNemxrOG1FTE14eWxhd0FpT2xOaWh0V0hjWEc0X1AzdjAzM2taWlNlZkxIenJJbXlrTWw3Y0IxS1ZtN0JiTlZmMS1Vdi1yOUlTNkRXYkFnIiwic2lnbmVyUHVibGljS2V5IjoieG9JbU44ZlRFT3hYWW52Z0M2SlowbE4wbjBxdlpFUnd6X3ZsT2pYM01rSSIsInN0cmlwIjoiZnVsbCIsInRhcmdldCI6eyJsdWEiOiI1LjQuOCIsImx1YWNIZWFkZXIiOiIxYjRjNzU2MTU0MDAxOTkzMGQwYTFhMGEwNDA4MDg3ODU2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDI4Nzc0MCJ9LCJ2ZXJzaW9uIjoiMi4wLjAifS43LhiiFG26F+2uh5nfTZK1fshIA6IjXgMIi17lzsxCPqizzUHn9i4mOF1MLc5u8msGKEfR3cxcsj7EZZ2hLN68Covtef3pcqhIuHd26qXl5sbsqjL7hCFH4q+LM0kIZ2VQKGWR/AFr+4UUHHNhV2KNpdluA4D2O5OqsPwqC9dx3Xlr8mhbd38ijMGi+FrhafJGaCNkWlPk4ZOYIm4KvAIFjRphDj5AGVYyYsEmPX5sdbBjvC1ADyyQuzq16vHVU6NRmCM3VvN1QLd/rATHc/LondCMJbuR6aS4amEjT8sqk/qeNhQGRCm4t9a3N+Rx4L+GFNBhnm/i2GsfaKd1m4B8GcmOX5RUvUOawfWr+uFpo0F/dudQgJ6AgsjYj4rml1Kdyv1+wssN7iK+f8WPEuUxBJlakv0dQ0loSo/WOvG9lPvFR8L37D7zz23X8fbbfNx9+j1fJx5z1mAMoL4+U1nUzbS9mIvLo2Q/7tDBYWejtWQWcO0vEYyxYKMhcJNe8VBjT1ol6UQJwRS9BZTWVhU72RF1wu6R9jpZ",
+  "containerSha256": "c6cf8625840dde340d911948bb1790f1174869ac7db780ee9e61881b7e3779b5",
+  "foreignTargetBase64": "U0dDRQEAAAB8AwAAeyJjaHVua3MiOlt7ImJ5dGVzIjoxNTgsImxlbmd0aCI6MTc0LCJub25jZSI6IjkxVUtqYkFLU0ltdFJwUGciLCJvZmZzZXQiOjAsInBhdGgiOiJjbGllbnQvZmFpbC5sdWEiLCJzaGEyNTYiOiI4ZWU0MTIwYzYzYzhhY2NiNWMzNWJkMjMzOWMwMjA0NTI4YWY3MjkyZGZhZDdmZGYyZTgzZDdjMzg0MmQ0N2E4In0seyJieXRlcyI6MjIwLCJsZW5ndGgiOjIzNiwibm9uY2UiOiJUWi1lYW5PNzZFYXVBSktSIiwib2Zmc2V0IjoxNzQsInBhdGgiOiJjbGllbnQvbWFpbi5sdWEiLCJzaGEyNTYiOiI0MTdjZjYxNGU0NmFmYzA1ZDVhMTU5ZTEwN2QzNGU0Mjg3NjM5MTFhZTU2ZmVhZDJjZGI1N2QzOGU5ZGRhNDEwIn1dLCJjaXBoZXIiOiJBRVMtMjU2LUdDTSIsImRlcGxveW1lbnQiOiJkZXBfNyIsImZpbmdlcnByaW50IjoiZnBfdmVjdG9yX21hcmtlciIsImZvcm1hdCI6InNjcmlwdGdvLWNsaWVudC1lc2Nyb3cvMSIsImtkZiI6IkhLREYtU0hBMjU2K1gyNTUxOSIsImtleUlkIjoiR3ZRMHlOZ2J4al9nb3hITG0xNFFpZyIsInBhY2thZ2UiOiJrZXN0cmVsLy9uaWdodC1tYXJrZXQiLCJwZXJtR2VuZXJhdGlvbiI6MCwicmVsZWFzZSI6InJlbF8wMSIsInNpZ25hdHVyZSI6InNkQUJDLV8zUm0xQ3dadUgycjZMdFVSdHplN1Z1V0hDc09YYjU2Mjlqbk1DaEx3VTNEOUs3MEJoRTA4bTktZGlJMlZWNmxHOGJmeEdXeWhLSzFWWkRRIiwic2lnbmVyUHVibGljS2V5IjoieG9JbU44ZlRFT3hYWW52Z0M2SlowbE4wbjBxdlpFUnd6X3ZsT2pYM01rSSIsInN0cmlwIjoiZnVsbCIsInRhcmdldCI6eyJsdWEiOiI1LjMuNiIsImx1YWNIZWFkZXIiOiIxYjRjNzU2MTUzMDAxOTkzMGQwYTFhMGEwNDA4MDg3ODU2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDI4Nzc0MCJ9LCJ2ZXJzaW9uIjoiMi4wLjAifYShYkuQmUCLKIrvTWKTTbpWcdgWVdeEBYoxSlmRpGnImaS6fuvxz0UjiMMPY3JMc00Cf2sREEvw6zN8WRgfzKPni2I0jzyb8MTJVwFeGkVNCCXF76//UXQq7cKerN7rtMbYyH9KomQ7CLFicwrwexeKvNKmPCwSI7+jWMHg2CFqAtPFs5El+taA8VW1QjeTPUqxCx56Cnqlj716efQiXGkthlAO8C2pbDUBIzAmDE71T6BCblW+XTAVKKzli9VocNh3+CuWIhtPIUl1nlkz/hiALovimsHZ8vsJhLjAcb3gxRejdQX7SpX+ZNChxvDiAeidF7AqoD2PmCyaWh1D3wv5CTOj4wvsoH1y0YksKV1GZ5F6suOsdJbRiCe07CGNvmkOysmG6qMebHRUPF3lXw+2y2dh+S69NA2u6CuqIIaIC+QwEOIrQFbgSmTY/YBj5XUadLey5h9Nff4DtXLYyho6BMONzsMUlmPaFzskIV9iVa9jPeRgJvGBVru3iqDRV21S2lDLkTTwariKYHgMUZwf52pl+KGK+VhL",
+  "lyingBase64": "U0dDRQEAAAB8AwAAeyJjaHVua3MiOlt7ImJ5dGVzIjoxNTgsImxlbmd0aCI6MTc0LCJub25jZSI6IjkxVUtqYkFLU0ltdFJwUGciLCJvZmZzZXQiOjAsInBhdGgiOiJjbGllbnQvZmFpbC5sdWEiLCJzaGEyNTYiOiI4ZWU0MTIwYzYzYzhhY2NiNWMzNWJkMjMzOWMwMjA0NTI4YWY3MjkyZGZhZDdmZGYyZTgzZDdjMzg0MmQ0N2E4In0seyJieXRlcyI6MjIwLCJsZW5ndGgiOjIzNiwibm9uY2UiOiJUWi1lYW5PNzZFYXVBSktSIiwib2Zmc2V0IjoxNzQsInBhdGgiOiJjbGllbnQvbWFpbi5sdWEiLCJzaGEyNTYiOiI0MTdjZjYxNGU0NmFmYzA1ZDVhMTU5ZTEwN2QzNGU0Mjg3NjM5MTFhZTU2ZmVhZDJjZGI1N2QzOGU5ZGRhNDEwIn1dLCJjaXBoZXIiOiJBRVMtMjU2LUdDTSIsImRlcGxveW1lbnQiOiJkZXBfNyIsImZpbmdlcnByaW50IjoiZnBfdmVjdG9yX21hcmtlciIsImZvcm1hdCI6InNjcmlwdGdvLWNsaWVudC1lc2Nyb3cvMSIsImtkZiI6IkhLREYtU0hBMjU2K1gyNTUxOSIsImtleUlkIjoiR3ZRMHlOZ2J4al9nb3hITG0xNFFpZyIsInBhY2thZ2UiOiJrZXN0cmVsLy9uaWdodC1tYXJrZXQiLCJwZXJtR2VuZXJhdGlvbiI6MCwicmVsZWFzZSI6InJlbF8wMSIsInNpZ25hdHVyZSI6Im5RajhjbHIwQ2htMzRmemxOZ2Joc2FtT1lQVzhNMzY4azk4TjNkaWFWa2I3b3FlWDl0Q3NaWGMydEVlaXNMRnVtaVF4NzFkYlpWa1ZuN3FnOHBEdEN3Iiwic2lnbmVyUHVibGljS2V5IjoieG9JbU44ZlRFT3hYWW52Z0M2SlowbE4wbjBxdlpFUnd6X3ZsT2pYM01rSSIsInN0cmlwIjoiZnVsbCIsInRhcmdldCI6eyJsdWEiOiI1LjQuOCIsImx1YWNIZWFkZXIiOiIxYjRjNzU2MTU0MDAxOTkzMGQwYTFhMGEwNDA4MDg3ODU2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDI4Nzc0MCJ9LCJ2ZXJzaW9uIjoiMi4wLjAifYShYkuQmUCLKIrvTWKTTbpWcdgWVdeEBYoxSlmRpGnImaS6fuvxz0UjiMMPY3JMc00Cf2sREEvw6zN8WRgfzKPni2I0jzyb8MTJVwFeGkVNCCXF76//UXQq7cKerN7rtMbYyH9KomQ7CLFicwrwexeKvNKmPCwSI7+jWMHg2CFqAtPFs5El+taA8VW1QjeTPUqxCx56Cnqlj716efQiXGkthlAO8C2pbDUBIzAmDE71T6BCblW+XTAVKKzli9VocNh3+CuWIhtPIUl1nlkz/hiALovimsHZ8vsJhLjAcb3gxRejdQX7SpX+ZNChxvDiAeidF7AqoD2PmCyaWh1D3wv5CTOj4wvsoH1y0YksKV1GZ5F6suOsdJbRiCe07CGNvmkOysmG6qMebHRUPF3lXw+2y2dh+S69NA2u6CuqIIaIC+QwEOIrQFbgSmTY/YBj5XUadLey5h9Nff4DtXLYyho6BMONzsMUlmPaFzskIV9iVa9jPeRgJvGBVru3iqDRV21S2lDLkTTwariKYHgMUZwf52pl+KGK+VhL",
+  "permutedBase64": "U0dDRQEAAAB8AwAAeyJjaHVua3MiOlt7ImJ5dGVzIjoxNTgsImxlbmd0aCI6MTc0LCJub25jZSI6Im01VTJsblRzcVFhWmROS0IiLCJvZmZzZXQiOjAsInBhdGgiOiJjbGllbnQvZmFpbC5sdWEiLCJzaGEyNTYiOiIzMWRhMGMzOGRhYTJkNTIyZWE3YTE1ZjIwNGZkNjRiZTVlYWE4NjlmMzJhM2Q3N2FhOTA3OTBhMWI2NDg3YzExIn0seyJieXRlcyI6MjIwLCJsZW5ndGgiOjIzNiwibm9uY2UiOiI1WnBTOGR6ejhITVpGYUJxIiwib2Zmc2V0IjoxNzQsInBhdGgiOiJjbGllbnQvbWFpbi5sdWEiLCJzaGEyNTYiOiI5YzhmODhlZWEwMTUzNjdhM2Y4MTRjMWYzYWMyNDU2Y2EyZTA1YzJiZTAzMzhlNWNkMTczY2NkZDk3NWUwMTA3In1dLCJjaXBoZXIiOiJBRVMtMjU2LUdDTSIsImRlcGxveW1lbnQiOiJkZXBfNyIsImZpbmdlcnByaW50IjoiZnBfdmVjdG9yX21hcmtlciIsImZvcm1hdCI6InNjcmlwdGdvLWNsaWVudC1lc2Nyb3cvMSIsImtkZiI6IkhLREYtU0hBMjU2K1gyNTUxOSIsImtleUlkIjoiR3ZRMHlOZ2J4al9nb3hITG0xNFFpZyIsInBhY2thZ2UiOiJrZXN0cmVsLy9uaWdodC1tYXJrZXQiLCJwZXJtR2VuZXJhdGlvbiI6MSwicmVsZWFzZSI6InJlbF8wMSIsInNpZ25hdHVyZSI6IldydU9OT0tiU1lDN1kyRDBEcGVoU0lQNnJETzNNcVlsbGxsODVDaEJlVm9VakpDS3BlQjVlenBUY3Q2QUNIalNiX3JEa2ZvWnJyNEh0emItamQtNEFRIiwic2lnbmVyUHVibGljS2V5IjoieG9JbU44ZlRFT3hYWW52Z0M2SlowbE4wbjBxdlpFUnd6X3ZsT2pYM01rSSIsInN0cmlwIjoiZnVsbCIsInRhcmdldCI6eyJsdWEiOiI1LjQuOCIsImx1YWNIZWFkZXIiOiIxYjRjNzU2MTU0MDAxOTkzMGQwYTFhMGEwNDA4MDg3ODU2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDI4Nzc0MCJ9LCJ2ZXJzaW9uIjoiMi4wLjAifS43LhiiFG26F+2uh5nfTZK1fshIA6IjXgMIi17lzsxCPqizzUHn9i4mOF1MLc5u8msGKEfR3cxcsj7EZZ2hLN68Covtef3pcqhIuHd26qXl5sbsqjL7hCFH4q+LM0kIZ2VQKGWR/AFr+4UUHHNhV2KNpdluA4D2O5OqsPwqC9dx3Xlr8mhbd38ijMGi+FrhafJGaCNkWlPk4ZOYIm4KvAIFjRphDj5AGVYyYsEmPX5sdbBjvC1ADyyQuzq16vHVU6NRmCM3VvN1QLd/rATHc/LondCMJbuR6aS4amEjT8sqk/qeNhQGRCm4t9a3N+Rx4L+GFNBhnm/i2GsfaKd1m4B8GcmOX5RUvUOawfWr+uFpo0F/dudQgJ6AgsjYj4rml1Kdyv1+wssN7iK+f8WPEuUxBJlakv0dQ0loSo/WOvG9lPvFR8L37D7zz23X8fbbfNx9+j1fJx5z1mAMoL4+U1nUzbS9mIvLo2Q/7tDBYWejtWQWcO0vEYyxYKMhcJNe8VBjT1ol6UQJwRS9BZTWVhU72RF1wu6R9jpZ",
+  "server": {
+    "privateKey": "mJmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmdk",
+    "publicKey": "uhk4Ns_x9OhmwTlxXTBkCNJqdvdtY4o5r8EAEITSVBE",
+    "aad": "scriptgo-client-escrow/1\nserver\nkestrel//night-market@2.0.0\ndep_7",
+    "wrapped": {
+      "epk": "eBpCG-L-7qXm5o5kohnNq4QApLP9D9cvUXpSKvOpJlY",
+      "nonce": "W1tbW1tbW1tbW1tb",
+      "wrapped": "uhiAk4Iy5HeoEMpuMpuVdJcBo_aMvLRuntYWIoWyPJ6JeraxuFT1CxgZhb7Ami9N"
+    }
+  },
+  "session": {
+    "privateKey": "uLu7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u3s",
+    "publicKey": "awthbXGOU2kSNtO-PObUT50og2Qm2BMF0TH0iCBvjSs",
+    "aad": "scriptgo-client-escrow/1\nclient\nkestrel//night-market@2.0.0\nGvQ0yNgbxj_goxHLm14Qig",
+    "wrapped": {
+      "epk": "slmehgu-Uy5JVcyk29INO39oBdgbtQXdvmknahcMTXQ",
+      "nonce": "eXl5eXl5eXl5eXl5",
+      "wrapped": "hosM69Bqi_U9AGnx0LCMqLxL72eM-1-TWCKYnOr530RbHZhyWCnXw5xlttjYpgu8"
+    },
+    "otherWrapped": {
+      "epk": "slmehgu-Uy5JVcyk29INO39oBdgbtQXdvmknahcMTXQ",
+      "nonce": "enp6enp6enp6enp6",
+      "wrapped": "2DGRkWqaOAbpOmFnYTdpaRokmecQdyBeFwxRBeKhpjqDSOl-G8QqbR7bn3g5zHeq"
+    },
+    "assetKeyWrapped": {
+      "epk": "slmehgu-Uy5JVcyk29INO39oBdgbtQXdvmknahcMTXQ",
+      "nonce": "e3t7e3t7e3t7e3t7",
+      "wrapped": "m9JI35qjlV1JwNOx0E2hYwFQpVtSBhrfxF6CPLD1hf-wv3NPJNQmgfxWLt2Zq5Dl"
+    }
+  }
+}

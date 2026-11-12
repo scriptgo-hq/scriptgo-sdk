@@ -62,6 +62,18 @@ public sealed class AssetKey : IDisposable
     public static AssetKey UnwrapForClient(EscrowIdentity session, WrappedKey wrapped, string aad) =>
         Unwrap(session, EscrowNative.AssetWrapClient, wrapped, aad);
 
+    /// <summary>Unwraps a client-code key the API wrapped to this server (<c>POST /v1/licenses/key</c>
+    /// with <c>kind: "client"</c>, docs/spec/client-escrow.md). <paramref name="aad"/> must equal
+    /// <see cref="ClientEscrowFormat.ServerAad"/>. The key's <see cref="KeyId"/> is the client-code id,
+    /// <see cref="WrapForClient"/> re-wraps it with the client-code session label, and it binds only to a
+    /// <see cref="ClientCodeContainer"/>.</summary>
+    public static AssetKey UnwrapClientCodeForServer(EscrowIdentity identity, WrappedKey wrapped, string aad) =>
+        Unwrap(identity, EscrowNative.ClientWrapServer, wrapped, aad);
+
+    /// <summary>Unwraps a server's per-session wrap of a client-code key.</summary>
+    public static AssetKey UnwrapClientCodeForSession(EscrowIdentity session, WrappedKey wrapped, string aad) =>
+        Unwrap(session, EscrowNative.ClientWrapSession, wrapped, aad);
+
     /// <summary>Wraps this key to one player's session public key (32-byte X25519): a fresh ephemeral
     /// key and nonce per call. <paramref name="aad"/> is <see cref="AssetEscrowFormat.ClientAad"/>.</summary>
     public WrappedKey WrapForClient(ReadOnlySpan<byte> clientPublicKey, string aad)

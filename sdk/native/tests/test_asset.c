@@ -399,7 +399,7 @@ static int handles_reject_misuse(void)
     {
         sg_identity* id = NULL;
         CHECK_RC(sg_identity_generate(&id), SG_OK);
-        CHECK_RC(sg_asset_key_unwrap(id, 3, AVEC_CLIENT_EPK, AVEC_CLIENT_NONCE, AVEC_CLIENT_WRAPPED, AVEC_CLIENT_WRAPPED_len, NULL, 0, &key),
+        CHECK_RC(sg_asset_key_unwrap(id, 9, AVEC_CLIENT_EPK, AVEC_CLIENT_NONCE, AVEC_CLIENT_WRAPPED, AVEC_CLIENT_WRAPPED_len, NULL, 0, &key),
                  SG_ERR_INVALID_ARGUMENT);
         sg_identity_free(id);
     }

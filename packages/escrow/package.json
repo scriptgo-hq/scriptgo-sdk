@@ -27,6 +27,9 @@
   "types": "./src/index.ts",
   "files": [
     "dist",
+    "luac/luac-5.4.8.wasm",
+    "luac/luac-5.4.8.wasm.sha256",
+    "luac/LICENSE-lua.txt",
     "README.md",
     "LICENSE"
   ],

@@ -104,6 +104,7 @@ extern "C" {
 #define SG_ERR_BAD_CONTAINER (-21)       /* an asset container's preamble, header or file table is malformed */
 #define SG_ERR_KEY_MISMATCH (-22)        /* the asset content key is not this container's key (keyId) */
 #define SG_ERR_UNTRUSTED_SIGNER (-23)    /* the container is signed by another key than the pinned one */
+#define SG_ERR_TARGET_MISMATCH (-24)     /* client code compiled for another Lua VM than the host's (LUAC header) */
 
 /* ------------------------------------------------------------------------------------------ general */
 
@@ -294,6 +295,12 @@ SG_API void SG_CALL sg_bundle_free(sg_bundle* bundle);
 
 #define SG_ASSET_WRAP_SERVER 1 /* the API to a licensed server: info "scriptgo.escrow.keywrap.v1" */
 #define SG_ASSET_WRAP_CLIENT 2 /* a licensed server to one player's session: info "scriptgo.asset-escrow.client-keywrap.v1" */
+/* Client code escrow keys (docs/spec/client-escrow.md). sg_asset_key_unwrap accepts these kinds too;
+ * the key it returns is a CLIENT-CODE key: its id uses the label "scriptgo.client-escrow.keyid.v1",
+ * sg_asset_key_wrap re-wraps it with the client-code session info, and it binds only to an sg_clink
+ * container (an asset container refuses it, and an asset key never binds to an sg_clink). */
+#define SG_CLIENT_WRAP_SERVER 3  /* the API to a licensed server (kind "client"): info "scriptgo.escrow.keywrap.v1" */
+#define SG_CLIENT_WRAP_SESSION 4 /* a licensed server to one player's session: info "scriptgo.client-escrow.client-keywrap.v1" */
 
 /* A content key in guarded memory (sodium_malloc, read-only, wiped on free). Never exported. */
 typedef struct sg_asset_key sg_asset_key;
@@ -377,6 +384,74 @@ SG_API int SG_CALL sg_asset_reader_read(sg_asset_reader* reader, const char* pat
 
 /* Wipes the cached chunk and frees. NULL is accepted. */
 SG_API void SG_CALL sg_asset_reader_free(sg_asset_reader* reader);
+
+/* ------------------------------------------------------------------------------- client code escrow */
+/* Client code escrow, `scriptgo-client-escrow/1` (docs/spec/client-escrow.md): client scripts shipped
+ * as stripped Lua bytecode, compiled by the SDK from the creator's source, encrypted per deployment
+ * with AES-256-GCM (one chunk per script). Added with no change to the calls above (SG_ABI_VERSION
+ * stays 1).
+ *
+ * The key flow is asset escrow's with the client-code kinds:
+ *   licensed server  sg_asset_key_unwrap(server identity, SG_CLIENT_WRAP_SERVER, ...)    the API's answer
+ *                    sg_asset_key_wrap(key, player session public key, ...)              per player
+ *   game client      sg_identity_generate()                                             one per connection
+ *                    sg_asset_key_unwrap(session identity, SG_CLIENT_WRAP_SESSION, ...)  the server's wrap
+ *                    sg_clink_container_open / _target_check / _bind / sg_clink_lua_load
+ *
+ * There is deliberately NO call that hands decrypted bytecode back to the host: a chunk is decrypted
+ * into guarded memory, checked, compiled into the given lua_State with mode "b" and wiped. Compare
+ * sg_asset_reader_read, the documented copy door asset escrow needs and client code does not.
+ *
+ * Honest ceiling: the VM runs the bytecode, so a player who reads their own game memory can copy the
+ * compiled functions and decompile them into readable, de-identified Lua. This keeps client code
+ * encrypted at rest and in transit, never as source, bound to one deployment and one session, and
+ * refused to new sessions after revocation. It is not unbreakable. */
+
+#define SG_CLINK_LUAC_HEADER_BYTES 31u /* Lua 5.4 dump header: signature, version, format, LUAC_DATA, sizes, LUAC_INT, LUAC_NUM */
+#define SG_CLINK_MAX_CHUNKS 4096u
+#define SG_CLINK_MAX_CHUNK_BYTES (16u * 1024u * 1024u)
+
+typedef struct sg_clink sg_clink;
+
+/* Runs every check of client-escrow.md "Reading" that needs no key: preamble ("SGCE", version 1),
+ * header length, canonical header JSON, format / cipher / kdf, strip ("full" or "names"),
+ * permGeneration (0: opcode permutation is not supported, any other generation is refused), the
+ * target's shape, the pinned signer (`trusted_signer`, 32 bytes, or NULL), the ed25519 signature,
+ * every chunk's path, size, nonce and contiguous range, and the body length. Borrows `data`: keep it
+ * alive and unchanged until sg_clink_container_free. */
+SG_API int SG_CALL sg_clink_container_open(const uint8_t* data, size_t len, const uint8_t* trusted_signer, sg_clink** out_container);
+
+/* SG_OK when the container's bytecode target is the host VM's: `luac_header` is the first
+ * SG_CLINK_LUAC_HEADER_BYTES bytes of a string.dump / lua_dump made by the host's own Lua. Otherwise
+ * SG_ERR_TARGET_MISMATCH. sg_clink_lua_load refuses to run until this call has succeeded. */
+SG_API int SG_CALL sg_clink_target_check(sg_clink* container, const uint8_t* luac_header, size_t len);
+
+/* A header field as a NUL-terminated string owned by the container: "package", "version",
+ * "release", "deployment", "keyId", "signerPublicKey", "strip", "lua" (the target's Lua version) or
+ * "fingerprint" (SG_ERR_NOT_FOUND when null). */
+SG_API int SG_CALL sg_clink_container_field(const sg_clink* container, const char* name, const char** out_value);
+
+SG_API int SG_CALL sg_clink_chunk_count(const sg_clink* container, size_t* out_count);
+
+/* Chunk `index` in path order: its script path (owned by the container) and its bytecode size. */
+SG_API int SG_CALL sg_clink_chunk_at(const sg_clink* container, size_t index, const char** out_path, size_t* out_size);
+
+/* Gives the container its client-code key (copied into guarded memory). SG_ERR_KEY_MISMATCH when the
+ * key is not this container's (another deployment, or an asset key). Call once. */
+SG_API int SG_CALL sg_clink_container_bind(sg_clink* container, const sg_asset_key* key);
+
+/* Decrypts the bytecode of `path` into guarded memory, verifies its tag, its SHA-256 and that it
+ * starts with the checked LUAC header, then compiles it into `lua_state` through the host's own
+ * luaL_loadbufferx with mode "b" (bytecode only) and the chunk name "=" + path, and wipes it.
+ * On SG_OK the main function is on top of the Lua stack. On SG_ERR_LUA_LOAD Lua's error message is on
+ * top and `out_lua_status` (optional) holds its status. On any other error nothing was pushed:
+ * SG_ERR_DECRYPT (tampered chunk), SG_ERR_PAYLOAD_HASH, SG_ERR_TARGET_MISMATCH, SG_ERR_NOT_FOUND,
+ * SG_ERR_INVALID_ARGUMENT (not bound, or the target not checked). */
+SG_API int SG_CALL sg_clink_lua_load(const sg_clink* container, const char* path, void* lua_state,
+                                     sg_lua_loadbufferx_fn loadbufferx, int* out_lua_status);
+
+/* Wipes the key and frees. NULL is accepted. Functions already compiled keep running. */
+SG_API void SG_CALL sg_clink_container_free(sg_clink* container);
 
 #ifdef __cplusplus
 }

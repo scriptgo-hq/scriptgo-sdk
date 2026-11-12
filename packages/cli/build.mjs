@@ -83,6 +83,9 @@ function copyTree(from, to) {
   }
 }
 for (const part of ["lua", "adapters", "packages"]) copyTree(join(repo, "sdk", part), join(sdkOut, part));
+// The publish-time Lua compiler of client code escrow (@scriptgo/escrow luac.ts reads ./luac/ next to the bundle).
+mkdirSync(join(dist, "luac"), { recursive: true });
+for (const file of ["luac-5.4.8.wasm", "luac-5.4.8.wasm.sha256", "LICENSE-lua.txt"]) cpSync(join(repo, "packages", "escrow", "luac", file), join(dist, "luac", file));
 for (const file of ["environments.json", "LICENSE"]) cpSync(join(repo, "sdk", file), join(sdkOut, file));
 
 if (!existsSync(join(sdkOut, "lua", "scriptgo", "host.lua"))) throw new Error("build: the Lua core was not copied");

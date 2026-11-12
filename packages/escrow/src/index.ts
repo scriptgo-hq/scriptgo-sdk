@@ -6,4 +6,6 @@ export * from "./watermark.ts";
 export * from "./signer.ts";
 export * from "./fingerprint.ts";
 export * from "./asset-escrow.ts";
+export * from "./luac.ts";
+export * from "./client-escrow.ts";
 export { readZip, readZipEntry, ZipError, type ZipArchive, type ZipEntry } from "./zip.ts";
