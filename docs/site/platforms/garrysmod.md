@@ -108,7 +108,7 @@ Maps, models, textures, sounds and other files players download. See [Selling as
 
 Run on a dedicated server (srcds): every packed file was found by the engine and added to the download list. No client was run.
 
-Asset escrow: Not feasible: GMod clients do not load server-sent binary modules.
+Asset escrow: Not available: players receive the addon's content in clear, from the server or FastDL, and GMod clients do not load server-sent binary modules, so nothing can decrypt it there. What protects it: the licence-gated download and the copy's fingerprint record in the addon folder.
 
 ## The platform's own rules
 

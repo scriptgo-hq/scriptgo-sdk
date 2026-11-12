@@ -10,7 +10,7 @@ This document is normative for the manifest section, the inspection every builde
 pack`, the per-buyer build the platform makes at download, and the asset-escrow container format.
 The code is in `packages/manifest/src/assets.ts` (inspection), `packages/manifest/src/zip.ts` (the
 strict zip reader), `packages/escrow/src/fingerprint.ts` and `packages/escrow/src/asset-escrow.ts`,
-and `packages/cli/src/lib/assets.ts`, `asset-targets.ts`, `asset-verify.ts`.
+and `packages/cli/src/lib/assets.ts`, `asset-targets.ts`, `asset-verify.ts`, `fivem-pack.ts`.
 
 ## Honest stance (normative)
 
@@ -28,10 +28,14 @@ SCRIPT//GO does, a player who controls their machine can extract an asset their 
   the key in transit; every session of a deployment unwraps the same key). It raises the cost of copying an asset from a
   server, from a distribution channel or from a player's disk while the game is not running; it
   does not prevent extraction from a running client.
+- **Cfx.re's asset escrow** (FiveM, RedM) is Cfx.re's, run on the creator's own Cfx.re account.
+  `scriptgo pack --cfx-escrow` only builds the upload. Never say SCRIPT//GO encrypts there; say
+  "Cfx.re encrypts it". An escrowed upload is one copy for every buyer, delivered by Cfx.re, without
+  SCRIPT//GO's per-buyer fingerprint.
 
 ## Manifest
 
-Four directives (`docs/spec/manifest.md`). The Lua, JSON and .NET parsers share their fixtures
+Five directives (`docs/spec/manifest.md`). The Lua, JSON and .NET parsers share their fixtures
 (`sdk/lua/spec/fixtures/manifests*/assets*`).
 
 | Directive | Value | Meaning |
@@ -40,11 +44,13 @@ Four directives (`docs/spec/manifest.md`). The Lua, JSON and .NET parsers share 
 | `environment_asset(s)` | `"<env>" "<path>"` or `"<env>" { ... }` | Assets in one environment's native form (an OPEN//77 preload package, FiveM `stream/` files, a Rust map ...) |
 | `game_build(s)` | `"<env>" "<build>"` or `"<env>" { ... }` | Game builds the assets were made for, as the platform names them (`"2.31"`, `"3095"`). `^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$` |
 | `data_file(s)` | `"<TYPE>" "<path>"` or `"<TYPE>" { ... }` | FiveM/RedM `data_file` lines: type (`^[A-Z0-9_]{1,64}$`) and an asset path (a file, or a folder of asset files) |
+| `cfx_escrow_ignore` | glob(s) | Files left readable in the build for Cfx.re's asset escrow (`pack --target fivem\|redm --cfx-escrow` writes them as `escrow_ignore`); ignored by every other target |
 
-`scriptgo.json` keys: `assets`, `environment_assets`, `game_builds`, `data_files`. Parsed fields:
-`assets`, `environmentAssets`, `gameBuilds`, `dataFiles`.
+`scriptgo.json` keys: `assets`, `environment_assets`, `game_builds`, `data_files`,
+`cfx_escrow_ignore`. Parsed fields: `assets`, `environmentAssets`, `gameBuilds`, `dataFiles`,
+`cfxEscrowIgnore`.
 
-Parser errors: `unsafe_path`; `reserved_path` (`.scriptgo/` is reserved for the fingerprint);
+Parser errors: `unsafe_path` (also for a `cfx_escrow_ignore` entry); `reserved_path` (`.scriptgo/` is reserved for the fingerprint);
 `invalid_environment`; `invalid_game_build`; `invalid_data_file`. A package may hold assets and no
 script: `empty_resource` is raised only when there are no scripts, no files and no assets.
 
@@ -128,8 +134,8 @@ assets and no `game_build` for that environment gets the warning `asset_game_bui
 | Environment | Support | Generic `assets` | `environment_asset` | `scriptgo pack --target` writes | Real run |
 |---|---|---|---|---|---|
 | OPEN//77 | supported | resource `files`: every player downloads them before the resource starts; scripts and the WebUI read them | `.zip` preload packages under `archive/pc/mod/` (`.archive`, `.xl`), `r6/tweaks/` (`.yaml`, `.yml`, `.tweak`), `engine/config/` (`.ini`); `.archive` must start with `RDAR`; in a deployment's copy, an escrowed preload: one `.sgae` directly under `archive/pc/mod/` (starts with `SGAE`, version 1) and its fingerprint record | `open77/<name>/` with `preload_mod(s)` lines, `dependency "archivexl"` when a preload holds `.xl` | not run (needs an OPEN//77 server and a game client; see below) |
-| FiveM | supported | `stream/` files are streamed; others listed in `files {}` | `stream/` (`.ydr .ydd .yft .ytd .ybn .ymap .ytyp .ynd .ynv .ycd .ypt .ymt ...`) and `data_file` targets | `fivem/<name>/fxmanifest.lua` with `files`, `data_file`, `this_is_a_map "yes"` for a `.ymap`; no shim for an asset-only package | not run (an FXServer run needs a Cfx.re licence key; no client) |
-| RedM | partial | as FiveM | as FiveM | not built yet (validated only) | not run |
+| FiveM | supported | `stream/` files are streamed; others listed in `files {}` | `stream/` (`.ydr .ydd .yft .ytd .ybn .ymap .ytyp .ynd .ynv .ycd .ypt .ymt ...`) and `data_file` targets | `fivem/<name>/fxmanifest.lua` with `files`, `data_file`, `this_is_a_map "yes"` for a `.ymap`; no shim for an asset-only package. `--cfx-escrow`: `fivem-cfx-escrow/<name>/` and its upload zip | not run (an FXServer run needs a Cfx.re licence key; no client) |
+| RedM | supported | as FiveM | RDR2 files, same layout and checks as FiveM, under `environment_asset "redm"` | `redm/<name>/fxmanifest.lua`: as FiveM with `game "rdr3"` and `rdr3_warning`; `--cfx-escrow` as FiveM | not run (same key; no client) |
 | Garry's Mod | supported | content under `materials/ models/ sound/ maps/ resource/ particles/` | the same, `.bsp` maps in `maps/` | `garrysmod/scriptgo_<name>/` with the content and `lua/autorun/server/sgassets_<name>.lua` (`resource.AddSingleFile` per file) | **run**: srcds loads the addon, every file is found in the GAME file system and added to the download list |
 | Luanti | supported | media under `textures/ sounds/ models/ media/ locale/ fonts/` in the formats Luanti sends (`.png .jpg .tga .ogg .x .b3d .obj .gltf .glb .ttf .woff .tr .po`) | the same | `luanti/mods/sgmedia_<name>/` (`mod.conf`, `init.lua`, media); with scripts also `mods/scriptgo/` | **run**: the official server image announces every file with the SHA-1 of its bytes |
 | BeamMP | supported | refused (BeamMP sends mod zips only) | `.zip` BeamNG mods | `beammp/Resources/Client/<mod>.zip` (and `Resources/Server/scriptgo/` with scripts) | not run (BeamMP-Server needs an AuthKey; none here) |
@@ -160,6 +166,15 @@ Notes per environment:
   `data_file` names is an error (`fivem_asset_unused`): FiveM would ship it and never load it. The
   FiveM shim has no licence check, so a package **with scripts** that needs one is refused by
   `pack`; an asset-only package packs, its licence gates the download.
+  GTA V and RDR2 files do not load in each other's game, so FiveM files are `environment_asset
+  "fivem"` and RedM files `environment_asset "redm"`. A package carrying both keeps them apart under
+  `stream/` (`stream/gta/`, `stream/rdr/`): each build copies its own. `data_file` lines are not
+  keyed by game: a line that names only the other game's files belongs to that game's build, is left
+  out of this one, and is not an error here (`cfxDataFileTargets`). RedM requires `rdr3_warning`
+  with an exact text in every `fxmanifest.lua` (read from the FXServer binary, build 38435:
+  "Resource %s does not contain the RedM pre-release warning in fxmanifest.lua"); the pack writes
+  it. `this_is_a_map` is documented as marking "a GTA map"; that RedM honours it the same way is an
+  inference, not run.
 - **Garry's Mod.** A `.bsp` is downloaded like any content; to play on it the operator sets it as
   the server's map, which also makes GMod send it. Upper-case paths are a warning (Linux servers and
   `.gma` lower-case them).
@@ -186,6 +201,7 @@ Nothing is dropped silently:
 - a package with assets none of which the target delivers is `assets_not_for_target`, unless
   `--without-assets` asks for that build on purpose; the output then lists what was left for the
   other targets;
+- `pack --target fivem|redm --cfx-escrow` writes the build for Cfx.re's asset escrow (below);
 - `pack --target scriptgo` (the upload) carries every environment's assets, and `publish` and that
   target refuse a buyer's fingerprinted copy (`asset_fingerprinted`), an escrowed OPEN//77 preload
   included (`fingerprinted` lists it). `pack --target open77` packs a deployment's copy as is: its
@@ -470,17 +486,50 @@ So a key never goes to an anonymous caller: only to a player the master enrolled
 banned and owns the game. That player can still copy what their running game loads (above): the
 ticket decides who gets a key, not what they can do with the files once the game has them.
 
+### FiveM and RedM: the build for Cfx.re's asset escrow
+
+Cfx.re's asset escrow (docs.fivem.net/docs/server-manual/asset-escrow; forum.cfx.re "Introducing
+Asset Escrow for your resources", "Introducing RedM Asset Escrow", "Asset Security Update";
+read 2026-11-12) is not a SCRIPT//GO feature. What it does, from those sources:
+
+| Rule | Value |
+|---|---|
+| Encrypted | Lua scripts, `.ydr`, `.ydd`, `.yft`. Every other file stays as uploaded (`.ytd`, `.ymap`, `.ytyp`, `.ybn` ..., data files, JavaScript, C#). NUI is not supported |
+| Left readable on purpose | the files named by `escrow_ignore { ... }` in `fxmanifest.lua`: a path, `dir/*.ext`, `dir/**/*.ext` |
+| Lua | Lua 5.4 (`lua54 'yes'`; Cfx.re's manifest reference now calls the directive deprecated and not needed) |
+| Server | FiveM server build 5181 or later; RedM server build 12735 or later, `game 'rdr3'` |
+| Upload | a zipped resource, at most 1 GB, at portal.cfx.re (Created Assets; Keymaster's asset pages were deprecated on 2025-10-15) |
+| Sale and start | through a Tebex package linked to the asset; a server starts it only when its Cfx.re key's account holds the asset ("You lack the required entitlement" otherwise). Not transferable to another account |
+| Known weakness | 2025-08-08: a flaw let assets be extracted from the game client; 2025-10-16: an obfuscation layer for 3D models and a re-encrypt button, not covering scripts |
+
+`scriptgo pack <dir> --target fivem|redm --cfx-escrow` (`packages/cli/src/lib/fivem-pack.ts`)
+writes `<out>/<target>-cfx-escrow/<name>/` and `<name>-<version>.zip` (entries `<name>/...`,
+fixed timestamps, so the same sources give the same bytes). Its `fxmanifest.lua` is the target's,
+plus `lua54 "yes"` and `escrow_ignore` listing the **files** (expanded, sorted) that
+`cfx_escrow_ignore` names, and `scriptgo_shim.lua`, which stays readable (MIT, no secret; an
+operator can audit what talks to SCRIPT//GO). It reports the files Cfx.re encrypts, the ones left
+open, and the ones it does not encrypt, with a warning for JavaScript, NUI files, streamed types
+other than `.ydr .ydd .yft`, a `cfx_escrow_ignore` pattern that matches nothing, and a build with
+nothing to encrypt. Errors: `cfx_escrow_too_large` (the zip above 10^9 bytes, the stricter reading
+of "1GB"), `cfx_escrow_buyer_copy` (a buyer's fingerprinted copy: the upload is the creator's).
+`--cfx-escrow` with another target is a usage error.
+
+How it combines with SCRIPT//GO: a copy downloaded from SCRIPT//GO is licence-gated, fingerprinted
+per buyer and signed, and not encrypted. The escrowed upload is delivered by Cfx.re as one copy for
+every buyer; SCRIPT//GO's fingerprint is not in it and SCRIPT//GO holds no key. Nothing of this was
+run: an FXServer does not start without a Cfx.re key.
+
 ### Client work per environment
 
 | Environment | Client work escrow needs | Feasibility | What it would buy |
 |---|---|---|---|
 | OPEN//77 | the key exchange at boot (with the player's connect ticket) and a decryptor in the RED4ext client plugin (built, see "OPEN//77"); a true in-memory mount needs the depot's archive loading hooked | key exchange and decryption: built and tested outside the game; in-memory mount: unresearched for REDengine 2.5 | an escrowed preload is useless off a licensed, unrevoked server; while the game runs the files are on disk, and extraction from a running client remains |
-| FiveM / RedM | none possible from a resource: the client is Cfx.re's. FiveM's own Asset Escrow encrypts stream files tied to Cfx.re accounts and server keys; on 2025-08-08 Cfx.re reported a flaw that let assets be extracted from the game client, and on 2025-10-16 added an obfuscation layer for 3D models and a re-encrypt button ([Asset Security Update](https://forum.cfx.re/t/asset-security-update/5344773), [Introducing Asset Escrow](https://forum.cfx.re/t/introducing-asset-escrow-for-your-resources/4777151)) | not by SCRIPT//GO | sellers on FiveM rely on the platform's own escrow and on enforcement against servers |
+| FiveM / RedM | none possible from a resource: the client is Cfx.re's. Cfx.re's own asset escrow encrypts Lua and `.ydr .ydd .yft` on the creator's Cfx.re account, tied to Cfx.re accounts and server keys (above); on 2025-08-08 Cfx.re reported a flaw that let assets be extracted from the game client, and on 2025-10-16 added an obfuscation layer for 3D models and a re-encrypt button ([Asset Security Update](https://forum.cfx.re/t/asset-security-update/5344773), [Introducing Asset Escrow](https://forum.cfx.re/t/introducing-asset-escrow-for-your-resources/4777151), [Introducing RedM Asset Escrow](https://forum.cfx.re/t/introducing-redm-asset-escrow/5303450)) | not by SCRIPT//GO; `pack --cfx-escrow` builds the creator's upload | Cfx.re's escrow, for what it encrypts; one copy for every buyer, no SCRIPT//GO fingerprint |
 | Garry's Mod | a binary module on every client; GMod clients do not load server-sent binary modules | not feasible | - |
 | Luanti | an engine fork (media are hashed and cached by the client) | not feasible without forking the engine | - |
-| BeamMP | a decryptor in every player's BeamNG: BeamMP's launcher (BeamMP's, not a package's) or a client mod; BeamNG mounts mod zips from disk through its own virtual file system | not available (assessed 2026-11-12): a client mod would ship its decryptor in clear to every player, would need vetted cryptography reachable from BeamNG's Lua (not established), and would still write the decrypted zip to disk for BeamNG to mount; nothing of it can be run here (BeamMP-Server needs an AuthKey, no BeamNG client) | - |
-| Rust | Facepunch's client | not feasible | - |
-| Hytale | the official client | not feasible today | - |
+| BeamMP | a decryptor in every player's BeamNG: BeamMP's launcher (BeamMP's, not a package's) or a client mod; BeamNG mounts mod zips from disk through its own virtual file system | not available (assessed 2026-11-12): a client mod would ship its decryptor in clear to every player, would need vetted cryptography reachable from BeamNG's Lua (not established), and would still write the decrypted zip to disk for BeamNG to mount; nothing of it can be run here (BeamMP-Server needs an AuthKey, no BeamNG client). BeamNG has no encrypted format for third-party mods. BeamMP's `protectmod <file.zip> true` (server console, docs.beammp.com) only stops the server sending a mod: each player gets it elsewhere, in clear. Access control, not encryption | - |
+| Rust | Facepunch's client | not feasible. Facepunch documents no map protection. RustEdit 2 (a third-party editor) can encrypt RustEdit's own data in an exported map, read by its server extension with the key; "Rust's data stays readable" and players receive the map without the key (rustedit.rusthq.com, read 2026-11-12). It does not protect the map's assets | - |
+| Hytale | the official client | not feasible today: no documented encryption for server-sent asset packs (asset-pack tutorial, read 2026-11-12) | - |
 | bundled hosts | the host itself can call `AssetContainerReader` (one process, the operator's machine) | feasible, but the operator holds the key, so it protects nothing from them | at-rest encryption only |
 
 v1 never depends on escrow: every target above ships v1 assets without it.

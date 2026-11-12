@@ -85,7 +85,7 @@ Maps, models, textures, sounds and other files players download. See [Selling as
 
 Run on Luanti 5.18.0 (official server image): every packed media file was announced to clients with the SHA-1 of its bytes. No client was run.
 
-Asset escrow: Not feasible without forking the engine.
+Asset escrow: Not available: the server sends media in clear and each client caches it by hash; a decryptor would need an engine fork. What protects it: the licence-gated download and the copy's fingerprint record in the media mod.
 
 ## Limits
 

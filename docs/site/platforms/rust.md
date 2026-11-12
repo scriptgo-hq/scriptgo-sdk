@@ -162,7 +162,7 @@ Maps, models, textures, sounds and other files players download. See [Selling as
 
 Packed (the map for server.levelurl); not run.
 
-Asset escrow: Not feasible: Facepunch's client.
+Asset escrow: Not available: every player downloads the map in clear from the operator's URL into Facepunch's client, and Facepunch documents no map protection. RustEdit's map encryption (a third-party editor) covers RustEdit's own data in the map, not Rust's. What protects it: the licence-gated download; the map is a loose file, so copies are not fingerprinted.
 
 ## The platform's own rules
 

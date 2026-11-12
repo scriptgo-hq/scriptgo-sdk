@@ -63,7 +63,7 @@ Maps, models, textures, sounds and other files players download. See [Selling as
 
 Packed (fxmanifest files, data_file, this_is_a_map); not run on FXServer, which needs a Cfx.re licence key.
 
-Asset escrow: No client work is possible from a resource; FiveM's own Asset Escrow covers stream files on its side.
+Asset escrow: No client work is possible from a resource: the game client is Cfx.re's. Cfx.re's own asset escrow encrypts Lua and .ydr, .ydd and .yft models when the creator uploads the resource to their own Cfx.re account; `scriptgo pack --target fivem --cfx-escrow` builds that upload. Cfx.re encrypts it, not SCRIPT//GO, and it reaches buyers through Cfx.re as one copy for all, without SCRIPT//GO's per-buyer fingerprint.
 
 ## The platform's own rules
 
@@ -78,7 +78,7 @@ This is the platform's rule, shown as information: whoever runs a script there a
 - Only the server half can be verified; the client half needs the game.
 - `require` finds no resource module on FiveM: list every module as a script.
 - The client has no `os`: ScriptGo.time.now() is nil there.
-- RedM runs the same shim (game rdr3); it is not built or verified yet.
+- RedM: `scriptgo pack --target redm` packs for it with the same shim (game rdr3); not run either.
 
 ## Real runs
 

@@ -62,7 +62,7 @@ Maps, models, textures, sounds and other files players download. See [Selling as
 
 Validated and packed (mods/); not loaded by a Hytale server yet.
 
-Asset escrow: Not feasible today: the official client.
+Asset escrow: Not available: the server sends the pack's assets to the official client, and no encryption for server-sent asset packs is documented. What protects it: the licence-gated download and a fingerprint record inside the pack zip.
 
 ## The platform's own rules
 

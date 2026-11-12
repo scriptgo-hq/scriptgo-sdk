@@ -53,7 +53,16 @@ your server.
 FiveM's `require` finds no resource module, and the client has no `os`, so `pack` refuses code
 that uses either. To pack it anyway, with warnings, pass `--allow-unportable`.
 
-RedM runs the same shim with `game "rdr3"`. It is not built or verified yet.
+**RedM.** `scriptgo pack my_resource --target redm` writes the same resource with `game "rdr3"`,
+the `rdr3_warning` line RedM requires, and the shim reporting `redm`. RedM's own files are
+`environment_asset "redm"` (GTA V files do not load in RDR2). Player match is not available on RedM
+yet. Nothing of it has run on a RedM server.
+
+**Cfx.re's asset escrow.** `scriptgo pack my_resource --target fivem --cfx-escrow` (or `redm`)
+writes `dist/fivem-cfx-escrow/my_resource/` and its zip, to upload at portal.cfx.re with your own
+Cfx.re account. It adds `lua54 "yes"` and `escrow_ignore` (the files `cfx_escrow_ignore` names in
+`scriptgo.lua`, and the shim). Cfx.re encrypts Lua and `.ydr`/`.ydd`/`.yft` models, not
+SCRIPT//GO; the pack lists what stays readable.
 
 To check a package on a real server (server half only):
 

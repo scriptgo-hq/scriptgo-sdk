@@ -566,7 +566,7 @@
         "native": "the same media folders",
         "packTarget": "luanti",
         "note": "Run on Luanti 5.18.0 (official server image): every packed media file was announced to clients with the SHA-1 of its bytes. No client was run.",
-        "escrow": "Not feasible without forking the engine."
+        "escrow": "Not available: the server sends media in clear and each client caches it by hash; a decryptor would need an engine fork. What protects it: the licence-gated download and the copy's fingerprint record in the media mod."
       },
       "proof": [
         {
@@ -1316,7 +1316,7 @@
         "native": "an asset pack (.zip with manifest.json, Common/ and Server/) installed in the server's mods/ folder; the server sends its assets to players",
         "packTarget": "hytale",
         "note": "Validated and packed (mods/); not loaded by a Hytale server yet.",
-        "escrow": "Not feasible today: the official client."
+        "escrow": "Not available: the server sends the pack's assets to the official client, and no encryption for server-sent asset packs is documented. What protects it: the licence-gated download and a fingerprint record inside the pack zip."
       },
       "proof": [],
       "runtimeVersions": [],
@@ -1397,7 +1397,7 @@
         "native": "the same content roots, including .bsp maps under maps/",
         "packTarget": "garrysmod",
         "note": "Run on a dedicated server (srcds): every packed file was found by the engine and added to the download list. No client was run.",
-        "escrow": "Not feasible: GMod clients do not load server-sent binary modules."
+        "escrow": "Not available: players receive the addon's content in clear, from the server or FastDL, and GMod clients do not load server-sent binary modules, so nothing can decrypt it there. What protects it: the licence-gated download and the copy's fingerprint record in the addon folder."
       },
       "proof": [
         {
@@ -1506,7 +1506,7 @@
         "native": "one custom map (.map), which players download from a URL the operator hosts (server.levelurl); a plugin cannot send files to players",
         "packTarget": "rust",
         "note": "Packed (the map for server.levelurl); not run.",
-        "escrow": "Not feasible: Facepunch's client."
+        "escrow": "Not available: every player downloads the map in clear from the operator's URL into Facepunch's client, and Facepunch documents no map protection. RustEdit's map encryption (a third-party editor) covers RustEdit's own data in the map, not Rust's. What protects it: the licence-gated download; the map is a loose file, so copies are not fingerprinted."
       },
       "proof": [
         {
@@ -1604,7 +1604,7 @@
         "native": "BeamNG mod .zip files, put in Resources/Client/: every player downloads them at join",
         "packTarget": "beammp",
         "note": "Packed (Resources/Client); not run, BeamMP-Server needs an AuthKey.",
-        "escrow": "Not available: it would need a decryptor in every player's BeamNG (BeamMP's launcher or a client mod), and BeamNG mounts mod zips from disk."
+        "escrow": "Not available: players receive the mod .zip files in clear, and BeamNG has no encrypted format for third-party mods; a decryptor would have to run in every player's BeamNG, which mounts mod zips from disk. BeamMP's protectmod only stops the server sending a mod (each player gets it elsewhere, in clear). What protects it: the licence-gated download and a fingerprint record inside each mod zip."
       },
       "proof": [],
       "runtimeVersions": [],
@@ -1735,7 +1735,7 @@
         "native": "streamed game files under stream/ (.ydr, .yft, .ytd, .ymap, .ytyp ...) and data files listed by data_file",
         "packTarget": "fivem",
         "note": "Packed (fxmanifest files, data_file, this_is_a_map); not run on FXServer, which needs a Cfx.re licence key.",
-        "escrow": "No client work is possible from a resource; FiveM's own Asset Escrow covers stream files on its side."
+        "escrow": "No client work is possible from a resource: the game client is Cfx.re's. Cfx.re's own asset escrow encrypts Lua and .ydr, .ydd and .yft models when the creator uploads the resource to their own Cfx.re account; `scriptgo pack --target fivem --cfx-escrow` builds that upload. Cfx.re encrypts it, not SCRIPT//GO, and it reaches buyers through Cfx.re as one copy for all, without SCRIPT//GO's per-buyer fingerprint."
       },
       "proof": [],
       "runtimeVersions": [],
@@ -1776,7 +1776,7 @@
         "Only the server half can be verified; the client half needs the game.",
         "`require` finds no resource module on FiveM: list every module as a script.",
         "The client has no `os`: ScriptGo.time.now() is nil there.",
-        "RedM runs the same shim (game rdr3); it is not built or verified yet."
+        "RedM: `scriptgo pack --target redm` packs for it with the same shim (game rdr3); not run either."
       ],
       "listed": true,
       "sortOrder": 160,
@@ -1799,37 +1799,67 @@
         "server",
         "client"
       ],
-      "adapterState": "none",
-      "blockedOn": "",
-      "integration": null,
+      "adapterState": "written",
+      "blockedOn": "Waiting for a server key: FXServer does not start without a Cfx.re registration key (sv_licenseKey).",
+      "integration": {
+        "runtime": "FXServer (gamename rdr3) and the RedM client (Lua 5.4)",
+        "summary": "RedM runs the FiveM resource shape on the same FXServer. `scriptgo pack --target redm` emits a resource folder with a generated `fxmanifest.lua` (`game \"rdr3\"` and the `rdr3_warning` RedM requires) and the FiveM shim, loaded first, which maps `ScriptGo.*` onto CitizenFX natives. Threads, events and exports stay Cfx.re's own.",
+        "type": "shim"
+      },
       "protection": {
         "tier": "none",
         "state": "available",
         "optIn": false,
-        "note": "It would run the FiveM shim, which has no licence check, so a package runs there without one. Releases are still signed."
+        "note": "It runs the FiveM shim, which has no licence check, so a package runs there without one. Releases are still signed."
       },
       "assets": {
-        "support": "partial",
-        "generic": "as on FiveM (stream/ and files {}); the RedM pack target is not built yet",
-        "native": "as on FiveM; the RedM pack target is not built yet",
-        "packTarget": null,
-        "note": "Validated as FiveM; no RedM pack target yet.",
-        "escrow": "No client work is possible from a resource; Cfx.re's own Asset Escrow covers stream files on its side."
+        "support": "supported",
+        "generic": "as on FiveM: files under stream/ are streamed to players; other files are listed in files {} and downloaded by players",
+        "native": "Red Dead Redemption 2 streamed files under stream/ and data files listed by data_file, declared with environment_asset \"redm\" (a GTA V file does not load in RDR2)",
+        "packTarget": "redm",
+        "note": "Packed (fxmanifest with game rdr3 and rdr3_warning, files, data_file, this_is_a_map); not run on FXServer, which needs a Cfx.re licence key.",
+        "escrow": "No client work is possible from a resource: the game client is Cfx.re's. Cfx.re's own asset escrow encrypts Lua and .ydr, .ydd and .yft models when the creator uploads the resource to their own Cfx.re account; `scriptgo pack --target redm --cfx-escrow` builds that upload. Cfx.re encrypts it, not SCRIPT//GO, and it reaches buyers through Cfx.re as one copy for all, without SCRIPT//GO's per-buyer fingerprint."
       },
       "proof": [],
       "runtimeVersions": [],
       "adapterVersion": "",
       "summary": "Scripts on RedM roleplay servers, the same way as on FiveM.",
       "capabilities": {
+        "commands": "supported",
+        "config": "supported",
+        "events": "supported",
+        "http": "partial",
+        "licensing": "unavailable",
+        "logging": "supported",
         "perks": "unavailable",
-        "presence": "unavailable"
+        "permissions": "supported",
+        "players": "supported",
+        "presence": "unavailable",
+        "storage": "supported",
+        "ui": "fallback"
       },
       "capabilityNotes": {
-        "perks": "No adapter yet.",
-        "presence": "No adapter yet (RedM would read the address with GetPlayerEndpoint, as FiveM)."
+        "commands": "RegisterCommand; restricted commands check the ACE command.<name>.",
+        "config": "Server side: the convar <resource>:<key> (set in server.cfg).",
+        "events": "Cfx.re's own events and exports, as on FiveM; TriggerEvent runs its handlers at once instead of on the next tick.",
+        "http": "Server side, through PerformHttpRequest; redirects are not followed. No host allow-list: the server owner decides what a resource may call.",
+        "licensing": "Not implemented: the FiveM shim has no licence check (see FiveM).",
+        "logging": "print to the server console (channel script:<resource>) or the client console, with the level in front.",
+        "perks": "Not switched on: the shim does not carry the core's perks module.",
+        "permissions": "Server side: ACE (IsPlayerAceAllowed), granted with add_ace in server.cfg.",
+        "players": "Server side: GetPlayers, GetPlayerName, and the license: identifier.",
+        "presence": "Not on RedM yet: `scriptgo pack --target redm` leaves the shim's player match section out, and refuses a package that requires presence.",
+        "storage": "Resource KVP (GetResourceKvpString / SetResourceKvp) on both sides, values stored as JSON text.",
+        "ui": "Chat messages (chat:addMessage, handled by the server's chat resource)."
       },
       "setupMarkdown": "",
-      "limitations": [],
+      "limitations": [
+        "Planned: no run on a real FXServer has passed yet. FXServer does not start without a Cfx.re registration key (sv_licenseKey).",
+        "The shim is FiveM's: it calls only CitizenFX natives both games have. Nothing of it has run on RedM.",
+        "No licence check: `scriptgo pack --target redm` refuses a package that needs one (`licensed true`, or the licensing capability), because the shim could not enforce it.",
+        "Only the server half can be verified; the client half needs the game.",
+        "`require` finds no resource module: list every module as a script. The client has no `os`."
+      ],
       "listed": true,
       "sortOrder": 170,
       "adapters": []

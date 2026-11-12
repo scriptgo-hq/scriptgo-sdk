@@ -62,7 +62,7 @@ Maps, models, textures, sounds and other files players download. See [Selling as
 
 Packed (Resources/Client); not run, BeamMP-Server needs an AuthKey.
 
-Asset escrow: Not available: it would need a decryptor in every player's BeamNG (BeamMP's launcher or a client mod), and BeamNG mounts mod zips from disk.
+Asset escrow: Not available: players receive the mod .zip files in clear, and BeamNG has no encrypted format for third-party mods; a decryptor would have to run in every player's BeamNG, which mounts mod zips from disk. BeamMP's protectmod only stops the server sending a mod (each player gets it elsewhere, in clear). What protects it: the licence-gated download and a fingerprint record inside each mod zip.
 
 ## The platform's own rules
 

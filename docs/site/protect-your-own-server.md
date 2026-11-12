@@ -40,7 +40,11 @@ On these platforms it does **not** keep code secret, and we say so plainly:
   disk so the host can load them, and a licence check written in Lua can be deleted by whoever has
   the files. That does not stop a leaked folder.
 - **FiveM and RedM.** The SCRIPT//GO shim there has no licence check and no loader, so an encrypted
-  release cannot run.
+  release cannot run. Cfx.re's own asset escrow is the platform's way: upload the resource to your
+  own Cfx.re account and Cfx.re encrypts its Lua scripts and `.ydr`/`.ydd`/`.yft` models; it then
+  starts only on servers whose Cfx.re key belongs to that account. `scriptgo pack --target
+  fivem|redm --cfx-escrow` builds that upload. Cfx.re does the encryption and holds the keys, not
+  SCRIPT//GO; see [Selling assets](/docs/selling-assets#fivem-and-redm-cfxres-asset-escrow).
 - **Hytale.** A loader (a plugin with a native library) is planned, not built.
 - **BeamMP.** No loader; a licence check is planned.
 

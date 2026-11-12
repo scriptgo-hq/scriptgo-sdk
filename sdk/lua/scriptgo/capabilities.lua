@@ -523,7 +523,7 @@ M.ENVIRONMENTS = {
             "Only the server half can be verified; the client half needs the game.",
             "`require` finds no resource module on FiveM: list every module as a script.",
             "The client has no `os`: ScriptGo.time.now() is nil there.",
-            "RedM runs the same shim (game rdr3); it is not built or verified yet.",
+            "RedM: `scriptgo pack --target redm` packs for it with the same shim (game rdr3); not run either.",
         },
         integration = {
             type = "shim",
@@ -533,11 +533,44 @@ M.ENVIRONMENTS = {
         blockedOn = "Waiting for a server key: FXServer does not start without a Cfx.re registration key (sv_licenseKey).",
     },
     redm = {
-        protection = { tier = "none", state = "available", note = "It would run the FiveM shim, which has no licence check, so a package runs there without one. Releases are still signed." },
+        protection = { tier = "none", state = "available", note = "It runs the FiveM shim, which has no licence check, so a package runs there without one. Releases are still signed." },
+        -- `scriptgo pack --target redm`: the FiveM shim and fxmanifest with game "rdr3" and RedM's
+        -- rdr3_warning. Unit-tested only; planned until a real FXServer run passes (a Cfx.re key).
         name = "RedM", kind = "mod_platform", status = "planned", dialects = { "5.4" }, sides = { "server", "client" },
         summary = "Scripts on RedM roleplay servers, the same way as on FiveM.",
         platformRules = "restricts_paid", platformRulesNote = "The platform's creator terms keep paid server content on its own marketplace (Rockstar Games Creator Platform License Agreement, 2026-09-10, §3.1(6)).",
-        capabilities = { perks = "unavailable", presence = "unavailable" }, notes = { perks = "No adapter yet.", presence = "No adapter yet (RedM would read the address with GetPlayerEndpoint, as FiveM)." }, limitations = {},
+        capabilities = {
+            events = "supported", logging = "supported", storage = "supported", players = "supported",
+            permissions = "supported", commands = "supported", config = "supported", ui = "fallback",
+            http = "partial", licensing = "unavailable", perks = "unavailable", presence = "unavailable",
+        },
+        notes = {
+            perks = "Not switched on: the shim does not carry the core's perks module.",
+            presence = "Not on RedM yet: `scriptgo pack --target redm` leaves the shim's player match section out, and refuses a package that requires presence.",
+            events = "Cfx.re's own events and exports, as on FiveM; TriggerEvent runs its handlers at once instead of on the next tick.",
+            logging = "print to the server console (channel script:<resource>) or the client console, with the level in front.",
+            storage = "Resource KVP (GetResourceKvpString / SetResourceKvp) on both sides, values stored as JSON text.",
+            players = "Server side: GetPlayers, GetPlayerName, and the license: identifier.",
+            permissions = "Server side: ACE (IsPlayerAceAllowed), granted with add_ace in server.cfg.",
+            commands = "RegisterCommand; restricted commands check the ACE command.<name>.",
+            config = "Server side: the convar <resource>:<key> (set in server.cfg).",
+            ui = "Chat messages (chat:addMessage, handled by the server's chat resource).",
+            http = "Server side, through PerformHttpRequest; redirects are not followed. No host allow-list: the server owner decides what a resource may call.",
+            licensing = "Not implemented: the FiveM shim has no licence check (see FiveM).",
+        },
+        limitations = {
+            "Planned: no run on a real FXServer has passed yet. FXServer does not start without a Cfx.re registration key (sv_licenseKey).",
+            "The shim is FiveM's: it calls only CitizenFX natives both games have. Nothing of it has run on RedM.",
+            "No licence check: `scriptgo pack --target redm` refuses a package that needs one (`licensed true`, or the licensing capability), because the shim could not enforce it.",
+            "Only the server half can be verified; the client half needs the game.",
+            "`require` finds no resource module: list every module as a script. The client has no `os`.",
+        },
+        integration = {
+            type = "shim",
+            runtime = "FXServer (gamename rdr3) and the RedM client (Lua 5.4)",
+            summary = "RedM runs the FiveM resource shape on the same FXServer. `scriptgo pack --target redm` emits a resource folder with a generated `fxmanifest.lua` (`game \"rdr3\"` and the `rdr3_warning` RedM requires) and the FiveM shim, loaded first, which maps `ScriptGo.*` onto CitizenFX natives. Threads, events and exports stay Cfx.re's own.",
+        },
+        blockedOn = "Waiting for a server key: FXServer does not start without a Cfx.re registration key (sv_licenseKey).",
     },
     kcdmp = {
         protection = { tier = "license", state = "planned", note = "No adapter yet. Licence check and signed releases are planned with it; the host would run plain script, so its operator could read what it loads: no code-secrecy claim." },

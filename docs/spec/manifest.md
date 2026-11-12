@@ -78,9 +78,10 @@ share code through `dependencies` + exports.
 | `test_script(s)` | path(s) | Test files run by `scriptgo test` in the standalone host |
 | `licensed` | boolean | The resource verifies a license at start (`ScriptGo.licensing`) |
 | `asset(s)` | glob(s) | Client-delivered assets, delivered on every environment that takes generic files ([assets.md](assets.md)) |
-| `environment_asset(s)` | `"<env>" "<path>"` or `"<env>" { ... }` | Assets in one environment's native form: an OPEN//77 preload package, FiveM `stream/` files, a BeamMP client mod, a Rust map, a Hytale asset pack |
+| `environment_asset(s)` | `"<env>" "<path>"` or `"<env>" { ... }` | Assets in one environment's native form: an OPEN//77 preload package, FiveM or RedM `stream/` files, a BeamMP client mod, a Rust map, a Hytale asset pack |
 | `game_build(s)` | `"<env>" "<build>"` or `"<env>" { ... }` | Game builds the assets were made for (information, never a load gate) |
 | `data_file(s)` | `"<TYPE>" "<path>"` or `"<TYPE>" { ... }` | FiveM/RedM `data_file` lines naming asset files |
+| `cfx_escrow_ignore` | glob(s) | Files left readable when the creator uploads the FiveM or RedM build to Cfx.re's own asset escrow: `scriptgo pack --target fivem\|redm --cfx-escrow` writes them as `escrow_ignore` ([assets.md](assets.md)). Safe paths only (`unsafe_path`). Every other target ignores it; SCRIPT//GO's own code escrow uses `--escrow-ignore` |
 
 ## `scriptgo.json`
 

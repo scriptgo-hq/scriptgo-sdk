@@ -33,7 +33,9 @@ enforce it: the script runs where a licence allows it, and stops where one ends.
 
 Assets (maps, models, textures, sounds) are protected differently: a licence-gated download, a
 fingerprinted copy per buyer, signed releases and takedown on report, on every platform. On
-OPEN//77 they can also be delivered encrypted, with a key per server deployment. See
+OPEN//77 they can also be delivered encrypted, with a key per server deployment. On FiveM and RedM,
+Cfx.re's own asset escrow can encrypt Lua scripts and models on your Cfx.re account, and
+`scriptgo pack --cfx-escrow` builds that upload; Cfx.re encrypts it, not SCRIPT//GO. See
 [Selling assets](/docs/selling-assets#protection).
 
 ## Three layers

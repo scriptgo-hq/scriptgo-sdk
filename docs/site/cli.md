@@ -68,7 +68,7 @@ scoped to one user. Revoke it from the same settings page if it leaks.
 | `scriptgo test <dir>` | Runs the resource's `test_script` files in the standalone host |
 | `scriptgo run <dir>...` | Runs resources in the standalone host, in simulated or real time |
 | `scriptgo verify <dir>` | Runs the resource on its environments and writes compatibility reports |
-| `scriptgo pack <dir>` | Builds the `.zip` you can upload on the website: the same archive `publish` sends, README, tests and assets included. `--target open77\|fivem\|garrysmod\|beammp\|luanti\|rust\|hytale` builds that platform's folder instead, assets in its own form; `--without-assets` builds a platform that delivers none of the package's assets. See [Selling assets](/docs/selling-assets) |
+| `scriptgo pack <dir>` | Builds the `.zip` you can upload on the website: the same archive `publish` sends, README, tests and assets included. `--target open77\|fivem\|redm\|garrysmod\|beammp\|luanti\|rust\|hytale` builds that platform's folder instead, assets in its own form; `--without-assets` builds a platform that delivers none of the package's assets. With `fivem` or `redm`, `--cfx-escrow` builds the folder and zip you upload to Cfx.re's own asset escrow, with `escrow_ignore` from `cfx_escrow_ignore`: Cfx.re encrypts it, not SCRIPT//GO. See [Selling assets](/docs/selling-assets) |
 | `scriptgo assets fingerprint <copy>` | Reads and checks the per-buyer fingerprints of a downloaded copy. `assets seal` and `assets open` make and read encrypted asset containers, for platform builders |
 | `scriptgo login` | Saves a personal access token |
 | `scriptgo publish [dir]` | Uploads a release of the resource and publishes it |

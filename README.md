@@ -46,7 +46,7 @@ textures, sounds. They are sold like scripts, with the same licences and refunds
 | Environment | What a package delivers |
 |---|---|
 | OPEN//77 | Resource files, and preload packages of REDengine archives, tweaks and engine config |
-| FiveM | `stream/` files and `data_file` entries (a map: `.ymap`, with `this_is_a_map`). RedM: validated, not packed yet |
+| FiveM, RedM | `stream/` files and `data_file` entries (a map: `.ymap`, with `this_is_a_map`), each game its own files |
 | Garry's Mod | Addon content: `materials/`, `models/`, `sound/`, `maps/` (`.bsp`) |
 | Luanti | Mod media: textures, sounds, models, translations |
 | BeamMP | BeamNG mod `.zip` files, sent to players at join |
@@ -66,7 +66,10 @@ On OPEN//77, `scriptgo publish --asset-escrow` also delivers the preload package
 for each licensed deployment, the key held by that server and handed only to players the OPEN//77
 master admits, revocable. The engine mounts archives from files, so while the game runs the
 decrypted archives are on the player's disk. The other platforms' game clients cannot run a
-decryptor from a server package, so they get the protection above.
+decryptor from a server package, so they get the protection above. On FiveM and RedM,
+`scriptgo pack --target fivem|redm --cfx-escrow` builds the upload for Cfx.re's own asset escrow:
+Cfx.re encrypts it on the creator's Cfx.re account (Lua and `.ydr`/`.ydd`/`.yft` models), and
+delivers it as one copy for every buyer, without SCRIPT//GO's fingerprint.
 
 [Selling assets](https://scriptgo.dev/docs/selling-assets) is the guide;
 [`docs/spec/assets.md`](docs/spec/assets.md) is the specification.
