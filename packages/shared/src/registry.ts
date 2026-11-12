@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Money, PageQuery, Timestamp, PackageName, Username } from "./common.ts";
-import { AssetRightsCase, ReleaseAssetsInfo } from "./assets.ts";
+import { AssetEscrowInfo, AssetRightsCase, ReleaseAssetsInfo } from "./assets.ts";
 import {
   AdapterState,
   CapabilitySupport,
@@ -193,6 +193,46 @@ export const ReleaseEscrowInfo = z.object({
 });
 export type ReleaseEscrowInfo = z.infer<typeof ReleaseEscrowInfo>;
 
+/**
+ * Client code escrow of a release (client-escrow.md; ADR-0046 in scriptgo-api): its OPEN//77 client
+ * scripts ship in each copy as stripped Lua bytecode, sealed per deployment, never as source. Public
+ * metadata: never a key, never the line map. Bytecode can still be decompiled to working logic
+ * (local names and comments are lost): deterrence and traceability, not secrecy.
+ */
+export const ReleaseClientEscrowInfo = z.object({
+  format: z.literal("scriptgo-client-escrow/1"),
+  environment: z.literal("open77"),
+  /** full: no local names and no line numbers; names: no local names, real line numbers kept. */
+  strip: z.enum(["full", "names"]),
+  /** Client scripts each copy carries as bytecode (resource-relative paths). */
+  scripts: z.array(z.string()),
+  /**
+   * Where the source line numbers are. creator_only (strip full): in the line map the platform
+   * keeps and serves to the creator only (GET /v1/creator/releases/:id/client-lines), never in a
+   * copy. in_bytecode (strip names): left in the bytecode.
+   */
+  lineNumbers: z.enum(["creator_only", "in_bytecode"]),
+});
+export type ReleaseClientEscrowInfo = z.infer<typeof ReleaseClientEscrowInfo>;
+
+/**
+ * What a release protects, in one place (SDK 0.1.12; additive). Each kind is independent:
+ * serverCode is code escrow (escrow.md; details in `escrow`), clientCode is client code escrow,
+ * assets is asset escrow (the same value as `assets.escrow`). perBuyerCopies: every download is a
+ * copy built and fingerprinted for one licence (a release with assets or with client code escrow).
+ * A response from an older API has no `protection`: read it as `escrow !== null` for serverCode and
+ * `assets?.escrow ?? null` for assets.
+ */
+export const ReleaseProtection = z.object({
+  serverCode: z.boolean(),
+  clientCode: ReleaseClientEscrowInfo.nullable(),
+  assets: AssetEscrowInfo.nullable(),
+  perBuyerCopies: z.boolean(),
+});
+export type ReleaseProtection = z.infer<typeof ReleaseProtection>;
+
+const NO_PROTECTION: ReleaseProtection = { serverCode: false, clientCode: null, assets: null, perBuyerCopies: false };
+
 export const PackageVersion = z.object({
   version: z.string(),
   status: ReleaseStatus,
@@ -208,6 +248,8 @@ export const PackageVersion = z.object({
   signature: ReleaseSignature.nullable().default(null),
   /** Client-delivered assets of the release (docs/spec/assets.md); null when it carries none. */
   assets: ReleaseAssetsInfo.nullable().default(null),
+  /** What the release protects: server code, client code, assets (ReleaseProtection). */
+  protection: ReleaseProtection.default(NO_PROTECTION),
 });
 export type PackageVersion = z.infer<typeof PackageVersion>;
 
@@ -344,6 +386,8 @@ export const Release = z.object({
   signature: ReleaseSignature.nullable().default(null),
   /** Client-delivered assets of the release (docs/spec/assets.md); null when it carries none. */
   assets: ReleaseAssetsInfo.nullable().default(null),
+  /** What the release protects: server code, client code, assets (ReleaseProtection). */
+  protection: ReleaseProtection.default(NO_PROTECTION),
 });
 export type Release = z.infer<typeof Release>;
 

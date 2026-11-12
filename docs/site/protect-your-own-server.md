@@ -50,8 +50,10 @@ Each [platform page](/docs/environments) says what its adapter can do.
   `scriptgo login --token <your token>`.
 - Your scripts as a SCRIPT//GO resource: a folder with a `scriptgo.lua` manifest that lists the
   platform in `environments`. `scriptgo init` writes one; `scriptgo validate` checks it.
-- **Valuable logic in server scripts.** Only server scripts are encrypted. Client scripts, shared
-  scripts and UI files are sent to every player's game, on every platform, so they stay readable.
+- **Valuable logic in server scripts.** Code escrow encrypts server scripts only. Client scripts,
+  shared scripts and UI files are sent to every player's game, so they stay readable; on OPEN//77,
+  [client code escrow](/docs/protect-your-work#client-scripts-on-open77) ships client scripts as
+  stripped bytecode instead, which a player can still decompile.
 
 ## The steps
 
@@ -210,8 +212,10 @@ Rust has no client-side plugins, so everything a SCRIPT//GO resource runs there 
 ## What it does not do
 
 - **It protects server scripts only.** Client scripts, shared scripts and UI (NUI, WebUI, HUD) are
-  sent to every player in clear, on every platform. Keep prices, economy rules, anti-cheat and
-  anything valuable on the server side.
+  sent to every player. On OPEN//77,
+  [client code escrow](/docs/protect-your-work#client-scripts-on-open77) ships client scripts as
+  stripped bytecode, which a player can still decompile into working logic; everywhere else they
+  arrive in clear. Keep prices, economy rules, anti-cheat and anything valuable on the server side.
 - **The machine's operator can read their own process.** A server that must decrypt and run code
   can be inspected by whoever controls it. The encryption raises the cost and the marker makes a copy
   traceable; neither makes reading it impossible. Choose your host accordingly.

@@ -63,11 +63,29 @@ ReleaseSignature  = { alg: "ed25519", keyId, payload, signature }
 ReleaseEscrowInfo = { format, cipher, kdf, aad, signerPublicKey, signerKeyId, signerOrigin: "master" | "creator" | null,
                       allowlist: string[], clearFiles: string[], encryptedFiles: string[], watermarked: boolean,
                       builtBy: "cli" | "server", sealedKeyPresent: boolean }
+// Client code escrow (client-escrow.md): the OPEN//77 client scripts each copy carries as stripped
+// bytecode. lineNumbers: "creator_only" (strip full: the line map stays with the platform and is served
+// to the creator only) | "in_bytecode" (strip names). Never a key, never the line map.
+ReleaseClientEscrowInfo = { format: "scriptgo-client-escrow/1", environment: "open77", strip: "full" | "names",
+                            scripts: string[], lineNumbers: "creator_only" | "in_bytecode" }
+// Asset escrow (assets.md, "Asset escrow"): the OPEN//77 preloads sealed per deployment.
+AssetEscrowInfo   = { format: "scriptgo-asset-escrow/1", environment: "open77", containers: string[] }
+// What a release protects, each kind independent (additive since SDK 0.1.12).
+ReleaseProtection = { serverCode: boolean,                       // code escrow: escrow !== null
+                      clientCode: ReleaseClientEscrowInfo | null, // client code escrow
+                      assets: AssetEscrowInfo | null,             // asset escrow (same as assets.escrow)
+                      perBuyerCopies: boolean }                   // each download is a fingerprinted copy for one licence
 ```
 
 `Release` and `PackageVersion` carry `escrow: ReleaseEscrowInfo | null` and `signature: ReleaseSignature | null`
 (null only for a release published before signing; the seed signs those). For a protected release
 `sha256` and `size` describe the encrypted bundle: that is what is delivered.
+
+Both also carry `protection: ReleaseProtection`, the one place that says what the release protects:
+its server code (code escrow), its client code (client code escrow), its assets (asset escrow). A
+client of an older API, which sends no `protection`, reads `escrow !== null` as `serverCode` and
+`assets?.escrow ?? null` as `assets`; the schema's default is "nothing protected". `assets.escrow`
+(`ReleaseAssetsInfo`) is filled with the same value as `protection.assets`.
 
 ## Public
 

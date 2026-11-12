@@ -46,6 +46,19 @@ export const AssetEnvironmentInfo = z.object({
 });
 export type AssetEnvironmentInfo = z.infer<typeof AssetEnvironmentInfo>;
 
+/**
+ * Asset escrow of a release (assets.md, "Asset escrow"; ADR-0044 in scriptgo-api): the OPEN//77
+ * preloads (container paths in the resource) delivered sealed per deployment. Their key goes to the
+ * deployment's bound server only, which hands it to each player's session; they are decrypted only
+ * inside the game client. Public metadata: never a key.
+ */
+export const AssetEscrowInfo = z.object({
+  format: z.literal("scriptgo-asset-escrow/1"),
+  environment: z.literal("open77"),
+  containers: z.array(z.string()),
+});
+export type AssetEscrowInfo = z.infer<typeof AssetEscrowInfo>;
+
 /** A release's assets. Null on a release that carries none. */
 export const ReleaseAssetsInfo = z.object({
   files: z.number().int().nonnegative(),
@@ -61,10 +74,7 @@ export const ReleaseAssetsInfo = z.object({
    * resource) delivered sealed per deployment. Their key goes to the deployment's bound server only,
    * which hands it to each player's session. Absent on releases inspected before escrow existed.
    */
-  escrow: z
-    .object({ format: z.literal("scriptgo-asset-escrow/1"), environment: z.literal("open77"), containers: z.array(z.string()) })
-    .nullable()
-    .optional(),
+  escrow: AssetEscrowInfo.nullable().optional(),
   /** SDK version of the inspection that accepted the release. */
   inspectedWith: z.string(),
 });
