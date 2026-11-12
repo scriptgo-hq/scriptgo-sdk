@@ -18,7 +18,7 @@ export const CAPABILITIES = [
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
-export const KNOWN_ENVIRONMENTS = ["standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim", "cctweaked", "dotnet", "garrysmod", "hytale", "rust", "beammp", "fivem"] as const;
+export const KNOWN_ENVIRONMENTS = ["standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim", "cctweaked", "dotnet", "garrysmod", "hytale", "rust", "beammp", "fivem", "redm"] as const;
 export const LUA_DIALECTS = ["5.1", "5.2", "5.3", "5.4", "luajit"] as const;
 export const CATEGORIES = [
   "inventory",
@@ -99,6 +99,12 @@ export interface ParsedManifest {
   gameBuilds: Record<string, string[]>;
   /** FiveM-style data files: data file type -> paths (`data_file "DLC_ITYP_REQUEST" "stream/x.ytyp"`). */
   dataFiles: Record<string, string[]>;
+  /**
+   * Globs of files left readable when the creator uploads the FiveM or RedM build to Cfx.re's own
+   * asset escrow (`scriptgo pack --target fivem|redm --cfx-escrow` writes them as `escrow_ignore`).
+   * SCRIPT//GO does not encrypt anything there: Cfx.re does, on the creator's Cfx.re account.
+   */
+  cfxEscrowIgnore: string[];
   /** Directives this parser does not interpret (OPEN//77-only or future). Kept, never fatal. */
   unknown: { directive: string; args: unknown[]; line: number }[];
 }
@@ -147,6 +153,8 @@ def(["asset", "assets"], "assets", "list");
 def(["environment_asset", "environment_assets"], "environment_assets", "envlist");
 def(["game_build", "game_builds"], "game_builds", "envlist");
 def(["data_file", "data_files"], "data_files", "envlist");
+// Files Cfx.re's asset escrow leaves readable (configs), for `pack --cfx-escrow` (docs/spec/assets.md).
+def(["cfx_escrow_ignore"], "cfx_escrow_ignore", "list");
 
 /** What the first argument of each keyed list directive names, for its error message. */
 const ENVLIST_HINT: Record<string, string> = {
@@ -428,6 +436,10 @@ export function parseManifest(source: string, opts: { fileName?: string } = {}):
     else if (p.startsWith(RESERVED_ASSET_PREFIX)) errors.push({ code: "reserved_path", message: `'${p}' in ${where}: ${RESERVED_ASSET_PREFIX} is reserved for the per-buyer fingerprint.` });
   };
   for (const p of list("assets")) checkAsset(p, "assets");
+  for (const p of list("cfx_escrow_ignore")) {
+    const reason = unsafePathReason(p);
+    if (reason) errors.push({ code: "unsafe_path", message: `'${p}' in cfx_escrow_ignore: ${reason}.` });
+  }
   for (const [env, paths] of Object.entries(environmentAssets)) {
     if (!SLUG.test(env)) errors.push({ code: "invalid_environment", message: `Environment '${env}' in environment_asset is not a valid slug.` });
     for (const p of paths) checkAsset(p, `environment_asset "${env}"`);
@@ -526,6 +538,7 @@ export function parseManifest(source: string, opts: { fileName?: string } = {}):
     environmentAssets,
     gameBuilds,
     dataFiles,
+    cfxEscrowIgnore: list("cfx_escrow_ignore"),
     unknown,
   };
   return { ok: true, manifest, warnings };

@@ -1,5 +1,5 @@
 {
   "ok": false,
-  "errors": ["invalid_value", "unsafe_path", "reserved_path", "invalid_environment", "invalid_game_build", "invalid_data_file"],
+  "errors": ["invalid_value", "unsafe_path", "reserved_path", "unsafe_path", "invalid_environment", "invalid_game_build", "invalid_data_file"],
   "warnings": []
 }

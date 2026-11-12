@@ -4,6 +4,7 @@
   "manifest": {
     "name": "night_market",
     "category": "housing",
+    "environments": ["fivem", "redm", "open77", "garrysmod"],
     "serverScripts": ["server/doors.lua"],
     "assets": ["media/**/*.png", "media/sounds/*.ogg"],
     "environmentAssets": {
@@ -18,6 +19,7 @@
     "dataFiles": {
       "DLC_ITYP_REQUEST": ["stream/night_market.ytyp"],
       "VEHICLE_METADATA_FILE": ["data/vehicles.meta"]
-    }
+    },
+    "cfxEscrowIgnore": ["config.lua", "config/**"]
   }
 }

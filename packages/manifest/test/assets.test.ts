@@ -185,6 +185,26 @@ describe("FiveM", () => {
     const r = inspect(head("data_file_pkg", 'environment_asset "fivem" "stream/**"\ngame_build "fivem" "3258"\ndata_file "DLC_ITYP_REQUEST" "stream/missing.ytyp"\n'), { "stream/a.ydr": Buffer.alloc(8) });
     expect(codes(r)).toEqual(["fivem_data_file_missing"]);
   });
+  it("RedM: its own files, and a data_file of the other game's files belongs to that game's build", () => {
+    const pkg = head(
+      "two_games",
+      'environment_asset "fivem" { "stream/gta/**", "data/gta/**" }\nenvironment_asset "redm" { "stream/rdr/**", "data/rdr/**" }\n' +
+        'game_build "fivem" "3258"\ngame_build "redm" "1491"\n' +
+        'data_file "VEHICLE_METADATA_FILE" "data/gta/vehicles.meta"\ndata_file "DLC_ITYP_REQUEST" "data/rdr/props.ytyp"\n',
+    );
+    const files = { "stream/gta/a.ydr": Buffer.alloc(8), "data/gta/vehicles.meta": Buffer.from("<x/>"), "stream/rdr/b.ydr": Buffer.alloc(8), "data/rdr/props.ytyp": Buffer.alloc(8) };
+    const r = inspect(pkg, files, ["redm"]);
+    expect(r.errors).toEqual([]);
+    expect(r.environments["fivem"]!.files).toEqual(["data/gta/vehicles.meta", "stream/gta/a.ydr"]);
+    expect(r.environments["redm"]!.files).toEqual(["data/rdr/props.ytyp", "stream/rdr/b.ydr"]);
+    const ok = inspect(
+      head("two_games_ok", 'environment_asset "redm" { "stream/**", "data/**" }\ngame_build "redm" "1491"\ndata_file "DLC_ITYP_REQUEST" "data/props.ytyp"\ndata_file "VEHICLE_METADATA_FILE" "data/missing.meta"\n'),
+      { "stream/b.ydr": Buffer.alloc(8), "stream/m.ymap": Buffer.alloc(8), "data/props.ytyp": Buffer.alloc(8) },
+    );
+    expect(codes(ok)).toEqual(["fivem_data_file_missing"]);
+    expect(ok.environments["redm"]!.support).toBe("supported");
+    expect(ok.environments["redm"]!.needs).toEqual(["this_is_a_map"]);
+  });
 });
 
 describe("Garry's Mod, Luanti, BeamMP, Rust, Hytale", () => {

@@ -6,7 +6,7 @@ local json = R("json")
 local M = {}
 
 M.CAPABILITIES = { "events", "logging", "storage", "players", "permissions", "commands", "config", "ui", "http", "licensing", "perks", "presence" }
-M.KNOWN_ENVIRONMENTS = { "standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim", "cctweaked", "dotnet", "garrysmod", "hytale", "rust", "beammp", "fivem" }
+M.KNOWN_ENVIRONMENTS = { "standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim", "cctweaked", "dotnet", "garrysmod", "hytale", "rust", "beammp", "fivem", "redm" }
 M.LUA_DIALECTS = { "5.1", "5.2", "5.3", "5.4", "luajit" }
 M.CATEGORIES = { "inventory", "permissions", "economy", "events", "ui", "admin", "framework", "vehicles", "housing", "quests", "library", "other" }
 M.MAX_MANIFEST_BYTES = 256 * 1024
@@ -250,6 +250,8 @@ def({ "asset", "assets" }, "assets", "list")
 def({ "environment_asset", "environment_assets" }, "environment_assets", "envlist")
 def({ "game_build", "game_builds" }, "game_builds", "envlist")
 def({ "data_file", "data_files" }, "data_files", "envlist")
+-- Files Cfx.re's asset escrow leaves readable (configs), for `pack --cfx-escrow` (docs/spec/assets.md).
+def({ "cfx_escrow_ignore" }, "cfx_escrow_ignore", "list")
 local ENVLIST_HINT = {
     environment_scripts = "an environment and at least one script",
     environment_assets = "an environment and at least one asset path",
@@ -582,6 +584,10 @@ function M.parse(source, fileName)
     end
     local environmentAssets, gameBuilds, dataFiles = envLists.environment_assets or {}, envLists.game_builds or {}, envLists.data_files or {}
     for _, p in ipairs(list("assets")) do checkAsset(p, "assets") end
+    for _, p in ipairs(list("cfx_escrow_ignore")) do
+        local reason = M.unsafePathReason(p)
+        if reason then err("unsafe_path", "'" .. p .. "' in cfx_escrow_ignore: " .. reason .. ".") end
+    end
     for _, env in ipairs(envListOrder.environment_assets or {}) do
         if not M.isSlug(env) then err("invalid_environment", "Environment '" .. env .. "' in environment_asset is not a valid slug.") end
         for _, p in ipairs(environmentAssets[env]) do checkAsset(p, 'environment_asset "' .. env .. '"') end
@@ -684,6 +690,7 @@ function M.parse(source, fileName)
             exports = list("exports"), serverExports = list("server_exports"),
             webUiPage = webUiPage, webFiles = list("web_files"),
             assets = list("assets"), environmentAssets = environmentAssets, gameBuilds = gameBuilds, dataFiles = dataFiles,
+            cfxEscrowIgnore = list("cfx_escrow_ignore"),
             unknown = unknown,
         },
     }

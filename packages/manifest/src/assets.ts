@@ -107,10 +107,10 @@ export const ASSET_RULES: Record<string, AssetEnvironmentRule> = {
     packTarget: "fivem",
   },
   redm: {
-    support: "partial",
-    generic: "as on FiveM (stream/ and files {}); the RedM pack target is not built yet",
-    native: "as on FiveM; the RedM pack target is not built yet",
-    packTarget: null,
+    support: "supported",
+    generic: "as on FiveM: files under stream/ are streamed to players; other files are listed in files {} and downloaded by players",
+    native: "Red Dead Redemption 2 streamed files under stream/ and data files listed by data_file, declared with environment_asset \"redm\" (a GTA V file does not load in RDR2)",
+    packTarget: "redm",
   },
   garrysmod: {
     support: "supported",
@@ -639,16 +639,32 @@ const ENV_CHECKS: Record<string, (x: EnvCheck) => void> = {
   },
 };
 
+/**
+ * The files of `delivered` a data_file path names: a file (or glob), or a folder (audio wave packs)
+ * that holds asset files. Empty when the line is not for this build.
+ */
+export function cfxDataFileTargets(path: string, delivered: Iterable<string>, listing: string[]): string[] {
+  const set = new Set(delivered);
+  const hits = expandGlob(path, listing).filter((f) => set.has(f));
+  const under = [...set].filter((f) => f.startsWith(path.endsWith("/") ? path : `${path}/`));
+  return [...new Set([...hits, ...under])];
+}
+
+/** FiveM (GTA V) and RedM (RDR2) take the same resource shape but not each other's game files. */
+const CFX_GAMES = ["fivem", "redm"];
+
 function fivemCheck({ c, m, env, generic, native, listing, bytesOf, report }: EnvCheck): void {
   const assetSet = new Set([...generic, ...native]);
   const dataTargets = new Set<string>();
+  // data_file lines are not keyed by environment: a line that names only the other game's files
+  // belongs to that game's build and is left out of this one (lib/fivem-pack.ts does the same).
+  const otherGame = new Set(CFX_GAMES.filter((g) => g !== env).flatMap((g) => environmentAssetFiles(m, g, listing)));
   for (const [type, paths] of Object.entries(m.dataFiles)) {
     for (const p of paths) {
-      // A data_file names a file, or a folder (audio wave packs) that holds asset files.
-      const hits = expandGlob(p, listing).filter((f) => assetSet.has(f));
-      const under = [...assetSet].filter((f) => f.startsWith(p.endsWith("/") ? p : `${p}/`));
-      if (hits.length === 0 && under.length === 0) err(c, "fivem_data_file_missing", `data_file "${type}" "${p}": not an asset of this package for ${env}.`);
-      for (const f of [...hits, ...under]) dataTargets.add(f);
+      const own = cfxDataFileTargets(p, assetSet, listing);
+      if (own.length === 0 && cfxDataFileTargets(p, otherGame, listing).length > 0) continue;
+      if (own.length === 0) err(c, "fivem_data_file_missing", `data_file "${type}" "${p}": not an asset of this package for ${env}.`);
+      for (const f of own) dataTargets.add(f);
     }
   }
   let map = false;

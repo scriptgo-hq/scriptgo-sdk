@@ -54,6 +54,8 @@ public sealed class ResourceManifest
     public IReadOnlyDictionary<string, IReadOnlyList<string>> GameBuilds { get; init; } = new Dictionary<string, IReadOnlyList<string>>();
     /// <summary>FiveM-style data files: data file type to paths.</summary>
     public IReadOnlyDictionary<string, IReadOnlyList<string>> DataFiles { get; init; } = new Dictionary<string, IReadOnlyList<string>>();
+    /// <summary>Globs of files Cfx.re's asset escrow leaves readable (`pack --cfx-escrow` writes them as escrow_ignore).</summary>
+    public IReadOnlyList<string> CfxEscrowIgnore { get; init; } = [];
     public IReadOnlyList<UnknownDirective> Unknown { get; init; } = [];
 
     /// <summary>Guest languages the scripts need: "lua" for .lua, "js" for .js and .ts (sorted).</summary>
@@ -67,7 +69,7 @@ public sealed record ManifestResult(bool Ok, ResourceManifest? Manifest, IReadOn
 public static partial class ManifestParser
 {
     public static readonly string[] Capabilities = ["events", "logging", "storage", "players", "permissions", "commands", "config", "ui", "http", "licensing", "perks", "presence"];
-    public static readonly string[] KnownEnvironments = ["standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim", "cctweaked", "dotnet", "garrysmod", "hytale", "rust", "beammp", "fivem"];
+    public static readonly string[] KnownEnvironments = ["standalone", "love2d", "godot", "luanti", "open77", "openresty", "defold", "neovim", "cctweaked", "dotnet", "garrysmod", "hytale", "rust", "beammp", "fivem", "redm"];
     public static readonly string[] LuaDialects = ["5.1", "5.2", "5.3", "5.4", "luajit"];
     public static readonly string[] Categories = ["inventory", "permissions", "economy", "events", "ui", "admin", "framework", "vehicles", "housing", "quests", "library", "other"];
     public const int MaxManifestBytes = 256 * 1024;
@@ -147,6 +149,8 @@ public static partial class ManifestParser
         Def(["environment_asset", "environment_assets"], "environment_assets", Kind.EnvList);
         Def(["game_build", "game_builds"], "game_builds", Kind.EnvList);
         Def(["data_file", "data_files"], "data_files", Kind.EnvList);
+        // Files Cfx.re's asset escrow leaves readable (configs), for `pack --cfx-escrow` (docs/spec/assets.md).
+        Def(["cfx_escrow_ignore"], "cfx_escrow_ignore", Kind.List);
         return d;
     }
 
@@ -435,6 +439,11 @@ public static partial class ManifestParser
         var gameBuilds = Keyed("game_builds");
         var dataFiles = Keyed("data_files");
         foreach (var p in List("assets")) CheckAsset(p, "assets");
+        foreach (var p in List("cfx_escrow_ignore"))
+        {
+            var reason = UnsafePathReason(p);
+            if (reason is not null) errors.Add(new("unsafe_path", $"'{p}' in cfx_escrow_ignore: {reason}."));
+        }
         foreach (var env in environmentAssets.Order)
         {
             if (!SlugPattern().IsMatch(env)) errors.Add(new("invalid_environment", $"Environment '{env}' in environment_asset is not a valid slug."));
@@ -528,6 +537,7 @@ public static partial class ManifestParser
             EnvironmentAssets = environmentAssets.Order.ToDictionary(e => e, e => (IReadOnlyList<string>)environmentAssets.Map[e]),
             GameBuilds = gameBuilds.Order.ToDictionary(e => e, e => (IReadOnlyList<string>)gameBuilds.Map[e]),
             DataFiles = dataFiles.Order.ToDictionary(e => e, e => (IReadOnlyList<string>)dataFiles.Map[e]),
+            CfxEscrowIgnore = List("cfx_escrow_ignore"),
             Unknown = unknown,
         };
         return new(true, manifest, errors, warnings);

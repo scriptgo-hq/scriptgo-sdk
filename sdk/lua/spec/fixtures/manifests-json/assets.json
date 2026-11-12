@@ -5,5 +5,6 @@
   "assets": ["media/**/*.png"],
   "environment_assets": { "open77": "dist/night_market.zip", "fivem": ["stream/**"] },
   "game_builds": { "open77": "2.5" },
-  "data_files": { "DLC_ITYP_REQUEST": "stream/night_market.ytyp" }
+  "data_files": { "DLC_ITYP_REQUEST": "stream/night_market.ytyp" },
+  "cfx_escrow_ignore": ["config.lua"]
 }
