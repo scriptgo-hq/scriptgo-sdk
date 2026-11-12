@@ -202,6 +202,11 @@ Without `--owns-code` the release stays validated but unpublished; you can finis
 dashboard. `--dry-run` only packs. A published version is immutable: to fix `1.5.0`, publish
 `1.5.1`.
 
+`--private` (or `--visibility public|unlisted|private`) sets who sees the package, before the
+release is uploaded. A private package is listed nowhere: only you see it, and the servers you grant
+it to, with their deployment token. That is how a server owner protects their own scripts without
+selling them: see [Protect your own server](/docs/protect-your-own-server).
+
 You need `scriptgo login` and a creator profile before you can publish. Create the profile from
 the dashboard.
 
@@ -271,6 +276,10 @@ A **protected** release arrives as its encrypted bundle, and only for a licensed
 as the license holder, or pass `--deployment-token`. The bundle is saved as
 `./resources/<resource>-<version>.escrow.zip` and is not extracted.
 
+`--deployment-token` (or `SCRIPTGO_DEPLOYMENT_TOKEN`) is sent with the package lookup too, so a
+server finds a **private** package it was granted with its token alone, without anyone signing in.
+Without a usable licence of that package, a private package answers `not_found`.
+
 ### scriptgo grant
 
 ```bash
@@ -286,10 +295,12 @@ package's creator.
 
 - `--to` names another account by its account id (`scriptgo login` prints it; it is also in
   Dashboard → Settings) or by a creator username. An e-mail address is refused.
-- `--server-key` is for an operator without an account. They run `scriptgo escrow identity` on
-  their server and send you the public key. You hold the license, its one deployment is bound to
-  that key, and the deployment token is printed **once** for you to hand over. It does not work on
-  another server.
+- `--server-key` is for a server: your own, or that of an operator without an account. Its loader
+  prints its public key (the OPEN//77 server at boot, the Rust plugin on its first protected start,
+  `scriptgo escrow identity` for the reference loader). You hold the license, its one deployment is
+  bound to that key, and the deployment token is printed **once**, for that server. It does not work
+  on another server. A private package can be granted this way, and only this way: see
+  [Protect your own server](/docs/protect-your-own-server).
 - `list` shows each grant with its status, and says why when no new grant can be issued (a
   moderation hold, no published release, the daily allowance used up).
 - `revoke` needs `--reason`. The key endpoint refuses the license from then on; a running server

@@ -1,6 +1,6 @@
 // scriptgo publish [dir] [--package <slug>] --owns-code [--targets-proprietary-game] [--dry-run]
 //                  [--escrow [--escrow-ignore <glob>]...] [--asset-rights original|game-edits|game-extracted]
-//                  [--asset-escrow]
+//                  [--asset-escrow] [--private | --visibility public|unlisted|private]
 // scriptgo publish --bundle <file.escrow.zip> --escrow-key <file.json> --package <slug> --owns-code
 //
 // --escrow publishes a PROTECTED release: the CLI builds the encrypted bundle here, signs its
@@ -14,6 +14,10 @@
 // Packs the resource (manifest, every referenced file, test scripts, README/CHANGELOG/LICENSE),
 // uploads it as a new release, waits for validation, declares rights and publishes. The package is
 // created on first publish (slug = resource name with '_' turned into '-', or --package).
+// --private (or --visibility) sets who sees the package, before the release is uploaded: a private
+// package is listed nowhere and seen only by you and by the servers your licences name (a server you
+// granted it to finds it with its deployment token). That is the case of a server owner protecting
+// their own scripts: publish --escrow --private, then grant the package to the server's key.
 // Rights are never assumed: without --owns-code the release is left validated but unpublished.
 // A release with assets also needs --asset-rights: the case that applies to them (made by you,
 // edits of a game's files, or files taken from a game), shown to operators as information.
@@ -85,17 +89,28 @@ function printChecks(r: Release): void {
 const ASSET_RIGHTS: Record<string, string> = { original: "original", "game-edits": "game_edits", "game-extracted": "game_extracted" };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const VISIBILITIES = ["public", "unlisted", "private"];
 
 export async function run(args: string[]): Promise<number> {
-  const a = parseArgs(args, { booleans: ["help", "owns-code", "targets-proprietary-game", "dry-run", "escrow", "asset-escrow"], repeatable: ["escrow-ignore"] });
+  const a = parseArgs(args, { booleans: ["help", "owns-code", "targets-proprietary-game", "dry-run", "escrow", "asset-escrow", "private"], repeatable: ["escrow-ignore"] });
   if (a.bools.has("help")) {
     console.log(
       "scriptgo publish [resourceDir] [--package <slug>] --owns-code [--targets-proprietary-game] [--dry-run] [--timeout <seconds>]\n" +
         "                 [--escrow [--escrow-ignore <glob>]...]   protect the release: encrypted bundle, key handed to the master\n" +
         "                 [--asset-rights original|game-edits|game-extracted]   required for a release with assets\n" +
+        "                 [--private | --visibility public|unlisted|private]   who sees the package (set before the upload)\n" +
         "scriptgo publish --bundle <file.escrow.zip> --escrow-key <file.json> --package <slug> --owns-code",
     );
     return 0;
+  }
+  const visibility = a.bools.has("private") ? "private" : (a.flags.visibility ?? null);
+  if (visibility !== null && !VISIBILITIES.includes(visibility)) {
+    console.error(`scriptgo publish: --visibility takes ${VISIBILITIES.join(", ")}`);
+    return 2;
+  }
+  if (a.bools.has("private") && a.flags.visibility && a.flags.visibility !== "private") {
+    console.error("scriptgo publish: --private and --visibility disagree");
+    return 2;
   }
   const prebuilt = a.flags.bundle || a.flags["escrow-key"];
   if (prebuilt && !(a.flags.bundle && a.flags["escrow-key"] && a.flags.package)) {
@@ -162,7 +177,12 @@ export async function run(args: string[]): Promise<number> {
     const sha256 = createHash("sha256").update(upload.bytes).digest("hex");
 
     try {
-      await api.get(`/v1/creator/packages/${encodeURIComponent(slug)}`);
+      const existing = (await api.get<{ visibility?: string | null }>(`/v1/creator/packages/${encodeURIComponent(slug)}`)).data;
+      // Before the upload, so a package made private is never visible with the new release in it.
+      if (visibility && existing.visibility !== visibility) {
+        await api.request("PATCH", `/v1/creator/packages/${encodeURIComponent(slug)}`, { json: { visibility } });
+        console.log(`package ${slug} is now ${visibility}`);
+      }
     } catch (e) {
       if (!(e instanceof ApiError) || e.status !== 404) throw e;
       if (!pack) throw new Error(`you have no package named ${slug}: create it on the website, or publish its folder once with --escrow`);
@@ -173,8 +193,9 @@ export async function run(args: string[]): Promise<number> {
         summary: (pack.description ?? "").slice(0, 300),
         category,
         license: pack.license ?? "NOASSERTION",
+        ...(visibility ? { visibility } : {}),
       });
-      console.log(`created package ${slug}`);
+      console.log(`created package ${slug}${visibility ? ` (${visibility})` : ""}`);
     }
 
     const form = new FormData();

@@ -7,7 +7,9 @@
 // A tampered archive is refused before a single file is written.
 //
 // A PROTECTED release arrives as its encrypted bundle, for a licensed customer only (log in as the
-// license holder, or pass a deployment token). The bundle is saved as
+// license holder, or pass a deployment token). The deployment token goes with the package lookup as
+// well as with the download: a PRIVATE package is seen only by its creator and by the servers its
+// licences name, so a server the creator granted it to finds it with its token alone. The bundle is saved as
 // ./resources/<resource>-<version>.escrow.zip, never extracted: a loader on your bound server opens
 // it (the .NET kit in memory, or `scriptgo escrow load`, the reference loader).
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -63,15 +65,16 @@ export async function run(args: string[]): Promise<number> {
   }
   const api = ApiClient.fromEnvironment();
   try {
+    const deploymentToken = a.flags["deployment-token"] ?? process.env.SCRIPTGO_DEPLOYMENT_TOKEN;
+    const licensed = deploymentToken ? { "x-scriptgo-deployment-token": deploymentToken } : undefined;
     const q = ident.version ? `?version=${encodeURIComponent(ident.version)}` : "";
-    const pkg = (await api.get<PackageDetail>(`/v1/packages/${ident.creator}/${ident.name}${q}`)).data;
+    const pkg = (await api.get<PackageDetail>(`/v1/packages/${ident.creator}/${ident.name}${q}`, { headers: licensed })).data;
     const version = ident.version ?? pkg.latestVersion;
     if (!version) throw new Error(`${ident.creator}//${ident.name} has no published version`);
     if (!pkg.resourceName) throw new Error(`${ident.creator}//${ident.name} has no resource name yet`);
 
-    const deploymentToken = a.flags["deployment-token"] ?? process.env.SCRIPTGO_DEPLOYMENT_TOKEN;
     const res = await api.raw("GET", `/v1/packages/${ident.creator}/${ident.name}/versions/${encodeURIComponent(version)}/download`, {
-      headers: deploymentToken ? { "x-scriptgo-deployment-token": deploymentToken } : undefined,
+      headers: licensed,
     });
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;

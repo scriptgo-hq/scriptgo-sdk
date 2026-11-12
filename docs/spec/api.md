@@ -79,6 +79,9 @@ GET  /v1/packages?q&environment&capability&category&pricing=free|paid&sort=updat
                                                  → Page<PackageSummary>
 GET  /v1/packages/:creator/:name                 → PackageDetail
 GET  /v1/packages/:creator/:name/versions/:version/download   → zip stream, header X-Sha256
+     (a private package answers 404 to everyone but its creator, staff, and a request carrying
+      X-ScriptGo-Deployment-Token or X-ScriptGo-License-Key of a usable licence of that package:
+      see "Private packages" below)
 GET  /v1/creators/:username                      → CreatorProfile
 POST /v1/reports  (multipart: fields + evidence[]) → { caseId: "RPT-2026-000123", status: "received" }
 GET  /v1/stats                                   → { packages, creators, environmentsVerified }  (real counts only: demo
@@ -323,8 +326,11 @@ GrantList = { grants: GrantRow[], canGrant: boolean, blockedCode: string | null,
 - **Holds.** A grant needs no offer and depends on none. It is refused with `409 grant_blocked` and
   `details.reason` while staff action holds the package or nothing can be delivered:
   `listing_suspended`, `listing_restricted`, `sales_restricted`, `no_release` (no published release
-  that is neither yanked nor restricted). Also `409 package_private` (nobody but the creator could
-  download it). A license granted earlier follows the same staff action afterwards: the key endpoint
+  that is neither yanked nor restricted). A **private** package can be granted to a server key: the
+  license is the creator's and the server downloads with its deployment token (see *Private packages*).
+  That is the server owner protecting their own scripts with nothing listed anywhere. To an account it
+  is `409 package_private`, because a signed-in account sees nothing of a private package it does not
+  own. A license granted earlier follows the same staff action afterwards: the key endpoint
   does not release the key of a restricted or yanked release, and the download refuses a restricted
   listing. An environment's `platformRules` block nothing, a grant included; a server-key grant for
   an environment whose protection tier is `none` (its adapter has no licence check) is
@@ -412,6 +418,17 @@ POST /v1/me/licenses/:id/deployments/:activationId/reset-server-key   (owner; 10
 lastKeyReleaseAt, resets, lastResetAt }`: the server key as a fingerprint (16 hex characters of the
 SHA-256 of the raw public key), never the key. Activating the same deployment name again renews its
 token but answers 409 `server_key_mismatch` when it names another server key than the bound one.
+
+**Private packages.** `visibility: "private"` keeps a package out of every listing, search and
+creator profile, and `GET /v1/packages/:creator/:name` and its download answer `404 not_found` to
+anyone but its creator and staff. One exception, so that a server can fetch what it is licensed for
+without its owner's account: a request that carries `X-ScriptGo-Deployment-Token` or
+`X-ScriptGo-License-Key` of a usable licence of that very package (active, in grace, or cancelled
+but still in its period; for a token, a deployment that is not deactivated) sees the package and downloads it, answered with `Cache-Control: private, no-store`.
+Any other token, a licence of another package, a revoked or ended licence, or a suspended listing
+gets the same 404 as a package that does not exist. A signed-in account sees nothing of a private
+package it does not own, licence or not: that is why a private package cannot be granted to an
+account (`409 package_private`), while it can be granted to a server key (see *Creator grants*).
 
 **Download of a release** (`GET /v1/packages/:creator/:name/versions/:version/download`): the answer
 carries `X-Sha256`, `X-ScriptGo-Artifact: plain | escrow` and the release signature in

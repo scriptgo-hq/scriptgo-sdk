@@ -10,10 +10,12 @@
 // to one server, same revocation.
 //
 // --to names another account: its account id (shown by `scriptgo login` and in Dashboard →
-// Settings) or a creator username. An e-mail address is not accepted. --server-key is for an
-// operator without an account: they run `scriptgo escrow identity --identity <file>` on their
-// server and send you the public key it prints. The license is then held by you, bound to that
-// server, and the deployment token is printed ONCE for you to hand over.
+// Settings) or a creator username. An e-mail address is not accepted. --server-key is for a
+// server: your own, or an operator's without an account. Its loader prints its public key (the
+// OPEN//77 server at boot, the Rust plugin on its first protected start, `scriptgo escrow identity
+// --identity <file>` for the reference loader). The license is then held by you, bound to that
+// server, and the deployment token is printed ONCE: put it on that server. A private package can
+// be granted to a server key (not to an account): docs/site/protect-your-own-server.md.
 import { parseIdentifier } from "@scriptgo/shared";
 import { parseArgs } from "../lib/args.ts";
 import { ApiClient, describeError } from "./_api-client.ts";
@@ -31,9 +33,10 @@ A granted license is free: nothing is sold and no payment provider is involved. 
 release (delivery to chosen servers, traceability, revocation); it does not sell it.
 --to           the recipient's account id (they see it with 'scriptgo login' or in Dashboard → Settings),
                or a creator username. E-mail addresses are not accepted.
---server-key   the public key the operator's server prints with 'scriptgo escrow identity'. You hold
-               the license; its one deployment is bound to that key, and the deployment token is
-               printed once for you to hand to the operator.
+--server-key   the public key a server's loader prints (your own server, or an operator's): the OPEN//77
+               server at boot, the Rust plugin on its first protected start, or 'scriptgo escrow identity'.
+               You hold the license; its one deployment is bound to that key, and the deployment token
+               is printed once, for that server. A private package can be granted this way.
 <package> is one of your own packages: its name, or creator//name.`;
 
 interface GrantRow {

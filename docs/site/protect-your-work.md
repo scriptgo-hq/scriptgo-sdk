@@ -172,6 +172,11 @@ own packages, so that an encrypted release runs on the servers you chose: your o
 tester's. Nothing is sold and no payment provider is involved. There is no offer, no checkout and no
 store behind a granted licence.
 
+> [!NOTE]
+> Running a game server and only want its scripts not to leak? Follow
+> [Protect your own server](/docs/protect-your-own-server): a private package, a grant to your
+> server's key, and the steps for each platform that can load an encrypted release.
+
 A granted licence is an ordinary licence in every other way. It is bound to one server per
 deployment, every key delivery is logged, the copy carries a delivery marker, and you can revoke it.
 
@@ -195,15 +200,17 @@ bind itself.
 
 ### Grant to a server key
 
-The operator has no account, or does not want one. They create the server's identity and send you
-the public key it prints:
+The server is your own, or its operator has no account or does not want one. The server's loader
+prints its public key: the OPEN//77 server at boot, the Rust plugin on its first protected start, a
+compiled host when it starts. With the reference loader, the identity is created by:
 
 ```bash
 scriptgo escrow identity --identity ./server-identity.json
 # public key   <43 characters>      ← this is what they send you. The file stays on their server.
 ```
 
-A compiled host prints the same key when it starts. You grant to that key:
+Each loader keeps its own identity file, so take the key from the loader that will run the
+package. You grant to that key:
 
 ```bash
 scriptgo grant create inventory-pro --server-key <public key> --environment standalone --name their-server
@@ -235,8 +242,10 @@ the payment provider (a refund) or for SCRIPT//GO staff.
 
 - Only for your own packages, and only while the package can be delivered: a listing that
   SCRIPT//GO restricted or suspended after a report, or a package whose only release was yanked or
-  restricted, cannot be granted. A private package cannot be granted either, because nobody but
-  you could download it: make it unlisted.
+  restricted, cannot be granted.
+- A private package can be granted to a server key: that server sees it and downloads it with its
+  deployment token, and nobody else sees it at all. It cannot be granted to an account, which would
+  not see it: make it unlisted for that.
 - One live grant per account and per server key for a package. To change its terms, revoke it and
   grant again.
 - 25 grants per package per day. Every grant and every revocation is in the audit log.

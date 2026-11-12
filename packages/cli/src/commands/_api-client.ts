@@ -94,7 +94,7 @@ export class ApiClient {
   }
 
   /** JSON request; non-2xx answers become ApiError with the API's error code and message. */
-  async request<T>(method: string, path: string, init: { json?: unknown; form?: FormData } = {}): Promise<ApiResponse<T>> {
+  async request<T>(method: string, path: string, init: { json?: unknown; form?: FormData; headers?: Record<string, string> } = {}): Promise<ApiResponse<T>> {
     const res = await this.raw(method, path, init);
     const text = await res.text();
     let data: unknown = null;
@@ -112,8 +112,8 @@ export class ApiClient {
     return { status: res.status, data: data as T, headers: res.headers };
   }
 
-  get<T>(path: string) {
-    return this.request<T>("GET", path);
+  get<T>(path: string, init: { headers?: Record<string, string> } = {}) {
+    return this.request<T>("GET", path, init);
   }
 
   post<T>(path: string, json?: unknown) {
