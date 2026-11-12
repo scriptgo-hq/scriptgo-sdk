@@ -1,6 +1,6 @@
 {
   "name": "@scriptgo/shared",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "SCRIPT//GO API contract: the zod schemas and TypeScript types shared by the API, the website, the CLI and integrations.",
   "license": "MIT",
   "type": "module",
