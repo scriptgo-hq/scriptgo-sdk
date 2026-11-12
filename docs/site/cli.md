@@ -230,6 +230,19 @@ The key file is a secret: never commit it and never ship it with the bundle.
 Protection is deterrence and traceability, not DRM. A licensed operator can still read what their
 own host decrypts. See [Protect your work](/docs/protect-your-work).
 
+#### Publish encrypted assets (OPEN//77)
+
+```bash
+scriptgo publish --asset-escrow --asset-rights original --owns-code
+```
+
+`--asset-escrow` asks SCRIPT//GO to deliver the release's OPEN//77 preload packages
+(`environment_asset "open77"`) encrypted: each deployment's copy carries them sealed under a key for
+that deployment, which the licensed server unwraps and hands only to players the OPEN//77 master
+admits. It needs OPEN//77 preloads in the release and cannot be combined with `--escrow`. Other
+platforms receive the same release's assets as usual (licensed and fingerprinted). See
+[Selling assets](/docs/selling-assets#encrypted-assets-on-open77).
+
 ### scriptgo add
 
 ```bash

@@ -691,7 +691,7 @@
         "native": "preload packages: .zip files holding REDengine data under archive/pc/mod/, r6/tweaks/ or engine/config/, declared as preload_mod and mounted by the game at its next boot",
         "packTarget": "open77",
         "note": "Packed and checked against OPEN//77's preload rules; not run on an OPEN//77 server with a game client.",
-        "escrow": "Asset escrow needs the OPEN//77 client to mount REDengine archives from memory: unresearched for REDengine 2.5."
+        "escrow": "Encrypted preloads (scriptgo publish --asset-escrow): sealed for one licensed deployment; the server gives the key only to players the OPEN//77 master admits. Needs an OPEN//77 server and client with asset escrow. While the game runs, the decrypted archives are on the player's disk (REDengine 2.5 mounts archives from files)."
       },
       "proof": [
         {
@@ -1604,7 +1604,7 @@
         "native": "BeamNG mod .zip files, put in Resources/Client/: every player downloads them at join",
         "packTarget": "beammp",
         "note": "Packed (Resources/Client); not run, BeamMP-Server needs an AuthKey.",
-        "escrow": "Open: would need native code in the BeamMP launcher or a BeamNG mod."
+        "escrow": "Not available: it would need a decryptor in every player's BeamNG (BeamMP's launcher or a client mod), and BeamNG mounts mod zips from disk."
       },
       "proof": [],
       "runtimeVersions": [],

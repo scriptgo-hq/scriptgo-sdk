@@ -62,7 +62,7 @@ Maps, models, textures, sounds and other files players download. See [Selling as
 
 Packed (Resources/Client); not run, BeamMP-Server needs an AuthKey.
 
-Asset escrow: Open: would need native code in the BeamMP launcher or a BeamNG mod.
+Asset escrow: Not available: it would need a decryptor in every player's BeamNG (BeamMP's launcher or a client mod), and BeamNG mounts mod zips from disk.
 
 ## The platform's own rules
 

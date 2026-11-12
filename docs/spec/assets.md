@@ -22,10 +22,11 @@ SCRIPT//GO does, a player who controls their machine can extract an asset their 
   "escrow" for v1 assets, and never "unbreakable".
 - A fingerprint identifies a copy; it does not prevent copying. Repacking the files removes it.
 - **Asset escrow** (below) is a format, a key protocol and a client hook. It needs work in each
-  platform's game client; OPEN//77 is the first environment with that work (on a branch, not
-  released). Say "encrypted at rest and in transit, a key per session, revocable". It raises the
-  cost of copying an asset from a server, from a distribution channel or from a player's disk
-  while the game is not running; it does not prevent extraction from a running client.
+  platform's game client, so it exists only where that work is done: OPEN//77 (its server and
+  client side ship with OPEN//77, not with this SDK). Say "encrypted at rest and in transit, a key
+  per deployment and per player session, revocable". It raises the cost of copying an asset from a
+  server, from a distribution channel or from a player's disk while the game is not running; it
+  does not prevent extraction from a running client.
 
 ## Manifest
 
@@ -410,8 +411,8 @@ ignores it. The key path:
 | Step | Who | What |
 |---|---|---|
 | 1 | server | at start and on renewal, `POST /v1/licenses/key {kind:"assets"}` per escrowed resource; unwraps with its escrow identity |
-| 2 | client plugin, at boot, before the engine mounts archives | finds `archive/pc/mod/*.sgae`, makes a session key pair, asks the server it was launched for (`OP77_CONNECT`): `POST /assets/v1/keys {sessionPublicKey, keyIds}` |
-| 3 | server | answers each `keyId` it holds, re-wrapped to that session (client aad), with its trusted signer; logged per request |
+| 2 | client plugin, at boot, before the engine mounts archives | finds `archive/pc/mod/*.sgae`, makes a session key pair, fetches the player's connect ticket for that server from the OPEN//77 master (the one a join carries), and asks the server it was launched for (`OP77_CONNECT`): `POST /assets/v1/keys {sessionPublicKey, keyIds, ticket}`, `ticket` the base64url of the master-signed ticket |
+| 3 | server | verifies the ticket with the join's own verifier, then answers each `keyId` it holds, re-wrapped to that session (client aad), with its trusted signer; logged per request |
 | 4 | client plugin | opens each container with that signer pinned, binds, decrypts |
 
 **What OPEN//77 cannot do yet, said plainly.** REDengine mounts archives from files under
@@ -424,19 +425,31 @@ launcher's cache and on the player's disk whenever the game is not running, and 
 not launched for a licensed, unrevoked server gets no key. A true in-memory mount (hooking the
 depot's archive loading) is future work and needs reverse engineering of the 2.5 binary.
 
-Who may ask for a key at step 2 is the server's policy: by default any client that can reach the
-server, as for the preload files themselves. Binding it to a player identity (a master connect
-ticket) is an open decision below.
+**Who gets a key at step 2: a player the OPEN//77 master admits.** The key request carries the
+player's connect ticket for that server, the same master-signed ticket a join carries, and the
+server checks it with the join's own verifier. A server that requires tickets to join (every
+server except an OPEN//77 `devLocalAuth` development server, which admits joins without one)
+answers `403`:
+
+| Error | When |
+|---|---|
+| `ticket_required` | no ticket |
+| `ticket_invalid` | a ticket that does not verify: expired, for another server, signed by another master, or without the game-ownership attestation |
+| `ticket_replayed` | a ticket already used: one ticket buys one key request |
+
+So a key never goes to an anonymous caller: only to a player the master enrolled, who is not
+banned and owns the game. That player can still copy what their running game loads (above): the
+ticket decides who gets a key, not what they can do with the files once the game has them.
 
 ### Client work per environment
 
 | Environment | Client work escrow needs | Feasibility | What it would buy |
 |---|---|---|---|
-| OPEN//77 | the key exchange at boot and a decryptor in the RED4ext client plugin (built, see "OPEN//77"); a true in-memory mount needs the depot's archive loading hooked | key exchange and decryption: built and tested outside the game; in-memory mount: unresearched for REDengine 2.5 | an escrowed preload is useless off a licensed, unrevoked server; while the game runs the files are on disk, and extraction from a running client remains |
+| OPEN//77 | the key exchange at boot (with the player's connect ticket) and a decryptor in the RED4ext client plugin (built, see "OPEN//77"); a true in-memory mount needs the depot's archive loading hooked | key exchange and decryption: built and tested outside the game; in-memory mount: unresearched for REDengine 2.5 | an escrowed preload is useless off a licensed, unrevoked server; while the game runs the files are on disk, and extraction from a running client remains |
 | FiveM / RedM | none possible from a resource: the client is Cfx.re's. FiveM's own Asset Escrow encrypts stream files tied to Cfx.re accounts and server keys; on 2025-08-08 Cfx.re reported a flaw that let assets be extracted from the game client, and on 2025-10-16 added an obfuscation layer for 3D models and a re-encrypt button ([Asset Security Update](https://forum.cfx.re/t/asset-security-update/5344773), [Introducing Asset Escrow](https://forum.cfx.re/t/introducing-asset-escrow-for-your-resources/4777151)) | not by SCRIPT//GO | sellers on FiveM rely on the platform's own escrow and on enforcement against servers |
 | Garry's Mod | a binary module on every client; GMod clients do not load server-sent binary modules | not feasible | - |
 | Luanti | an engine fork (media are hashed and cached by the client) | not feasible without forking the engine | - |
-| BeamMP | the BeamMP launcher or a BeamNG mod with native code | open; BeamNG loads zips through its own virtual file system | - |
+| BeamMP | a decryptor in every player's BeamNG: BeamMP's launcher (BeamMP's, not a package's) or a client mod; BeamNG mounts mod zips from disk through its own virtual file system | not available (assessed 2026-11-12): a client mod would ship its decryptor in clear to every player, would need vetted cryptography reachable from BeamNG's Lua (not established), and would still write the decrypted zip to disk for BeamNG to mount; nothing of it can be run here (BeamMP-Server needs an AuthKey, no BeamNG client) | - |
 | Rust | Facepunch's client | not feasible | - |
 | Hytale | the official client | not feasible today | - |
 | bundled hosts | the host itself can call `AssetContainerReader` (one process, the operator's machine) | feasible, but the operator holds the key, so it protects nothing from them | at-rest encryption only |
@@ -545,8 +558,6 @@ package has no script run there. `sdk/conformance/sg_assets_probe` is the fixtur
 
 ## Open decisions (owner)
 
-- **Who may ask a server for an asset key.** Any client that reaches the server (the default, like
-  the preload files), or only a player holding a master connect ticket or a signed identity.
 - **A true in-memory mount for OPEN//77.** Until the depot's archive loading is hooked, escrowed
   preloads are on the player's disk while the game runs.
 

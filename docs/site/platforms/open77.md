@@ -120,7 +120,7 @@ Maps, models, textures, sounds and other files players download. See [Selling as
 
 Packed and checked against OPEN//77's preload rules; not run on an OPEN//77 server with a game client.
 
-Asset escrow: Asset escrow needs the OPEN//77 client to mount REDengine archives from memory: unresearched for REDengine 2.5.
+Asset escrow: Encrypted preloads (scriptgo publish --asset-escrow): sealed for one licensed deployment; the server gives the key only to players the OPEN//77 master admits. Needs an OPEN//77 server and client with asset escrow. While the game runs, the decrypted archives are on the player's disk (REDengine 2.5 mounts archives from files).
 
 ## The platform's own rules
 

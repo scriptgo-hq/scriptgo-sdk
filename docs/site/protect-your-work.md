@@ -32,7 +32,8 @@ Ownership only matters if it can be enforced. Per-server licences and encrypted 
 enforce it: the script runs where a licence allows it, and stops where one ends.
 
 Assets (maps, models, textures, sounds) are protected differently: a licence-gated download, a
-fingerprinted copy per buyer, signed releases and takedown on report. See
+fingerprinted copy per buyer, signed releases and takedown on report, on every platform. On
+OPEN//77 they can also be delivered encrypted, with a key per server deployment. See
 [Selling assets](/docs/selling-assets#protection).
 
 ## Three layers
