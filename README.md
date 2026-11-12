@@ -42,7 +42,7 @@ Each adapter's README says exactly what was run and what was not.
 Node.js 22 or later:
 
 ```bash
-npm install -g https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.6/scriptgo-cli-0.1.6.tgz
+npm install -g https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.7/scriptgo-cli-0.1.7.tgz
 scriptgo init my_script
 scriptgo test my_script        # needs lua, lua5.4 or luajit on the PATH
 ```

@@ -19,7 +19,7 @@
   </ItemGroup>
   <ItemGroup>
     <!-- Inside this repository: a project reference. In your own repository, replace it with
-           <PackageReference Include="ScriptGo.Escrow" Version="0.2.0" />
+           <PackageReference Include="ScriptGo.Escrow" Version="0.3.0" />
          from a feed that holds the package (see README.md, "From another repository"). -->
     <ProjectReference Include="../../dotnet/ScriptGo.Escrow/ScriptGo.Escrow.csproj" />
   </ItemGroup>
