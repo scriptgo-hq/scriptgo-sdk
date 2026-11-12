@@ -15,9 +15,9 @@ on the roadmap. The short version is on the [SDK page](/sdk).
 | Lua core | `sdk/lua/scriptgo` | Pure Lua. It runs on any Lua host (Lua 5.1 to 5.4, LuaJIT) and implements everything that does not depend on an engine: the manifest parser, the scheduler, events, exports, the value codec, the sandbox and the capability registry |
 | Adapters | `sdk/adapters/<host>/` | One per host. Each maps the API onto what that host has. The contract is in [Create an adapter](/docs/create-adapter) |
 | .NET host kit | `sdk/dotnet` | `ScriptGo.Host`, a .NET 10 library, and `scriptgo-dotnet`, its console host. Lua 5.4 (KeraLua) and JavaScript or TypeScript (Jint) side by side. Experimental. See [Embed the .NET kit](/docs/dotnet-kit) |
-| CLI | `packages/cli` | `scriptgo`: `init`, `validate`, `test`, `run`, `pack --target`, `verify --env`, `publish`, `add`, `license activate` and `license verify`. See [CLI](/docs/cli) |
+| CLI | `packages/cli` | `scriptgo`: `init`, `validate`, `test`, `run`, `pack --target`, `verify --env`, `publish`, `add`, `grant`, `assets`, `license activate` and `license verify`. See [CLI](/docs/cli) |
 | `@scriptgo/types` | `packages/types` | TypeScript declarations for resources, generated from `docs/spec/runtime-idl.json` by `tools/gen-types.mjs` |
-| Specs | `docs/spec` | `runtime.md` ([Runtime API](/docs/runtime)), `manifest.md` ([Manifest](/docs/manifest)), `multi-language.md`, `runtime-idl.md`, `api.md` ([HTTP API](/docs/api)) and `native-module.schema.json` |
+| Specs | `docs/spec` | `runtime.md` ([Runtime API](/docs/runtime)), `manifest.md` ([Manifest](/docs/manifest)), `multi-language.md`, `runtime-idl.md`, `api.md` ([HTTP API](/docs/api)), `escrow.md`, `assets.md`, `perks.md` ([Player perks](/docs/perks)), `player-match.md`, `open77.md` and `native-module.schema.json` |
 
 ## The API packages see
 
@@ -142,6 +142,11 @@ cross between languages is fixed in `docs/spec/multi-language.md`.
   the address is sent and SCRIPT//GO fingerprints it at once. The sign-in page and the API side are
   not live.
   The contract is `docs/spec/player-match.md`.
+- **Assets**: a package can carry maps, models, textures and sounds, sold like scripts, on
+  OPEN//77, FiveM, Garry's Mod, Luanti and BeamMP, and in part on Rust (one custom map) and Hytale
+  (asset packs). Every buyer's copy is fingerprinted to their licence. On OPEN//77, preload packages
+  can also be delivered encrypted, a key per deployment, revocable; while the game runs they are on
+  the player's disk. See [Selling assets](/docs/selling-assets).
 - **Free licences**: a creator grants a free licence for their own package to an account or a
   server key, with nothing sold. See [Protect without selling](/docs/protect-your-work#protect-without-selling).
 - **Compatibility proof**: statuses and package badges come from verification reports.

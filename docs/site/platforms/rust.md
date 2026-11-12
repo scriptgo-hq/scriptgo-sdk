@@ -158,6 +158,7 @@ Maps, models, textures, sounds and other files players download. See [Selling as
 |---|---|
 | Support | Partial |
 | `environment_asset` | one custom map (.map), which players download from a URL the operator hosts (server.levelurl); a plugin cannot send files to players |
+| Pack | `scriptgo pack --target rust` |
 
 Packed (the map for server.levelurl); not run.
 

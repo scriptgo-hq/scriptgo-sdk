@@ -6,7 +6,8 @@
 platform needs: the portable runtime, one adapter per environment, the `scriptgo` CLI, the protected
 release loader, and the guides to bring SCRIPT//GO to a platform of your own.
 
-MIT-licensed: use it, change it, and sell what you build with it.
+MIT-licensed: use it, change it, and sell what you build with it. The documentation is on
+[scriptgo.dev/docs](https://scriptgo.dev/docs), built from this repository's `docs/` folder.
 
 ## What is inside
 
@@ -21,7 +22,7 @@ MIT-licensed: use it, change it, and sell what you build with it.
 | [`sdk/examples`](sdk/examples), [`examples`](examples) | Example hosts (a fictional third-party engine included) and demo projects |
 | [`packages/cli`](packages/cli) | The `scriptgo` CLI |
 | [`packages/shared`](packages/shared), [`manifest`](packages/manifest), [`escrow`](packages/escrow), [`types`](packages/types) | The npm packages: the API contract, the manifest parser, the protected-release format, the TypeScript declarations of the runtime |
-| [`docs/spec`](docs/spec) | The contracts: runtime, manifest, multi-language IDL, escrow, perks, the API |
+| [`docs/spec`](docs/spec) | The contracts: runtime, manifest, multi-language IDL, escrow, assets, perks, player match, OPEN//77, the API |
 | [`docs/site`](docs/site), [`docs/guides`](docs/guides) | The documentation of [scriptgo.dev/docs](https://scriptgo.dev/docs): the website is built from these files (their links point to the website) |
 
 ## Environments
@@ -37,6 +38,39 @@ MIT-licensed: use it, change it, and sell what you build with it.
 
 Each adapter's README says exactly what was run and what was not.
 
+## Assets
+
+A package can carry assets as well as scripts, or only assets: maps, interiors, vehicles, models,
+textures, sounds. They are sold like scripts, with the same licences and refunds.
+
+| Environment | What a package delivers |
+|---|---|
+| OPEN//77 | Resource files, and preload packages of REDengine archives, tweaks and engine config |
+| FiveM | `stream/` files and `data_file` entries (a map: `.ymap`, with `this_is_a_map`). RedM: validated, not packed yet |
+| Garry's Mod | Addon content: `materials/`, `models/`, `sound/`, `maps/` (`.bsp`) |
+| Luanti | Mod media: textures, sounds, models, translations |
+| BeamMP | BeamNG mod `.zip` files, sent to players at join |
+| Rust | One custom `.map`, hosted by the operator for `server.levelurl` |
+| Hytale | An asset pack for the server's `mods/` folder |
+
+Assets are data: `scriptgo validate` refuses code in them, archives included, and reports the
+download size per player on each platform. `scriptgo pack --target <platform>` writes each
+platform's form. Real runs: Garry's Mod (srcds) and Luanti (5.18 server image) loaded packed assets
+on a server; on the others the packs are built and checked, not run. No game client was run.
+
+Every buyer's download is its own copy, fingerprinted with a signed record of its licence, and every
+release is signed: assets are licensed, fingerprinted and traceable. A game draws an asset in clear,
+so a player can extract it, and repacking a copy removes its fingerprint.
+
+On OPEN//77, `scriptgo publish --asset-escrow` also delivers the preload packages encrypted: sealed
+for each licensed deployment, the key held by that server and handed only to players the OPEN//77
+master admits, revocable. The engine mounts archives from files, so while the game runs the
+decrypted archives are on the player's disk. The other platforms' game clients cannot run a
+decryptor from a server package, so they get the protection above.
+
+[Selling assets](https://scriptgo.dev/docs/selling-assets) is the guide;
+[`docs/spec/assets.md`](docs/spec/assets.md) is the specification.
+
 ## Install the CLI
 
 Node.js 22 or later:
@@ -48,7 +82,9 @@ scriptgo test my_script        # needs lua, lua5.4 or luajit on the PATH
 ```
 
 The CLI talks to the production API, `https://api.scriptgo.dev`. `--api <url>` or `SCRIPTGO_API`
-points it at another one (a local API in development).
+points it at another one (a local API in development). Every version is on the
+[releases page](https://github.com/scriptgo-hq/scriptgo-sdk/releases); the commands are in
+[the CLI docs](https://scriptgo.dev/docs/cli).
 
 ## Work on the SDK
 

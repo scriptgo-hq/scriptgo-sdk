@@ -1313,8 +1313,8 @@
       "assets": {
         "support": "partial",
         "generic": null,
-        "native": "an asset pack (.zip with manifest.json, Common/ and Server/) installed in the server's mods/ folder; the server sends its assets to players. Validated, not packed or run yet",
-        "packTarget": null,
+        "native": "an asset pack (.zip with manifest.json, Common/ and Server/) installed in the server's mods/ folder; the server sends its assets to players",
+        "packTarget": "hytale",
         "note": "Validated and packed (mods/); not loaded by a Hytale server yet.",
         "escrow": "Not feasible today: the official client."
       },
@@ -1504,7 +1504,7 @@
         "support": "partial",
         "generic": null,
         "native": "one custom map (.map), which players download from a URL the operator hosts (server.levelurl); a plugin cannot send files to players",
-        "packTarget": null,
+        "packTarget": "rust",
         "note": "Packed (the map for server.levelurl); not run.",
         "escrow": "Not feasible: Facepunch's client."
       },

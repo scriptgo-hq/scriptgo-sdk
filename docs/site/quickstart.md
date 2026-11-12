@@ -347,3 +347,4 @@ between languages is specified in `docs/spec/multi-language.md` in the repositor
 - [Runtime](/docs/runtime): globals, the `ScriptGo` namespace, codec and sandbox.
 - [SDK and capabilities](/docs/sdk/capabilities): write code that degrades cleanly.
 - [Licensing API](/docs/licensing-api): sell your resource and check licenses from deployments.
+- [Selling assets](/docs/selling-assets): maps, models, textures and sounds in the same package.

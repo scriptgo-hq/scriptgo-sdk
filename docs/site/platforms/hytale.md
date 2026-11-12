@@ -57,7 +57,8 @@ Maps, models, textures, sounds and other files players download. See [Selling as
 | | |
 |---|---|
 | Support | Partial |
-| `environment_asset` | an asset pack (.zip with manifest.json, Common/ and Server/) installed in the server's mods/ folder; the server sends its assets to players. Validated, not packed or run yet |
+| `environment_asset` | an asset pack (.zip with manifest.json, Common/ and Server/) installed in the server's mods/ folder; the server sends its assets to players |
+| Pack | `scriptgo pack --target hytale` |
 
 Validated and packed (mods/); not loaded by a Hytale server yet.
 
