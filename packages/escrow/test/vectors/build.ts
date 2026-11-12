@@ -30,6 +30,8 @@ export const MATERIAL = {
   fingerprintSecret: Buffer.alloc(32, 0x33),
   fingerprintSignerSeed: Buffer.alloc(32, 0x44),
   assetSignerSeed: Buffer.alloc(32, 0x55),
+  /** A signer nobody pins: the self-signed containers a reader must refuse. */
+  strangerSignerSeed: Buffer.alloc(32, 0x66),
   releaseSecret: Buffer.alloc(32, 0x66),
   client: fixedX25519("a8abababababababababababababababababababababababababababababab6b"),
   ephemeral: fixedX25519("c8cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd4d"),
@@ -90,6 +92,12 @@ export function assetVectors(): Record<string, unknown> {
     files, package: identity.package, version: identity.version, release: identity.release, deployment: identity.deployment,
     contentKey, signerSeed: MATERIAL.assetSignerSeed, fingerprint: build.marker, chunkBytes: 4096,
   });
+  // The same files sealed under the same key by someone else (whoever holds the content key can) and
+  // signed with their own key: it verifies under the key its header names, so only a pinned signer refuses it.
+  const stranger = sealAssetContainer({
+    files, package: identity.package, version: identity.version, release: identity.release, deployment: identity.deployment,
+    contentKey, signerSeed: MATERIAL.strangerSignerSeed, fingerprint: build.marker, chunkBytes: 4096,
+  });
   const keyId = assetKeyId(contentKey);
   const serverWrap = wrapContentKey(contentKey, MATERIAL.server.publicKey, assetServerAad(identity.package, identity.version, identity.deployment), { ephemeral: MATERIAL.serverEphemeral, nonce: Buffer.alloc(12, 0x5a) });
   // The same copy with its OPEN//77 preload escrowed for the deployment (docs/spec/assets.md, "OPEN//77").
@@ -130,6 +138,7 @@ export function assetVectors(): Record<string, unknown> {
       files: [...files].map(([path, data]) => ({ path, bytes: data.length, sha256: sha(data) })),
       containerBase64: container.toString("base64"),
       containerSha256: sha(container),
+      strangerContainerBase64: stranger.toString("base64"),
       serverAad: assetServerAad(identity.package, identity.version, identity.deployment).toString("utf8"),
       server: {
         privateKey: MATERIAL.server.privateKey.toString("base64url"),

@@ -197,16 +197,45 @@ describe("the SGCE container", () => {
 
   it("a key from another deployment, or the asset key, does not open it", () => {
     const { container } = sealed();
-    expect(() => new ClientContainerReader(container, deriveClientContentKey(releaseSecret, "dep_2"))).toThrow(/not this container's key/);
-    expect(() => new ClientContainerReader(container, deriveAssetContentKey(releaseSecret, "dep_1"))).toThrow(/not this container's key/);
+    expect(() => new ClientContainerReader(container, deriveClientContentKey(releaseSecret, "dep_2"), { trustedSigner: signer })).toThrow(/not this container's key/);
+    expect(() => new ClientContainerReader(container, deriveAssetContentKey(releaseSecret, "dep_1"), { trustedSigner: signer })).toThrow(/not this container's key/);
+  });
+
+  it("needs a pinned signer to decrypt, and refuses a container re-signed by another key", () => {
+    const { key, container, a } = sealed();
+    expect(() => new ClientContainerReader(container, key, {} as { trustedSigner: string })).toThrow(/pinned signer is required/);
+    expect(() => new ClientContainerReader(container, key, { trustedSigner: "" })).toThrow(/pinned signer is required/);
+    // Whoever holds the content key (a game server does) can seal bytecode of its choice and sign it with
+    // its own key: it verifies under the key its header names, and only the pin refuses it.
+    const forged = sealClientContainer({ chunks: new Map([[a.path, a.bytecode]]), package: "c//pkg", version: "1.0.0", release: "rel_1", deployment: "dep_1", contentKey: key, signerSeed: Buffer.alloc(32, 0x42), strip: "full" });
+    expect(readClientContainer(forged).header.signerPublicKey).not.toBe(signer);
+    expect(() => new ClientContainerReader(forged, key, { trustedSigner: signer })).toThrow(/pinned/);
+  });
+
+  it("signs a hash of each chunk's ciphertext, never of its bytecode", () => {
+    const { container, a, b } = sealed();
+    const header = readClientContainer(container).header;
+    for (const c of header.chunks) {
+      expect(c.sha256).toBeUndefined();
+      expect(c.ciphertextSha256).toMatch(/^[0-9a-f]{64}$/);
+    }
+    const text = container.toString("latin1");
+    for (const bytecode of [a.bytecode, b.bytecode]) expect(text).not.toContain(createHash("sha256").update(bytecode).digest("hex"));
   });
 
   it("refuses a flipped ciphertext byte, a forged header and an unpinned signer", () => {
     const { key, container } = sealed();
     const bad = Buffer.from(container);
     bad[bad.length - 5]! ^= 1;
-    const r = new ClientContainerReader(bad, key);
-    expect(() => r.bytecode(r.paths()[1]!)).toThrow(/does not authenticate/);
+    // The signed ciphertext hash refuses it before any key is used ...
+    expect(() => readClientContainer(bad)).toThrow(/ciphertext hash mismatch/);
+    expect(() => new ClientContainerReader(bad, key, { trustedSigner: signer })).toThrow(/ciphertext hash mismatch/);
+    // ... and a legacy container (plaintext sha256) still fails on the AEAD tag.
+    const legacy = sealClientContainer({ chunks: new Map([["client/x.lua", compileClientScript("return 1", { package: "c//pkg", version: "1.0.0", path: "client/x.lua", strip: "full" }).bytecode]]), package: "c//pkg", version: "1.0.0", release: "rel_1", deployment: "dep_1", contentKey: key, signerSeed, strip: "full", legacyPlaintextSha256: true });
+    const badLegacy = Buffer.from(legacy);
+    badLegacy[badLegacy.length - 5]! ^= 1;
+    const r = new ClientContainerReader(badLegacy, key, { trustedSigner: signer });
+    expect(() => r.bytecode("client/x.lua")).toThrow(/does not authenticate/);
     const view = readClientContainer(container);
     const forged = Buffer.from(container.toString("latin1").replace('"strip":"full"', '"strip":"name"'), "latin1");
     expect(() => readClientContainer(forged)).toThrow();
@@ -220,7 +249,7 @@ describe("the SGCE container", () => {
     const other = { lua: "5.4.8-x", luacHeader: LUA_548_TARGET.luacHeader.replace(/^1b4c756154/, "1b4c756153") };
     expect(() => sealClientContainer({ chunks: new Map([["x.lua", a.bytecode]]), package: "c//pkg", version: "1.0.0", release: "r", deployment: "dep_1", contentKey: key, signerSeed, strip: "full", target: other })).toThrow(/declared target/);
     const c = sealed().container;
-    expect(() => new ClientContainerReader(c, key, { target: other })).toThrow(/another Lua VM/);
+    expect(() => new ClientContainerReader(c, key, { trustedSigner: signer, target: other })).toThrow(/another Lua VM/);
   });
 
   it("refuses unsafe paths", () => {
@@ -248,7 +277,7 @@ describe("the key flow", () => {
     const sessionAad = clientSessionAad("c//pkg", "1.0.0", clientKeyId(onServer));
     const toSession = wrapClientKeyForSession(onServer, session.publicKey, sessionAad);
     const inSession = unwrapClientKeyInSession(toSession, session.privateKey, session.publicKey, sessionAad);
-    expect(new ClientContainerReader(container, inSession).paths().length).toBe(2);
+    expect(new ClientContainerReader(container, inSession, { trustedSigner: signer }).paths().length).toBe(2);
     // A session wrap is not a server wrap (labels differ), and the aad binds the key id.
     expect(() => unwrapContentKey(toSession, session.privateKey, session.publicKey, sessionAad)).toThrow();
     expect(() => unwrapClientKeyInSession(toSession, session.privateKey, session.publicKey, clientSessionAad("c//pkg", "1.0.1", clientKeyId(onServer)))).toThrow();
@@ -325,11 +354,15 @@ describe("the client-escrow vectors", () => {
     const key = unwrapClientKeyInSession(v.session.wrapped, session.privateKey, session.publicKey, Buffer.from(v.session.aad));
     const r = new ClientContainerReader(Buffer.from(v.containerBase64, "base64"), key, { trustedSigner: v.signerPublicKey });
     for (const c of v.chunks) expect(createHash("sha256").update(r.bytecode(c.path)).digest("hex")).toBe(c.sha256);
-    expect(() => new ClientContainerReader(Buffer.from(v.foreignTargetBase64, "base64"), key)).toThrow(/another Lua VM/);
-    const lying = new ClientContainerReader(Buffer.from(v.lyingBase64, "base64"), key);
+    // The container as pre-0.1.12 writers sealed it (plaintext sha256 per chunk) still reads.
+    const legacy = new ClientContainerReader(Buffer.from(v.legacyContainerBase64, "base64"), key, { trustedSigner: v.signerPublicKey });
+    for (const c of v.chunks) expect(createHash("sha256").update(legacy.bytecode(c.path)).digest("hex")).toBe(c.sha256);
+    const pinned = { trustedSigner: v.signerPublicKey as string };
+    expect(() => new ClientContainerReader(Buffer.from(v.foreignTargetBase64, "base64"), key, pinned)).toThrow(/another Lua VM/);
+    const lying = new ClientContainerReader(Buffer.from(v.lyingBase64, "base64"), key, pinned);
     expect(() => lying.bytecode("client/main.lua")).toThrow(/differs from the target/);
     expect(() => readClientContainer(Buffer.from(v.permutedBase64, "base64"))).toThrow(/generation 1/);
     const other = unwrapClientKeyInSession(v.session.otherWrapped, session.privateKey, session.publicKey, Buffer.from(v.session.aad));
-    expect(() => new ClientContainerReader(Buffer.from(v.containerBase64, "base64"), other)).toThrow(/not this container's key/);
+    expect(() => new ClientContainerReader(Buffer.from(v.containerBase64, "base64"), other, pinned)).toThrow(/not this container's key/);
   });
 });

@@ -397,6 +397,39 @@ public sealed class EscrowFolderTests
 
         using var client = HttpEscrowKeyService.CreateClient(new Uri("https://master.example/base"), "acme-engine/1.0");
         Assert.AreEqual(new Uri("https://master.example/base/"), client.BaseAddress);
+
+        // The deployment token never crosses the network over plain http: only https, or http to loopback.
+        Assert.ThrowsExactly<ArgumentException>(() => HttpEscrowKeyService.CreateClient(new Uri("http://master.example/")));
+        using (HttpEscrowKeyService.CreateClient(new Uri("http://127.0.0.1:4100/"))) { }
+        using (HttpEscrowKeyService.CreateClient(new Uri("http://localhost:4100/"))) { }
+        using (HttpEscrowKeyService.CreateClient(new Uri("http://[::1]:4100/"))) { }
+        var sent = false;
+        using (var http = new HttpClient(new Handler(_ => { sent = true; return Json("{}"); })) { BaseAddress = new Uri("http://master.example") })
+        {
+            var insecure = await new HttpEscrowKeyService(http, options).RequestKeyAsync(manifest, identity);
+            Assert.AreEqual("insecure_master", insecure.Reason);
+            Assert.IsTrue(insecure.TransportError);
+            Assert.IsFalse(sent, "nothing is sent to an http master that is not loopback");
+        }
+    }
+
+    [TestMethod]
+    public void ABundleHoldsOnlyWhatItsSignedManifestLists()
+    {
+        var v = EscrowVector.Load();
+        var files = EscrowKit.Unzip(v.Bundle);
+        // A file added next to a validly signed manifest is refused, not served as a clear file.
+        var added = new Dictionary<string, byte[]>(files) { ["server/evil.lua"] = Encoding.UTF8.GetBytes("os.execute('calc')") };
+        var error = Assert.ThrowsExactly<InvalidDataException>(() => EscrowBundle.Read(EscrowKit.Zip(added.Select(static kv => (kv.Key, kv.Value)))));
+        StringAssert.Contains(error.Message, "server/evil.lua is in the bundle but not in escrow.json");
+        // A path listed both clear and encrypted is refused.
+        var manifest = JsonNode.Parse(files["escrow.json"])!.AsObject();
+        var encrypted = manifest["encryptedFiles"]!.AsArray()[0]!.GetValue<string>();
+        manifest["clearFiles"]!.AsArray().Add(new JsonObject { ["path"] = encrypted, ["bytes"] = 1, ["sha256"] = new string('0', 64) });
+        var both = new Dictionary<string, byte[]>(files) { ["escrow.json"] = Encoding.UTF8.GetBytes(manifest.ToJsonString()), [encrypted] = [0x41] };
+        StringAssert.Contains(Assert.ThrowsExactly<InvalidDataException>(() => EscrowBundle.Read(EscrowKit.Zip(both.Select(static kv => (kv.Key, kv.Value))))).Message, "listed both clear and encrypted");
+        // The genuine bundle reads.
+        Assert.IsNotNull(EscrowBundle.Read(v.Bundle).Manifest);
     }
 }
 

@@ -188,6 +188,54 @@ static int clink_refuses_other_keys(void)
     return 0;
 }
 
+/* The bytecode of an opened container reaches luaL_loadbufferx, so the open needs a pinned signer. A
+ * game server holds the content key; it can seal bytecode of its choice under it and sign the header
+ * with its own key, which verifies under the key that header names. Only the pin refuses it. */
+static int clink_requires_pinned_signer(void)
+{
+    sg_clink* c = (sg_clink*)(uintptr_t)1;
+    sg_asset_key* key = NULL;
+    const char* signer = NULL;
+    size_t count = 0;
+    int status = -1;
+    CHECK_RC(sg_clink_container_open(CVEC_CONTAINER, CVEC_CONTAINER_len, NULL, &c), SG_ERR_INVALID_ARGUMENT);
+    CHECK(c == NULL);
+    CHECK_RC(sg_clink_container_open(CVEC_STRANGER_CONTAINER, CVEC_STRANGER_CONTAINER_len, NULL, &c), SG_ERR_INVALID_ARGUMENT);
+    CHECK_RC(sg_clink_container_open(CVEC_STRANGER_CONTAINER, CVEC_STRANGER_CONTAINER_len, CVEC_SIGNER, &c), SG_ERR_UNTRUSTED_SIGNER);
+    CHECK(c == NULL);
+
+    /* Inspection reads the header and refuses to bind, so nothing it holds ever loads. */
+    CHECK_RC(session_key(CVEC_SESSION_EPK, CVEC_SESSION_NONCE, CVEC_SESSION_WRAPPED, &key), SG_OK);
+    CHECK_RC(sg_clink_container_inspect(CVEC_STRANGER_CONTAINER, CVEC_STRANGER_CONTAINER_len, &c), SG_OK);
+    CHECK_RC(sg_clink_container_field(c, "signerPublicKey", &signer), SG_OK);
+    CHECK(signer != NULL && strlen(signer) == 43);
+    CHECK_RC(sg_clink_chunk_count(c, &count), SG_OK);
+    CHECK(count == CVEC_CHUNK_COUNT);
+    CHECK_RC(sg_clink_container_bind(c, key), SG_ERR_UNTRUSTED_SIGNER);
+    CHECK_RC(sg_clink_target_check(c, CVEC_LUAC_HEADER, CVEC_LUAC_HEADER_len), SG_OK);
+    CHECK_RC(sg_clink_lua_load(c, CVEC_CHUNK_PATHS[0], (void*)1, noop_loadbufferx, &status), SG_ERR_INVALID_ARGUMENT);
+    sg_clink_container_free(c);
+    c = NULL;
+    CHECK_RC(sg_clink_container_inspect(CVEC_CONTAINER, CVEC_CONTAINER_len, &c), SG_OK);
+    CHECK_RC(sg_clink_container_bind(c, key), SG_ERR_UNTRUSTED_SIGNER);
+    sg_clink_container_free(c);
+    sg_asset_key_free(key);
+    return 0;
+}
+
+/* A container sealed before SDK 0.1.12 (each chunk's plaintext sha256) still opens, binds and loads. */
+static int clink_reads_legacy_containers(void)
+{
+    sg_clink* c = NULL;
+    int status = -1;
+    CHECK_RC(open_bound(CVEC_LEGACY_CONTAINER, CVEC_LEGACY_CONTAINER_len, &c), SG_OK);
+    CHECK_RC(sg_clink_target_check(c, CVEC_LUAC_HEADER, CVEC_LUAC_HEADER_len), SG_OK);
+    CHECK_RC(sg_clink_lua_load(c, "client/main.lua", (void*)1, noop_loadbufferx, &status), SG_OK);
+    CHECK_RC(sg_clink_lua_load(c, "client/fail.lua", (void*)1, noop_loadbufferx, &status), SG_OK);
+    sg_clink_container_free(c);
+    return 0;
+}
+
 static int clink_refuses_tampering(void)
 {
     sg_clink* c = NULL;
@@ -196,16 +244,27 @@ static int clink_refuses_tampering(void)
     size_t body = body_offset(CVEC_CONTAINER);
     int status;
 
-    /* A flipped ciphertext byte: opens (the table is signed, not the body), never loads. */
+    /* A flipped ciphertext byte: the signed ciphertext hash refuses it at open, before any key. */
     bad = copy_of(CVEC_CONTAINER, CVEC_CONTAINER_len);
     CHECK(bad != NULL);
     bad[body + 40] ^= 1;
-    CHECK_RC(open_bound(bad, CVEC_CONTAINER_len, &c), SG_OK);
-    CHECK_RC(sg_clink_target_check(c, CVEC_LUAC_HEADER, CVEC_LUAC_HEADER_len), SG_OK);
-    CHECK_RC(sg_clink_lua_load(c, CVEC_CHUNK_PATHS[0], (void*)1, noop_loadbufferx, &status), SG_ERR_DECRYPT);
-    sg_clink_container_free(c);
-    c = NULL;
+    CHECK_RC(sg_clink_container_open(bad, CVEC_CONTAINER_len, CVEC_SIGNER, &c), SG_ERR_PAYLOAD_HASH);
+    CHECK(c == NULL);
     free(bad);
+
+    /* In a legacy container (plaintext sha256 per chunk) it opens, and the AEAD tag refuses the load. */
+    {
+        size_t legacy_body = body_offset(CVEC_LEGACY_CONTAINER);
+        bad = copy_of(CVEC_LEGACY_CONTAINER, CVEC_LEGACY_CONTAINER_len);
+        CHECK(bad != NULL);
+        bad[legacy_body + 40] ^= 1;
+        CHECK_RC(open_bound(bad, CVEC_LEGACY_CONTAINER_len, &c), SG_OK);
+        CHECK_RC(sg_clink_target_check(c, CVEC_LUAC_HEADER, CVEC_LUAC_HEADER_len), SG_OK);
+        CHECK_RC(sg_clink_lua_load(c, CVEC_CHUNK_PATHS[0], (void*)1, noop_loadbufferx, &status), SG_ERR_DECRYPT);
+        sg_clink_container_free(c);
+        c = NULL;
+        free(bad);
+    }
 
     /* A header byte changed: the signature (or the canonical form) refuses it. */
     bad = copy_of(CVEC_CONTAINER, CVEC_CONTAINER_len);
@@ -219,19 +278,19 @@ static int clink_refuses_tampering(void)
         CHECK(found != 0);
         bad[found + 16] = '2'; /* "rel_01" -> "rel_02": still a valid header, no longer what was signed */
     }
-    CHECK_RC(sg_clink_container_open(bad, CVEC_CONTAINER_len, NULL, &c), SG_ERR_BAD_SIGNATURE);
+    CHECK_RC(sg_clink_container_open(bad, CVEC_CONTAINER_len, CVEC_SIGNER, &c), SG_ERR_BAD_SIGNATURE);
     CHECK(c == NULL);
     free(bad);
 
     /* A truncated body, an unpinned signer. */
-    CHECK_RC(sg_clink_container_open(CVEC_CONTAINER, CVEC_CONTAINER_len - 1, NULL, &c), SG_ERR_BAD_CONTAINER);
+    CHECK_RC(sg_clink_container_open(CVEC_CONTAINER, CVEC_CONTAINER_len - 1, CVEC_SIGNER, &c), SG_ERR_BAD_CONTAINER);
     memset(wrong_signer, 7, sizeof wrong_signer);
     CHECK_RC(sg_clink_container_open(CVEC_CONTAINER, CVEC_CONTAINER_len, wrong_signer, &c), SG_ERR_UNTRUSTED_SIGNER);
     /* An asset container is not a client container. */
     bad = copy_of(CVEC_CONTAINER, CVEC_CONTAINER_len);
     CHECK(bad != NULL);
     memcpy(bad, "SGAE", 4);
-    CHECK_RC(sg_clink_container_open(bad, CVEC_CONTAINER_len, NULL, &c), SG_ERR_BAD_CONTAINER);
+    CHECK_RC(sg_clink_container_open(bad, CVEC_CONTAINER_len, CVEC_SIGNER, &c), SG_ERR_BAD_CONTAINER);
     free(bad);
     return 0;
 }
@@ -280,7 +339,7 @@ static int clink_container_survives_mutations(void)
         sg_clink* c = NULL;
         uint8_t saved = bad[i];
         bad[i] = (uint8_t)(saved ^ 0x5a);
-        if (sg_clink_container_open(bad, CVEC_CONTAINER_len, NULL, &c) == SG_OK) {
+        if (sg_clink_container_open(bad, CVEC_CONTAINER_len, CVEC_SIGNER, &c) == SG_OK) {
             /* Only a change the signature does not cover (none in the header) could pass. */
             sg_clink_container_free(c);
             free(bad);
@@ -438,15 +497,17 @@ static int clink_handles_reject_misuse(void)
     const char* value;
     size_t count;
     int status;
-    CHECK_RC(sg_clink_container_open(NULL, 0, NULL, &c), SG_ERR_INVALID_ARGUMENT);
-    CHECK_RC(sg_clink_container_open(CVEC_CONTAINER, CVEC_CONTAINER_len, NULL, NULL), SG_ERR_INVALID_ARGUMENT);
+    CHECK_RC(sg_clink_container_open(NULL, 0, CVEC_SIGNER, &c), SG_ERR_INVALID_ARGUMENT);
+    CHECK_RC(sg_clink_container_open(CVEC_CONTAINER, CVEC_CONTAINER_len, CVEC_SIGNER, NULL), SG_ERR_INVALID_ARGUMENT);
+    CHECK_RC(sg_clink_container_inspect(NULL, 0, &c), SG_ERR_INVALID_ARGUMENT);
+    CHECK_RC(sg_clink_container_inspect(CVEC_CONTAINER, CVEC_CONTAINER_len, NULL), SG_ERR_INVALID_ARGUMENT);
     CHECK_RC(sg_clink_container_field(NULL, "keyId", &value), SG_ERR_INVALID_ARGUMENT);
     CHECK_RC(sg_clink_chunk_count(NULL, &count), SG_ERR_INVALID_ARGUMENT);
     CHECK_RC(sg_clink_container_bind(NULL, NULL), SG_ERR_INVALID_ARGUMENT);
     CHECK_RC(sg_clink_lua_load(NULL, "x", (void*)1, noop_loadbufferx, &status), SG_ERR_INVALID_ARGUMENT);
     CHECK_RC(sg_clink_target_check(NULL, CVEC_LUAC_HEADER, CVEC_LUAC_HEADER_len), SG_ERR_INVALID_ARGUMENT);
     /* Not bound yet: no load, even with the target checked. */
-    CHECK_RC(sg_clink_container_open(CVEC_CONTAINER, CVEC_CONTAINER_len, NULL, &c), SG_OK);
+    CHECK_RC(sg_clink_container_open(CVEC_CONTAINER, CVEC_CONTAINER_len, CVEC_SIGNER, &c), SG_OK);
     CHECK_RC(sg_clink_target_check(c, CVEC_LUAC_HEADER, CVEC_LUAC_HEADER_len), SG_OK);
     CHECK_RC(sg_clink_lua_load(c, CVEC_CHUNK_PATHS[0], (void*)1, noop_loadbufferx, &status), SG_ERR_INVALID_ARGUMENT);
     CHECK_RC(sg_clink_lua_load(c, CVEC_CHUNK_PATHS[0], (void*)1, NULL, &status), SG_ERR_INVALID_ARGUMENT);
@@ -466,6 +527,8 @@ static const test_case CASES[] = {
     { "clink_keys_unwrap_and_rewrap", clink_keys_unwrap_and_rewrap },
     { "clink_container_good_path", clink_container_good_path },
     { "clink_refuses_other_keys", clink_refuses_other_keys },
+    { "clink_requires_pinned_signer", clink_requires_pinned_signer },
+    { "clink_reads_legacy_containers", clink_reads_legacy_containers },
     { "clink_refuses_tampering", clink_refuses_tampering },
     { "clink_refuses_other_targets", clink_refuses_other_targets },
     { "clink_container_survives_mutations", clink_container_survives_mutations },

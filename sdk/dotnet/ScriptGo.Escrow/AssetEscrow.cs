@@ -9,8 +9,9 @@
 //
 // Native backend only: the content key never becomes a managed array. A reader's output buffer is
 // plaintext, which is the point (the engine's loader reads it); from there no library can wipe it or
-// keep it out of a memory dump. What this protects: assets at rest and in transit, a key per session
-// that the server can stop handing out, never "unbreakable".
+// keep it out of a memory dump. What this protects: assets at rest and in transit, one key per
+// deployment, wrapped afresh for each player session, that the server can stop handing out; never
+// "unbreakable".
 using System.Runtime.InteropServices;
 using System.Text;
 using ScriptGo.Escrow.Native;
@@ -167,7 +168,8 @@ public readonly record struct AssetEntry(string Path, long Size);
 
 /// <summary>An opened asset container. Opening runs every check that needs no key (format,
 /// canonical header, pinned signer, signature, file table, ciphertext hashes). The container bytes
-/// are copied to unmanaged memory and kept until <see cref="Dispose"/>.</summary>
+/// are copied to unmanaged memory and kept until <see cref="Dispose"/>. <see cref="Open"/> needs the
+/// signer you trust; <see cref="Inspect"/> checks integrity only and never binds a key.</summary>
 public sealed class AssetContainer : IDisposable
 {
     private readonly AssetContainerHandle _handle;
@@ -196,12 +198,29 @@ public sealed class AssetContainer : IDisposable
     public string? Fingerprint { get; }
     public IReadOnlyList<AssetEntry> Files { get; }
     public bool IsBound { get; private set; }
+    /// <summary>True for a container from <see cref="Inspect"/>: its signature was checked under the key its
+    /// header names (integrity, not origin), and it never takes a key.</summary>
+    public bool IsInspectOnly { get; private init; }
 
-    /// <summary>Opens and checks a container. Pin <paramref name="trustedSigner"/> (32 bytes) to the
-    /// key you trust; null accepts the key the header names, which proves integrity, not origin.</summary>
-    public static AssetContainer Open(ReadOnlySpan<byte> container, ReadOnlySpan<byte> trustedSigner = default)
+    /// <summary>Opens and checks a container whose files will be decrypted. <paramref name="trustedSigner"/>
+    /// (32 bytes, required) is the signer you trust, from a source the party that handed you the container
+    /// does not control; a container signed by any other key is refused (<c>bad_signature</c>). Since 0.5.0
+    /// there is no "accept the key the header names": that proves integrity, not origin, and is
+    /// <see cref="Inspect"/>.</summary>
+    public static AssetContainer Open(ReadOnlySpan<byte> container, ReadOnlySpan<byte> trustedSigner)
     {
-        if (!trustedSigner.IsEmpty && trustedSigner.Length != 32) throw new ArgumentException("A signer public key is 32 bytes.", nameof(trustedSigner));
+        if (trustedSigner.Length != 32) throw new ArgumentException("A pinned signer public key (32 bytes) is required.", nameof(trustedSigner));
+        return OpenCore(container, trustedSigner, inspect: false);
+    }
+
+    /// <summary>Runs the same checks with the signature verified under the key the header names: integrity
+    /// only. For a host that reads the header and the file table and never decrypts (a server that relays
+    /// containers to its clients). Compare <see cref="SignerPublicKey"/> with the key you trust before you
+    /// rely on anything else; <see cref="Bind"/> refuses an inspected container.</summary>
+    public static AssetContainer Inspect(ReadOnlySpan<byte> container) => OpenCore(container, default, inspect: true);
+
+    private static AssetContainer OpenCore(ReadOnlySpan<byte> container, ReadOnlySpan<byte> trustedSigner, bool inspect)
+    {
         if (container.IsEmpty) throw new EscrowException(EscrowFailure.InvalidBundle, "bad_container:empty");
         AssetKey.EnsureAvailable();
         unsafe
@@ -210,9 +229,20 @@ public sealed class AssetContainer : IDisposable
             container.CopyTo(new Span<byte>(data, container.Length));
             IntPtr handle = IntPtr.Zero;
             int rc;
-            fixed (byte* signer = trustedSigner)
+            try
             {
-                rc = EscrowNative.sg_asset_container_open(data, (nuint)container.Length, trustedSigner.IsEmpty ? null : signer, out handle);
+                fixed (byte* signer = trustedSigner)
+                {
+                    rc = inspect
+                        ? EscrowNative.sg_asset_container_inspect(data, (nuint)container.Length, out handle)
+                        : EscrowNative.sg_asset_container_open(data, (nuint)container.Length, signer, out handle);
+                }
+            }
+            catch (EntryPointNotFoundException)
+            {
+                NativeMemory.Free(data);
+                throw new EscrowException(EscrowFailure.NativeLibraryUnavailable,
+                    "native_library_unavailable:this libscriptgo predates sg_asset_container_inspect (0.2.0); use the library that ships with this package");
             }
             if (rc != EscrowNative.Ok)
             {
@@ -225,17 +255,19 @@ public sealed class AssetContainer : IDisposable
                     _ => new EscrowException(EscrowFailure.InvalidBundle, "bad_container:" + EscrowNative.ErrorText(rc)),
                 };
             }
-            return new AssetContainer(new AssetContainerHandle(handle, (IntPtr)data));
+            return new AssetContainer(new AssetContainerHandle(handle, (IntPtr)data)) { IsInspectOnly = inspect };
         }
     }
 
     /// <summary>Gives the container its content key. Refused (<c>key_mismatch</c>) when the key's id is
-    /// not the header's: another deployment's or another release's key.</summary>
+    /// not the header's: another deployment's or another release's key. An inspected container is refused
+    /// (<c>untrusted_signer</c>).</summary>
     public void Bind(AssetKey key)
     {
         ArgumentNullException.ThrowIfNull(key);
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (IsBound) throw new InvalidOperationException("The container already has its key.");
+        if (IsInspectOnly) throw new EscrowException(EscrowFailure.Signature, "untrusted_signer:an inspected container is never decrypted; open it with the signer you trust");
         var rc = EscrowNative.sg_asset_container_bind(_handle, key.Handle);
         if (rc == EscrowNative.ErrKeyMismatch) throw new EscrowException(EscrowFailure.UnwrapFailed, "key_mismatch");
         if (rc != EscrowNative.Ok) throw new EscrowException(EscrowFailure.UnwrapFailed, "bind_failed:" + EscrowNative.ErrorText(rc));

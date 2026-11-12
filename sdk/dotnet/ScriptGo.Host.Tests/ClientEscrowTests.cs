@@ -144,15 +144,47 @@ public sealed class ClientEscrowTests
         StringAssert.StartsWith(Assert.ThrowsExactly<EscrowException>(() => ClientCodeContainer.Open(B64("permutedBase64"), Signer)).Reason, "bad_container");
         var unpinned = new byte[32];
         Assert.AreEqual(EscrowFailure.Signature, Assert.ThrowsExactly<EscrowException>(() => ClientCodeContainer.Open(B64("containerBase64"), unpinned)).Failure);
+        // A flipped ciphertext byte: the signed ciphertext hash refuses it at open, before any key ...
         var tampered = B64("containerBase64");
         tampered[^3] ^= 1;
-        using (var bad = ClientCodeContainer.Open(tampered, Signer))
+        StringAssert.StartsWith(Assert.ThrowsExactly<EscrowException>(() => ClientCodeContainer.Open(tampered, Signer)).Reason, "payload_hash");
+        // ... and in a legacy container (plaintext sha256 per chunk) the AEAD tag refuses the load.
+        var legacyTampered = B64("legacyContainerBase64");
+        legacyTampered[^3] ^= 1;
+        using (var bad = ClientCodeContainer.Open(legacyTampered, Signer))
         using (var key = SessionKey())
         using (var lua = new Lua())
         {
             bad.Bind(key);
             Assert.IsTrue(bad.CheckTarget(HostHeader(lua)));
             StringAssert.StartsWith(Assert.ThrowsExactly<EscrowException>(() => bad.LoadLuaChunk("client/main.lua", lua.Handle, Lua54.Value)).Reason, "decrypt_failed");
+        }
+    }
+
+    [TestMethod]
+    public void LoadingNeedsAPinnedSignerAndLegacyContainersStillLoad()
+    {
+        EscrowKit.RequireNative();
+        // Whoever holds the content key (a game server does) can seal bytecode of its choice and sign the
+        // header with its own key; it verifies under that key, so only the pin refuses it.
+        var stranger = B64("strangerContainerBase64");
+        Assert.ThrowsExactly<ArgumentException>(() => ClientCodeContainer.Open(B64("containerBase64"), ReadOnlySpan<byte>.Empty));
+        Assert.AreEqual(EscrowFailure.Signature, Assert.ThrowsExactly<EscrowException>(() => ClientCodeContainer.Open(stranger, Signer)).Failure);
+        using (var inspected = ClientCodeContainer.Inspect(stranger))
+        using (var key = SessionKey())
+        {
+            Assert.IsTrue(inspected.IsInspectOnly);
+            Assert.AreNotEqual(S(V["signerPublicKey"]), inspected.SignerPublicKey);
+            StringAssert.StartsWith(Assert.ThrowsExactly<EscrowException>(() => inspected.Bind(key)).Reason, "untrusted_signer");
+        }
+        // A container sealed before SDK 0.1.12 (each chunk's plaintext sha256) opens, binds and runs.
+        using (var legacy = ClientCodeContainer.Open(B64("legacyContainerBase64"), Signer))
+        using (var key = SessionKey())
+        using (var lua = new Lua())
+        {
+            legacy.Bind(key);
+            Assert.IsTrue(legacy.CheckTarget(HostHeader(lua)));
+            Assert.AreEqual(LuaChunkStatus.Loaded, legacy.LoadLuaChunk("client/main.lua", lua.Handle, Lua54.Value).Status);
         }
     }
 

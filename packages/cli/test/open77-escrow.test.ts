@@ -28,6 +28,7 @@ const manifestText = [
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
 
 function pack(out: string, extraAllow: string[] = []): { bundle: Buffer; signer: string } {
+  process.env.SCRIPTGO_CONFIG_DIR ??= join(tmp, "config"); // never ~/.scriptgo
   const parsed = parseManifest(manifestText, { fileName: "scriptgo.lua" });
   if (!parsed.ok) throw new Error(parsed.errors.map((e) => e.message).join("; "));
   const archive = zipSync({

@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { unzipSync, zipSync } from "fflate";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { randomBytes } from "node:crypto";
-import { buildFingerprinted, escrowedPreloadTransform, escrowPreload } from "@scriptgo/escrow";
+import { buildFingerprinted, ed25519FromSeed, escrowedPreloadTransform, escrowPreload, readAssetContainer } from "@scriptgo/escrow";
 import { fingerprintEntryPath, parseManifest } from "@scriptgo/manifest";
 import { run as assetsCommand } from "../src/commands/assets.ts";
 import { packForOpen77, run as packCommand, scriptgoArchive } from "../src/commands/pack.ts";
@@ -393,12 +393,15 @@ describe("asset escrow tooling", () => {
     expect(readFileSync(container).subarray(0, 4).toString("ascii")).toBe("SGAE");
     expect(readFileSync(container).includes(RDAR)).toBe(false);
     const dest = join(tmp, `opened-${n++}`);
-    const opened = await capture(() => assetsCommand(["open", container, "--key", `${container}.key.json`, "--out", dest]));
+    const signer = readAssetContainer(readFileSync(container)).header.signerPublicKey;
+    // Decrypting needs a pinned signer.
+    expect((await capture(() => assetsCommand(["open", container, "--key", `${container}.key.json`]))).code).toBe(2);
+    const opened = await capture(() => assetsCommand(["open", container, "--key", `${container}.key.json`, "--trusted-signer", signer, "--out", dest]));
     expect(opened.code).toBe(0);
     expect(readFileSync(join(dest, "archive", "pc", "mod", "market.archive")).equals(RDAR)).toBe(true);
     const other = join(tmp, `other-${n++}`, "o.sgae");
     await capture(() => assetsCommand(["seal", src, "--package", "p", "--version", "1", "--release", "r", "--deployment", "d", "--out", other]));
-    const wrong = await capture(() => assetsCommand(["open", container, "--key", `${other}.key.json`]));
+    const wrong = await capture(() => assetsCommand(["open", container, "--key", `${other}.key.json`, "--trusted-signer", signer]));
     expect(wrong.code).toBe(1);
     expect(wrong.text).toMatch(/wrong_key/);
     expect(readdirSync(dest).length).toBeGreaterThan(0);
@@ -416,7 +419,7 @@ describe("asset escrow tooling", () => {
     writeFileSync(file, zipped);
     writeFileSync(`${file}.key.json`, JSON.stringify({ contentKey: key.toString("base64") }));
     const dest = join(tmp, `escrowed-out-${n++}`);
-    const opened = await capture(() => assetsCommand(["open", file, "--key", `${file}.key.json`, "--out", dest]));
+    const opened = await capture(() => assetsCommand(["open", file, "--key", `${file}.key.json`, "--trusted-signer", ed25519FromSeed(Buffer.alloc(32, 9)).publicKey.toString("base64url"), "--out", dest]));
     expect(opened.code).toBe(0);
     expect(readFileSync(join(dest, "archive", "pc", "mod", "market.archive")).equals(RDAR)).toBe(true);
   });

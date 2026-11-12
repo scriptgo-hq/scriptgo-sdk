@@ -64,8 +64,18 @@ export interface ClientEscrowChunk {
   path: string;
   /** Plaintext bytecode length. */
   bytes: number;
-  /** SHA-256 of the plaintext bytecode, hex. */
-  sha256: string;
+  /**
+   * SHA-256 of the chunk's ciphertext and tag (the `length` bytes at `offset`), hex. What current
+   * writers emit: it reveals nothing about the bytecode, and with the key fixed by `keyId` it still
+   * fixes the bytecode the signature vouches for. Exactly one of `ciphertextSha256` / `sha256`.
+   */
+  ciphertextSha256?: string;
+  /**
+   * LEGACY (containers sealed before SDK 0.1.12): SHA-256 of the plaintext bytecode, hex. Bytecode
+   * compiles deterministically, so this hash confirms a guessed source or a copy; readers still accept
+   * it, writers emit it only with `legacyPlaintextSha256`.
+   */
+  sha256?: string;
   /** 12-byte AES-GCM nonce, base64url. */
   nonce: string;
   offset: number;
@@ -230,6 +240,13 @@ export function sealClientContainer(opts: {
   fingerprint?: string | null;
   /** Test vectors only: seal what a reader must refuse (a chunk that is not the target's bytecode, another generation). */
   unchecked?: { skipTargetCheck?: boolean; permGeneration?: number };
+  /**
+   * TRANSITION ONLY: write the legacy per-chunk `sha256` of the plaintext bytecode instead of
+   * `ciphertextSha256`, for game clients whose libscriptgo predates 0.2.0 (they refuse a chunk without
+   * `sha256`). It reveals the bytecode's hash (a guessed source can be confirmed). Drop it once the
+   * clients carry libscriptgo 0.2.0 or later.
+   */
+  legacyPlaintextSha256?: boolean;
 }): Buffer {
   const target = opts.target ?? LUA_548_TARGET;
   if (opts.contentKey.length !== 32) throw new Error("the content key must be 32 bytes");
@@ -244,7 +261,8 @@ export function sealClientContainer(opts: {
     const digest = sha256(data);
     const nonce = clientChunkNonce(opts.contentKey, path, digest);
     const ct = aeadEncrypt(opts.contentKey, data, clientChunkAad(opts.package, opts.version, path), nonce).ciphertext;
-    chunks.push({ path, bytes: data.length, sha256: digest.toString("hex"), nonce: b64(nonce), offset, length: ct.length });
+    const hash = opts.legacyPlaintextSha256 ? { sha256: digest.toString("hex") } : { ciphertextSha256: sha256(ct).toString("hex") };
+    chunks.push({ path, bytes: data.length, ...hash, nonce: b64(nonce), offset, length: ct.length });
     body.push(ct);
     offset += ct.length;
   }
@@ -283,8 +301,12 @@ export interface ClientContainerView {
 /**
  * Reads and checks a container before any key is involved (client-escrow.md, "Reading"): preamble,
  * canonical header, format, cipher, kdf, strip, permutation generation, target shape, pinned signer and
- * signature, chunk table (safe unique paths, `length = bytes + 16`, contiguous offsets, nonce size),
- * body length. Each chunk's plaintext hash is checked after decryption, by the reader.
+ * signature, chunk table (safe unique paths, `length = bytes + 16`, contiguous offsets, nonce size, one
+ * hash), body length, then each chunk's `ciphertextSha256`. A legacy chunk's plaintext `sha256` is
+ * checked after decryption, by the reader.
+ *
+ * Without `trustedSigner` this is INSPECTION (integrity, not origin). `ClientContainerReader`, which
+ * decrypts, requires a pinned signer, as the native `sg_clink_container_open` does.
  */
 export function readClientContainer(container: Uint8Array, opts: { trustedSigner?: string } = {}): ClientContainerView {
   const buf = Buffer.from(container.buffer, container.byteOffset, container.byteLength);
@@ -326,10 +348,18 @@ export function readClientContainer(container: Uint8Array, opts: { trustedSigner
     seen.add(c.path);
     if (!Number.isInteger(c.bytes) || c.bytes < LUAC_HEADER_BYTES || c.offset !== expected || c.length !== c.bytes + AES_TAG_BYTES) fail("invalid_header", `${c.path}: inconsistent size or range`);
     if (typeof c.nonce !== "string" || unb64(c.nonce).length !== 12) fail("invalid_header", `${c.path}: nonce must be 12 bytes`);
-    if (typeof c.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(c.sha256)) fail("invalid_header", `${c.path}: sha256 malformed`);
+    const keys = Object.keys(c).sort().join(",");
+    if (keys !== "bytes,ciphertextSha256,length,nonce,offset,path" && keys !== "bytes,length,nonce,offset,path,sha256") fail("invalid_header", `${c.path}: a chunk has bytes, length, nonce, offset, path and one of ciphertextSha256 / sha256`);
+    const hash = c.ciphertextSha256 ?? c.sha256;
+    if (typeof hash !== "string" || !/^[0-9a-f]{64}$/.test(hash)) fail("invalid_header", `${c.path}: hash malformed`);
     expected += c.length;
   }
   if (bodyOffset + expected !== buf.length) fail("tampered", "the body length does not match the chunk table");
+  for (const c of header.chunks) {
+    if (c.ciphertextSha256 === undefined) continue;
+    const range = buf.subarray(bodyOffset + c.offset, bodyOffset + c.offset + c.length);
+    if (sha256(range).toString("hex") !== c.ciphertextSha256) fail("tampered", `${c.path}: ciphertext hash mismatch`);
+  }
   return { header, bodyOffset };
 }
 
@@ -344,7 +374,12 @@ export class ClientContainerReader {
   readonly header: ClientEscrowHeader;
   private readonly bodyOffset: number;
 
-  constructor(container: Uint8Array, contentKey: Buffer, opts: { trustedSigner?: string; target?: ClientBytecodeTarget } = {}) {
+  /** `trustedSigner` is required: the signer you trust, from a source the party that handed you the
+   * container does not control (a game server never decides it). */
+  constructor(container: Uint8Array, contentKey: Buffer, opts: { trustedSigner: string; target?: ClientBytecodeTarget }) {
+    if (typeof opts?.trustedSigner !== "string" || opts.trustedSigner.length === 0) {
+      throw new ClientEscrowError("untrusted_signer", "a pinned signer is required to decrypt a container (the key its header names proves integrity, not origin)");
+    }
     const view = readClientContainer(container, opts);
     const target = opts.target ?? LUA_548_TARGET;
     if (view.header.target.luacHeader !== target.luacHeader) throw new ClientEscrowError("target_mismatch", "compiled for another Lua VM");
@@ -359,7 +394,7 @@ export class ClientContainerReader {
     return this.header.chunks.map((c) => c.path);
   }
 
-  /** Decrypts and checks one chunk: tag, plaintext hash, LUAC header. */
+  /** Decrypts and checks one chunk: tag, a legacy chunk's plaintext hash, LUAC header. */
   bytecode(path: string): Buffer {
     if (!this.key) throw new ClientEscrowError("closed", "the reader was closed");
     const c = this.header.chunks.find((x) => x.path === path);
@@ -371,7 +406,7 @@ export class ClientContainerReader {
     } catch {
       throw new ClientEscrowError("tampered", `${path}: the chunk does not authenticate`);
     }
-    if (sha256(plain).toString("hex") !== c.sha256) throw new ClientEscrowError("tampered", `${path}: bytecode hash mismatch`);
+    if (c.sha256 !== undefined && sha256(plain).toString("hex") !== c.sha256) throw new ClientEscrowError("tampered", `${path}: bytecode hash mismatch`);
     if (luacHeaderOf(plain) !== this.header.target.luacHeader) throw new ClientEscrowError("target_mismatch", `${path}: bytecode header differs from the target`);
     return plain;
   }

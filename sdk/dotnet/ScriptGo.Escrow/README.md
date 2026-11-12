@@ -144,7 +144,7 @@ var answer = await keys.RequestAssetKeyAsync(version, identity);          // POS
 if (answer.Valid && answer.Aad == AssetEscrowFormat.ServerAad(package, version, deploymentId))
 {
     using var key = AssetKey.UnwrapForServer(identity, answer.WrappedKey!, answer.Aad);
-    // per player session: their 32-byte X25519 public key
+    // for each player session: the deployment's one key, wrapped to their 32-byte X25519 public key
     var wrapped = key.WrapForClient(sessionPublicKey, AssetEscrowFormat.ClientAad(package, version, key.KeyId));
 }
 ```
@@ -152,6 +152,19 @@ if (answer.Valid && answer.Aad == AssetEscrowFormat.ServerAad(package, version, 
 `AssetContainer` (open, check, `Bind`, `OpenReader`) is the client side in .NET, used by the tests
 and by tools; a game client hook is native code over the same `sg_asset_*` calls.
 `key_mismatch` from `Bind` is another deployment's or another release's key.
+
+**Pin the signer.** `AssetContainer.Open(container, trustedSigner)` and
+`ClientCodeContainer.Open(container, trustedSigner)` require the 32-byte signer you trust, from a
+source the party that hands you the container does not control (for platform containers:
+`PLATFORM_CONTAINER_SIGNERS` in `@scriptgo/shared`). A container's own header proves integrity, not
+origin: whoever holds the content key, a game server included, can seal and sign one. A server that
+only needs a container's `KeyId` or fields calls `AssetContainer.Inspect(container)` /
+`ClientCodeContainer.Inspect(container)`: `IsInspectOnly` is true and `Bind` refuses
+(`untrusted_signer:`). Since 0.5.0 (libscriptgo 0.2.0) there is no default for the signer.
+
+`HttpEscrowKeyService.CreateClient` refuses a master URL that is not `https` (plain `http` only to
+loopback), and a key request to such a master answers `insecure_master` without sending anything:
+the deployment token never crosses a network in clear.
 
 ## More
 

@@ -13,6 +13,7 @@
 // marker. It never writes a key to disk. A definitive refusal stops it; a master that cannot answer
 // does not release a key either, so a cold start always needs the master.
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { looseSecretFile, writeSecretFile } from "./secret-files.ts";
 import { createHash } from "node:crypto";
 import { dirname, join, resolve, sep } from "node:path";
 import {
@@ -32,6 +33,10 @@ export interface ServerIdentity extends X25519KeyPair {
   /** Short fingerprint of the public key: what the dashboard shows as "bound to". */
   fingerprint: string;
   created: boolean;
+  /** How the identity file is protected on this OS, in one honest line (set when created). */
+  protection?: string;
+  /** Set when a new identity file could not be restricted to the current user. */
+  warning?: string | null;
 }
 
 export function fingerprintOf(publicKey: Buffer): string {
@@ -39,22 +44,24 @@ export function fingerprintOf(publicKey: Buffer): string {
 }
 
 /**
- * The server's X25519 identity, created on first use. The private key stays in this file on this
- * machine (mode 0600); only the public key goes to the master. Copying the resource folder to
- * another machine does not copy a usable identity unless this file is copied too, and a second
- * machine with the same deployment token and another identity is refused (server_key_mismatch).
+ * The server's X25519 identity, created on first use. Only the public key goes to the master. The
+ * private key is in CLEAR in this file (this reference loader has no OS key store): 0600 on POSIX,
+ * an ACL for the current user on Windows. Whoever copies the file has the identity, on any machine:
+ * keep it outside the resource and server folders and back it up like a secret. A second machine
+ * with the same deployment token and ANOTHER identity is refused (server_key_mismatch).
  */
 export function loadIdentity(file: string): ServerIdentity {
   const path = resolve(file);
   if (existsSync(path)) {
+    const loose = looseSecretFile(path);
+    if (loose) throw new Error(`refusing the server identity: ${loose}`);
     const j = JSON.parse(readFileSync(path, "utf8")) as { publicKey?: string; privateKey?: string };
     if (!j.publicKey || !j.privateKey) throw new Error(`${path} is not a server identity file`);
     const publicKey = Buffer.from(j.publicKey, "base64url");
     return { publicKey, privateKey: Buffer.from(j.privateKey, "base64url"), fingerprint: fingerprintOf(publicKey), created: false };
   }
   const pair = generateX25519KeyPair();
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(
+  const written = writeSecretFile(
     path,
     JSON.stringify(
       {
@@ -66,9 +73,8 @@ export function loadIdentity(file: string): ServerIdentity {
       null,
       2,
     ) + "\n",
-    { mode: 0o600 },
   );
-  return { ...pair, fingerprint: fingerprintOf(pair.publicKey), created: true };
+  return { ...pair, fingerprint: fingerprintOf(pair.publicKey), created: true, protection: written.protection, warning: written.warning };
 }
 
 export interface KeyAnswer {

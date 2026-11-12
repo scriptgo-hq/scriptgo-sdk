@@ -36,8 +36,11 @@ public sealed class EscrowBundle
     /// <summary>payload.enc: AES-256-GCM ciphertext with the 16-byte tag appended.</summary>
     internal byte[] Payload => _payload;
 
-    /// <summary>Parses a bundle. Throws <see cref="InvalidDataException"/> on a malformed archive or
-    /// on a path that would escape the resource root.</summary>
+    /// <summary>Parses a bundle. Throws <see cref="InvalidDataException"/> on a malformed archive, on a
+    /// path that would escape the resource root, on an entry the manifest does not list (anything but
+    /// <c>escrow.json</c>, <c>payload.enc</c> and its <c>clearFiles</c>: the signature covers the
+    /// manifest, not the zip, so an added <c>server/evil.lua</c> would otherwise be served as a clear
+    /// file) and on a path listed both clear and encrypted.</summary>
     public static EscrowBundle Read(ReadOnlyMemory<byte> bundle)
     {
         byte[]? escrowJson = null, payload = null;
@@ -60,7 +63,22 @@ public sealed class EscrowBundle
         try { manifest = JsonSerializer.Deserialize<EscrowManifest>(escrowJson, EscrowFormat.Json); }
         catch (JsonException e) { throw new InvalidDataException("escrow.json is not valid JSON: " + e.Message, e); }
         if (manifest is null) throw new InvalidDataException("escrow.json is not a valid manifest.");
+        if (EntryProblem(manifest, clear.Keys) is { } problem) throw new InvalidDataException(problem);
         return new EscrowBundle(manifest, escrowJson, payload, clear);
+    }
+
+    /// <summary>The first entry of a bundle the signed manifest does not account for, or a path listed both
+    /// clear and encrypted; null when the bundle holds exactly <c>escrow.json</c>, <c>payload.enc</c> and
+    /// the manifest's clear files.</summary>
+    internal static string? EntryProblem(EscrowManifest manifest, IEnumerable<string> clearEntries)
+    {
+        var listed = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var file in manifest.ClearFiles ?? []) if (file?.Path is { } path) listed.Add(path);
+        foreach (var path in manifest.EncryptedFiles ?? [])
+            if (path is not null && listed.Contains(path)) return $"{EscrowPaths.Printable(path)} is listed both clear and encrypted.";
+        foreach (var path in clearEntries)
+            if (!listed.Contains(path)) return $"{EscrowPaths.Printable(path)} is in the bundle but not in escrow.json.";
+        return null;
     }
 
     // ---------------- a release installed as a folder (docs/spec/escrow.md, "On disk")

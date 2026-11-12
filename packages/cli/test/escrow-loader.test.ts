@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -67,6 +67,16 @@ describe("reference escrow loader", () => {
     expect(again.fingerprint).toBe(a.fingerprint);
     expect(JSON.parse(readFileSync(file, "utf8")).note).toMatch(/SECRET/);
     expect(statSync(file).isFile()).toBe(true);
+    expect(a.protection).toMatch(/in clear on disk/);
+    expect(a.warning ?? null).toBeNull();
+  });
+
+  it.skipIf(process.platform === "win32")("refuses an identity file group or others can read", () => {
+    const file = join(tmp, "id-loose.json");
+    loadIdentity(file);
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+    chmodSync(file, 0o644);
+    expect(() => loadIdentity(file)).toThrow(/group or others/);
   });
 
   it("loads a bundle on the bound server: decrypts in memory and adds the delivery marker", async () => {

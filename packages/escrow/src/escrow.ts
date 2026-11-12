@@ -148,6 +148,24 @@ export function readBundle(bundle: Buffer): ReadBundle {
   return { manifest, clear, payload: Buffer.from(payloadRaw) };
 }
 
+/**
+ * The first entry of a bundle that the signed manifest does not account for, or a path the manifest
+ * lists both clear and encrypted; null when the bundle holds exactly escrow.json, payload.enc and the
+ * manifest's clear files. The signature covers the manifest, not the zip: an entry added next to a
+ * validly signed manifest (a `server/evil.lua`) would otherwise be served as a clear file.
+ */
+export function bundleEntryProblem(manifest: EscrowManifest, clearEntries: Iterable<string>): string | null {
+  const clearFiles = Array.isArray(manifest.clearFiles) ? manifest.clearFiles : [];
+  const encryptedFiles = Array.isArray(manifest.encryptedFiles) ? manifest.encryptedFiles : [];
+  const listed = new Set(clearFiles.map((f) => f.path));
+  for (const path of encryptedFiles) if (listed.has(path)) return `${path} is listed both clear and encrypted`;
+  for (const path of clearEntries) {
+    if (path === ESCROW_JSON || path === ESCROW_PAYLOAD) continue;
+    if (!listed.has(path)) return `${path} is in the bundle but not in escrow.json`;
+  }
+  return null;
+}
+
 export interface VerifyOptions {
   /**
    * The ed25519 public key (raw base64url) the loader trusts. When set, the manifest's own
@@ -184,6 +202,8 @@ export function openEscrowRelease(input: OpenEscrowInput): Map<string, Buffer> {
   const { manifest, clear, payload } = readBundle(input.bundle);
   const verdict = verifyManifest(manifest, { trustedSignerPublicKey: input.trustedSignerPublicKey });
   if (!verdict.ok) throw new Error(`escrow verify failed: ${verdict.reason}`);
+  const stray = bundleEntryProblem(manifest, clear.keys());
+  if (stray) throw new Error(`escrow bundle refused: ${stray}`);
   if (sha256(payload) !== manifest.payload.sha256) throw new Error("escrow payload hash mismatch (tampered).");
   for (const entry of manifest.clearFiles) {
     const got = clear.get(entry.path);

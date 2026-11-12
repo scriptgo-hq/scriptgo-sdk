@@ -23,8 +23,9 @@ SCRIPT//GO does, a player who controls their machine can extract an asset their 
 - A fingerprint identifies a copy; it does not prevent copying. Repacking the files removes it.
 - **Asset escrow** (below) is a format, a key protocol and a client hook. It needs work in each
   platform's game client, so it exists only where that work is done: OPEN//77 (its server and
-  client side ship with OPEN//77, not with this SDK). Say "encrypted at rest and in transit, a key
-  per deployment and per player session, revocable". It raises the cost of copying an asset from a
+  client side ship with OPEN//77, not with this SDK). Say "encrypted at rest and in transit, one
+  key per deployment, wrapped afresh for each player session, revocable" (the session wrap protects
+  the key in transit; every session of a deployment unwraps the same key). It raises the cost of copying an asset from a
   server, from a distribution channel or from a player's disk while the game is not running; it
   does not prevent extraction from a running client.
 
@@ -151,8 +152,8 @@ Notes per environment:
   obey the roots and types above (`open77_escrow_header` when it does not parse; the files' own codes
   otherwise), next to the fingerprint record and nothing else (`open77_escrow_mixed`). The `needs`
   come from that header, so an escrowed preload holding `.xl` files still needs ArchiveXL. The
-  header's signature is checked by OPEN//77 with the signer it trusts (and by `scriptgo assets
-  open`), not by the inspection. ArchiveXL is executable on the
+  header's signature is checked by the OPEN//77 client against the platform signer it pins (and by
+  `scriptgo assets open --trusted-signer`), not by the inspection. ArchiveXL is executable on the
   client: a server whose preloads need it runs in OPEN//77's unsecured mode, and `pack` says so.
 - **FiveM / RedM.** FXServer streams `stream/` itself; `files` makes clients download the rest,
   and `data_file` tells the game to load a file as data. A native file outside `stream/` that no
@@ -297,6 +298,21 @@ files: [{ path, bytes, chunks, offset, length, noncePrefix, sha256 }], signerPub
 `fingerprint` is the copy's marker or null. Header at most 4 MiB. `chunkBytes` is 4096 to 16 MiB
 (default 1 MiB).
 
+**The signer is pinned by the client, never taken from the container or from the game server.**
+`signerPublicKey` only names the key that signed; a signature that verifies under it proves integrity,
+not origin. A game server holds the deployment's content key (it re-wraps it to each session), so it
+can seal files of its choice under that key and sign the header with its own key: that container
+verifies under the key it names, and only a signer the client pinned refuses it. A client builds the
+signer into its own binary or configuration, from a source the game server does not control; for
+containers the SCRIPT//GO platform seals, that source is `PLATFORM_CONTAINER_SIGNERS` in
+`@scriptgo/shared` (`packages/shared/src/signers.ts`) at the SDK tag the client ships with. Every
+decrypting entry point requires it: `sg_asset_container_open` with a NULL signer is
+`SG_ERR_INVALID_ARGUMENT` (libscriptgo 0.2.0), the .NET `AssetContainer.Open(container,
+trustedSigner)` and the TypeScript `AssetContainerReader` throw without one. A reader that only
+needs integrity (a server listing `keyId`s, a tool) uses `sg_asset_container_inspect` /
+`AssetContainer.Inspect` / `readAssetContainer` without a signer; an inspected handle never binds a
+key (`SG_ERR_UNTRUSTED_SIGNER`).
+
 ### Keys
 
 ```text
@@ -329,8 +345,8 @@ or moved between files even by someone who can re-sign the header (tested).
 
 Before any key is used: magic, version, the zero bytes, header length, header JSON in canonical
 form, `format`,
-`cipher`, chunk size bounds, the signature (and the pinned signer when one is configured), every
-file's path rules, `chunks`, `length = bytes + 16 × chunks`, contiguous offsets, a body length equal
+`cipher`, chunk size bounds, the pinned signer and the signature (inspection: the header's own key,
+and the handle never binds), every file's path rules, `chunks`, `length = bytes + 16 × chunks`, contiguous offsets, a body length equal
 to the sum, and each file's ciphertext SHA-256. Then `keyId` must match the key. A read of
 `(path, offset, length)` decrypts only the chunks it covers; any tag failure is an error, never a
 partial result. Closing a reader wipes its key.
@@ -369,10 +385,10 @@ game client ──(3) in memory────────────────�
 2. **Server to client.** The client makes an X25519 session key pair in memory for one connection
    and sends the public half with the `keyId`s it needs; the server answers each `keyId` it holds
    with `sg_asset_key_wrap` (a fresh ephemeral key and nonce per answer; .NET
-   `AssetKey.WrapForClient`) and the signer it trusts. The transport is the environment's own (for
-   OPEN//77, below).
+   `AssetKey.WrapForClient`). It sends no signer: which signer to trust is never the server's call.
+   The transport is the environment's own (for OPEN//77, below).
 3. **Client.** `sg_asset_key_unwrap` (kind `SG_ASSET_WRAP_CLIENT`), `sg_asset_container_open` with
-   the signer pinned, `sg_asset_container_bind`, then reads. The session private key and the
+   the signer the client pinned ("Layout"), `sg_asset_container_bind`, then reads. The session private key and the
    content key live in `sodium_malloc` memory and are wiped on free.
 
 **What a revocation does.** From the next renewal (or once offline grace has run out) the server
@@ -390,7 +406,7 @@ A platform implements five calls in its game client, in native code. `libscriptg
 |---|---|
 | `session_key() -> publicKey` | creates an X25519 key pair for this connection, in memory; returns the public half to send to the server |
 | `accept_key(wrapped, aad) -> keyId` | unwraps the content key the server sent for this session (`unwrapAssetKeyOnClient`) |
-| `open(container, keyId) -> handle` | runs every check of "Reading" on a container the client downloaded |
+| `open(container, keyId) -> handle` | runs every check of "Reading" on a container the client downloaded, against the signer the client pinned |
 | `read(handle, path, offset, length) -> bytes` | decrypts the chunks covering the range, into memory handed to the engine's loader |
 | `close(handle)` | wipes the key and the decrypted buffers |
 
@@ -425,8 +441,8 @@ OPEN//77) and writes the escrowed preload unchanged. The key path:
 |---|---|---|
 | 1 | server | at start and on renewal, `POST /v1/licenses/key {kind:"assets"}` per escrowed resource; unwraps with its escrow identity |
 | 2 | client plugin, at boot, before the engine mounts archives | finds `archive/pc/mod/*.sgae`, makes a session key pair, fetches the player's connect ticket for that server from the OPEN//77 master (the one a join carries), and asks the server it was launched for (`OP77_CONNECT`): `POST /assets/v1/keys {sessionPublicKey, keyIds, ticket}`, `ticket` the base64url of the master-signed ticket |
-| 3 | server | verifies the ticket with the join's own verifier, then answers each `keyId` it holds, re-wrapped to that session (client aad), with its trusted signer; logged per request |
-| 4 | client plugin | opens each container with that signer pinned, binds, decrypts |
+| 3 | server | verifies the ticket with the join's own verifier, then answers each `keyId` it holds, re-wrapped to that session (client aad); logged per request. It reads containers by inspection only (`AssetContainer.Inspect`) and sends no signer |
+| 4 | client plugin | opens each container with the platform signer built into the client (`PLATFORM_CONTAINER_SIGNERS`), never one the server names and never NULL, binds, decrypts |
 
 **What OPEN//77 cannot do yet, said plainly.** REDengine mounts archives from files under
 `archive/pc/mod/` at boot; no in-memory mount is known for 2.5. The OPEN//77 hook therefore

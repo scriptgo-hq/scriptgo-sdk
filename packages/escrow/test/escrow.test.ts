@@ -15,6 +15,9 @@ import {
   wrapContentKey,
 } from "../src/index.ts";
 import { DELIVERY_MARKER } from "../src/format.ts";
+import { canonicalJson } from "../src/canonical.ts";
+import { ed25519Sign } from "../src/crypto.ts";
+import { unzipSync, zipSync } from "fflate";
 
 const SEED = Buffer.alloc(32, 3);
 
@@ -71,6 +74,23 @@ describe("buildEscrowRelease", () => {
 
     const tampered = { ...manifest, package: "evil//demo" };
     expect(verifyManifest(tampered).ok).toBe(false);
+  });
+
+  it("refuses a file added next to a validly signed manifest, and a path listed clear and encrypted", () => {
+    const built = buildEscrowRelease({ files: resource(), package: "kestrel//demo", version: "1.0.0", manifestFile: "scriptgo.lua", signingSeed: SEED });
+    const pinned = built.manifest.signerPublicKey;
+    const entries = unzipSync(built.bundle);
+    entries["server/evil.lua"] = Buffer.from("os.execute('calc')");
+    const added = Buffer.from(zipSync(entries));
+    expect(() => openEscrowRelease({ bundle: added, contentKey: built.contentKey, trustedSignerPublicKey: pinned })).toThrow(/server\/evil\.lua is in the bundle but not in escrow\.json/);
+
+    // Signed by the creator, but a path both clear and encrypted is ambiguous: refused.
+    const manifest = { ...built.manifest, clearFiles: [...built.manifest.clearFiles, { path: "server/main.lua", bytes: 5, sha256: "0".repeat(64) }], signature: "" };
+    manifest.signature = ed25519Sign(Buffer.from(canonicalJson(manifest), "utf8"), SEED).toString("base64url");
+    const both = unzipSync(built.bundle);
+    both["escrow.json"] = Buffer.from(JSON.stringify(manifest), "utf8");
+    both["server/main.lua"] = Buffer.from("print('x')");
+    expect(() => openEscrowRelease({ bundle: Buffer.from(zipSync(both)), contentKey: built.contentKey, trustedSignerPublicKey: pinned })).toThrow(/listed both clear and encrypted/);
   });
 });
 

@@ -72,6 +72,7 @@ struct sg_asset_container {
     size_t count;
     size_t* by_path;       /* indices sorted by strcmp, for lookup */
     uint8_t* key;          /* sodium_malloc(32), NULL until bound */
+    int inspect_only;      /* opened by sg_asset_container_inspect: no signer pinned, never bound */
 };
 
 struct sg_asset_reader {
@@ -491,7 +492,24 @@ static void container_release(sg_asset_container* c)
     free(c);
 }
 
+static int asset_container_open(const uint8_t* data, size_t len, const uint8_t* trusted_signer, int inspect_only, sg_asset_container** out_container);
+
 int SG_CALL sg_asset_container_open(const uint8_t* data, size_t len, const uint8_t* trusted_signer, sg_asset_container** out_container)
+{
+    if (out_container == NULL) return SG_ERR_INVALID_ARGUMENT;
+    *out_container = NULL;
+    /* A signature under the key the header itself names proves integrity, not origin: an open that
+     * can lead to a decryption always has a pinned signer. */
+    if (trusted_signer == NULL) return SG_ERR_INVALID_ARGUMENT;
+    return asset_container_open(data, len, trusted_signer, 0, out_container);
+}
+
+int SG_CALL sg_asset_container_inspect(const uint8_t* data, size_t len, sg_asset_container** out_container)
+{
+    return asset_container_open(data, len, NULL, 1, out_container);
+}
+
+static int asset_container_open(const uint8_t* data, size_t len, const uint8_t* trusted_signer, int inspect_only, sg_asset_container** out_container)
 {
     sg_asset_container* c = NULL;
     header_ctx h;
@@ -536,7 +554,7 @@ int SG_CALL sg_asset_container_open(const uint8_t* data, size_t len, const uint8
 
     /* Signer and signature, over the header with its signature emptied. */
     if (!b64url_exact(c->fields[F_SIGNER], signer, sizeof signer) || !b64url_exact(h.signature, signature, sizeof signature)) goto done;
-    if (trusted_signer != NULL && sodium_memcmp(trusted_signer, signer, sizeof signer) != 0) { rc = SG_ERR_UNTRUSTED_SIGNER; goto done; }
+    if (!inspect_only && sodium_memcmp(trusted_signer, signer, sizeof signer) != 0) { rc = SG_ERR_UNTRUSTED_SIGNER; goto done; }
     {
         size_t signed_len = header_len - (h.sig_end - h.sig_start);
         uint8_t* message = (uint8_t*)malloc(signed_len);
@@ -548,6 +566,7 @@ int SG_CALL sg_asset_container_open(const uint8_t* data, size_t len, const uint8
         free(message);
         if (!verified) { rc = SG_ERR_BAD_SIGNATURE; goto done; }
     }
+    c->inspect_only = inspect_only;
 
     /* The file table: safe unique paths, sizes, chunk counts and contiguous ranges. */
     for (i = 0; i < c->count; i++) {
@@ -622,6 +641,7 @@ int SG_CALL sg_asset_container_bind(sg_asset_container* c, const sg_asset_key* k
 {
     uint8_t* copy;
     if (!container_ok(c) || !key_ok(key) || c->key != NULL) return SG_ERR_INVALID_ARGUMENT;
+    if (c->inspect_only) return SG_ERR_UNTRUSTED_SIGNER; /* integrity only: nothing it holds is ever decrypted */
     if (key->domain != KEY_DOMAIN_ASSET) return SG_ERR_KEY_MISMATCH; /* a client-code key never opens assets */
     if (sodium_memcmp(key->id, c->fields[F_KEY_ID], SG_ASSET_KEY_ID_CHARS) != 0) return SG_ERR_KEY_MISMATCH;
     copy = (uint8_t*)sodium_malloc(SG_ASSET_KEY_BYTES);
@@ -888,6 +908,7 @@ typedef struct clink_chunk {
     uint64_t length;
     uint8_t nonce[SG_NONCE_BYTES];
     uint8_t sha256[crypto_hash_sha256_BYTES];
+    int ciphertext_hash; /* 1: sha256 is "ciphertextSha256" (checked at open); 0: legacy "sha256" of the plaintext */
 } clink_chunk;
 
 enum { C_PACKAGE, C_VERSION, C_RELEASE, C_DEPLOYMENT, C_KEY_ID, C_SIGNER, C_STRIP, C_LUA, C_FINGERPRINT, C_COUNT };
@@ -902,6 +923,7 @@ struct sg_clink {
     clink_chunk* chunks;
     size_t count;
     uint8_t* key;  /* sodium_malloc(32), NULL until bound */
+    int inspect_only; /* opened by sg_clink_container_inspect: no signer pinned, never bound */
 };
 
 typedef struct clink_header_ctx {
@@ -929,12 +951,13 @@ static int on_clink_chunk_key(jp* p, const char* key, void* raw)
 {
     clink_chunk_ctx* cc = (clink_chunk_ctx*)raw;
     if (strcmp(key, "bytes") == 0) { cc->seen |= 1u; return jp_uint(p, &cc->ch->bytes); }
+    if (strcmp(key, "ciphertextSha256") == 0) { cc->seen |= 64u; cc->ch->ciphertext_hash = 1; return jp_string(p, &cc->sha, NULL, NULL); }
     if (strcmp(key, "length") == 0) { cc->seen |= 2u; return jp_uint(p, &cc->ch->length); }
     if (strcmp(key, "nonce") == 0) { cc->seen |= 4u; return jp_string(p, &cc->nonce, NULL, NULL); }
     if (strcmp(key, "offset") == 0) { cc->seen |= 8u; return jp_uint(p, &cc->ch->offset); }
     if (strcmp(key, "path") == 0) { cc->seen |= 16u; return jp_string(p, &cc->ch->path, NULL, NULL); }
     if (strcmp(key, "sha256") == 0) { cc->seen |= 32u; return jp_string(p, &cc->sha, NULL, NULL); }
-    return 0; /* a chunk entry has exactly these keys */
+    return 0; /* a chunk entry has exactly these keys (one of sha256 / ciphertextSha256) */
 }
 
 static int parse_clink_chunks(jp* p, clink_header_ctx* h)
@@ -958,7 +981,9 @@ static int parse_clink_chunks(jp* p, clink_header_ctx* h)
         memset(&cc, 0, sizeof cc);
         cc.ch = &c->chunks[c->count];
         c->count++;
-        ok = jp_object(p, 2, on_clink_chunk_key, &cc) && cc.seen == 63u
+        /* bytes, length, nonce, offset, path, and exactly one hash: the plaintext's "sha256" (legacy
+         * writers) or "ciphertextSha256" (current writers: reveals nothing about the bytecode). */
+        ok = jp_object(p, 2, on_clink_chunk_key, &cc) && (cc.seen == 63u || cc.seen == (31u | 64u))
              && b64url_exact(cc.nonce, cc.ch->nonce, SG_NONCE_BYTES)
              && hex_exact(cc.sha, cc.ch->sha256, sizeof cc.ch->sha256);
         free(cc.nonce);
@@ -1022,7 +1047,23 @@ static void clink_release(sg_clink* c)
     free(c);
 }
 
+static int clink_container_open(const uint8_t* data, size_t len, const uint8_t* trusted_signer, int inspect_only, sg_clink** out_container);
+
 int SG_CALL sg_clink_container_open(const uint8_t* data, size_t len, const uint8_t* trusted_signer, sg_clink** out_container)
+{
+    if (out_container == NULL) return SG_ERR_INVALID_ARGUMENT;
+    *out_container = NULL;
+    /* The bytecode of an opened container reaches luaL_loadbufferx: only a pinned signer vouches for it. */
+    if (trusted_signer == NULL) return SG_ERR_INVALID_ARGUMENT;
+    return clink_container_open(data, len, trusted_signer, 0, out_container);
+}
+
+int SG_CALL sg_clink_container_inspect(const uint8_t* data, size_t len, sg_clink** out_container)
+{
+    return clink_container_open(data, len, NULL, 1, out_container);
+}
+
+static int clink_container_open(const uint8_t* data, size_t len, const uint8_t* trusted_signer, int inspect_only, sg_clink** out_container)
 {
     sg_clink* c = NULL;
     clink_header_ctx h;
@@ -1067,7 +1108,7 @@ int SG_CALL sg_clink_container_open(const uint8_t* data, size_t len, const uint8
     if (strlen(c->fields[C_KEY_ID]) != SG_ASSET_KEY_ID_CHARS) goto done;
 
     if (!b64url_exact(c->fields[C_SIGNER], signer, sizeof signer) || !b64url_exact(h.signature, signature, sizeof signature)) goto done;
-    if (trusted_signer != NULL && sodium_memcmp(trusted_signer, signer, sizeof signer) != 0) { rc = SG_ERR_UNTRUSTED_SIGNER; goto done; }
+    if (!inspect_only && sodium_memcmp(trusted_signer, signer, sizeof signer) != 0) { rc = SG_ERR_UNTRUSTED_SIGNER; goto done; }
     {
         size_t signed_len = header_len - (h.sig_end - h.sig_start);
         uint8_t* message = (uint8_t*)malloc(signed_len);
@@ -1079,6 +1120,7 @@ int SG_CALL sg_clink_container_open(const uint8_t* data, size_t len, const uint8
         free(message);
         if (!verified) { rc = SG_ERR_BAD_SIGNATURE; goto done; }
     }
+    c->inspect_only = inspect_only;
 
     /* The chunk table: safe unique paths, sizes and contiguous ranges. */
     for (i = 0; i < c->count; i++) {
@@ -1091,6 +1133,15 @@ int SG_CALL sg_clink_container_open(const uint8_t* data, size_t len, const uint8
     }
     if (expected != (uint64_t)(len - PREAMBLE_BYTES - header_len)) goto done;
     c->body = data + PREAMBLE_BYTES + header_len;
+
+    /* A chunk with a signed ciphertext hash is checked now, before any key: with the key fixed by
+     * keyId, the ciphertext and its tag fix the bytecode, so the signer vouches for what will load. */
+    for (i = 0; i < c->count; i++) {
+        uint8_t digest[crypto_hash_sha256_BYTES];
+        if (!c->chunks[i].ciphertext_hash) continue;
+        crypto_hash_sha256(digest, c->body + c->chunks[i].offset, (unsigned long long)c->chunks[i].length);
+        if (sodium_memcmp(digest, c->chunks[i].sha256, sizeof digest) != 0) { rc = SG_ERR_PAYLOAD_HASH; goto done; }
+    }
 
     c->magic = SG_CLINK_MAGIC;
     *out_container = c;
@@ -1151,6 +1202,7 @@ int SG_CALL sg_clink_container_bind(sg_clink* c, const sg_asset_key* key)
 {
     uint8_t* copy;
     if (!clink_ok(c) || !key_ok(key) || c->key != NULL) return SG_ERR_INVALID_ARGUMENT;
+    if (c->inspect_only) return SG_ERR_UNTRUSTED_SIGNER; /* integrity only: never loads into a VM */
     if (key->domain != KEY_DOMAIN_CLIENT_CODE) return SG_ERR_KEY_MISMATCH; /* an asset key never opens client code */
     if (sodium_memcmp(key->id, c->fields[C_KEY_ID], SG_ASSET_KEY_ID_CHARS) != 0) return SG_ERR_KEY_MISMATCH;
     copy = (uint8_t*)sodium_malloc(SG_ASSET_KEY_BYTES);
@@ -1198,8 +1250,10 @@ int SG_CALL sg_clink_lua_load(const sg_clink* c, const char* path, void* lua_sta
         rc = SG_ERR_DECRYPT;
         goto done;
     }
-    crypto_hash_sha256(digest, plain, (unsigned long long)ch->bytes);
-    if (sodium_memcmp(digest, ch->sha256, sizeof digest) != 0) { rc = SG_ERR_PAYLOAD_HASH; goto done; }
+    if (!ch->ciphertext_hash) { /* legacy chunk: the signed hash is the plaintext's */
+        crypto_hash_sha256(digest, plain, (unsigned long long)ch->bytes);
+        if (sodium_memcmp(digest, ch->sha256, sizeof digest) != 0) { rc = SG_ERR_PAYLOAD_HASH; goto done; }
+    }
     /* Only bytecode for the VM that was checked ever reaches luaL_loadbufferx. */
     if (memcmp(plain, c->luac_header, SG_CLINK_LUAC_HEADER_BYTES) != 0) { rc = SG_ERR_TARGET_MISMATCH; goto done; }
 

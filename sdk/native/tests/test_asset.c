@@ -222,7 +222,7 @@ static int container_refuses_other_key(void)
     /* Another deployment's key unwraps (it was wrapped to this session) but is not this container's. */
     CHECK_RC(sg_asset_key_unwrap(client, SG_ASSET_WRAP_CLIENT, AVEC_OTHER_EPK, AVEC_OTHER_NONCE, AVEC_OTHER_WRAPPED,
                                  AVEC_OTHER_WRAPPED_len, (const uint8_t*)AVEC_CLIENT_AAD, strlen(AVEC_CLIENT_AAD), &other), SG_OK);
-    CHECK_RC(sg_asset_container_open(AVEC_CONTAINER, AVEC_CONTAINER_len, NULL, &c), SG_OK);
+    CHECK_RC(sg_asset_container_open(AVEC_CONTAINER, AVEC_CONTAINER_len, AVEC_SIGNER, &c), SG_OK);
     CHECK_RC(sg_asset_container_bind(c, other), SG_ERR_KEY_MISMATCH);
     sg_asset_container_free(c);
     sg_asset_key_free(other);
@@ -241,7 +241,7 @@ static int container_refuses_tampering(void)
 
     /* A ciphertext byte: the file's signed hash no longer matches. */
     b[AVEC_CONTAINER_len - 1] ^= 1;
-    CHECK_RC(sg_asset_container_open(b, AVEC_CONTAINER_len, NULL, &c), SG_ERR_PAYLOAD_HASH);
+    CHECK_RC(sg_asset_container_open(b, AVEC_CONTAINER_len, AVEC_SIGNER, &c), SG_ERR_PAYLOAD_HASH);
     b[AVEC_CONTAINER_len - 1] ^= 1;
 
     /* A header byte inside a string value: the signature no longer verifies. */
@@ -249,7 +249,7 @@ static int container_refuses_tampering(void)
         const char* at = strstr((const char*)b + 12, "\"release\":\"rel_01\"");
         CHECK(at != NULL);
         b[(size_t)(at - (const char*)b) + 12] = 'X'; /* rel_01 -> rXl_01 */
-        CHECK_RC(sg_asset_container_open(b, AVEC_CONTAINER_len, NULL, &c), SG_ERR_BAD_SIGNATURE);
+        CHECK_RC(sg_asset_container_open(b, AVEC_CONTAINER_len, AVEC_SIGNER, &c), SG_ERR_BAD_SIGNATURE);
         b[(size_t)(at - (const char*)b) + 12] = 'e';
     }
 
@@ -260,28 +260,70 @@ static int container_refuses_tampering(void)
 
     /* Preamble, version, reserved bytes, header length, truncation. */
     b[0] = 'X';
-    CHECK_RC(sg_asset_container_open(b, AVEC_CONTAINER_len, NULL, &c), SG_ERR_BAD_CONTAINER);
+    CHECK_RC(sg_asset_container_open(b, AVEC_CONTAINER_len, AVEC_SIGNER, &c), SG_ERR_BAD_CONTAINER);
     b[0] = 'S';
     b[4] = 2;
-    CHECK_RC(sg_asset_container_open(b, AVEC_CONTAINER_len, NULL, &c), SG_ERR_BAD_CONTAINER);
+    CHECK_RC(sg_asset_container_open(b, AVEC_CONTAINER_len, AVEC_SIGNER, &c), SG_ERR_BAD_CONTAINER);
     b[4] = 1;
     b[6] = 1;
-    CHECK_RC(sg_asset_container_open(b, AVEC_CONTAINER_len, NULL, &c), SG_ERR_BAD_CONTAINER);
+    CHECK_RC(sg_asset_container_open(b, AVEC_CONTAINER_len, AVEC_SIGNER, &c), SG_ERR_BAD_CONTAINER);
     b[6] = 0;
-    CHECK_RC(sg_asset_container_open(b, AVEC_CONTAINER_len - 1, NULL, &c), SG_ERR_BAD_CONTAINER);
-    CHECK_RC(sg_asset_container_open(b, 12 + header_len - 1, NULL, &c), SG_ERR_BAD_CONTAINER);
+    CHECK_RC(sg_asset_container_open(b, AVEC_CONTAINER_len - 1, AVEC_SIGNER, &c), SG_ERR_BAD_CONTAINER);
+    CHECK_RC(sg_asset_container_open(b, 12 + header_len - 1, AVEC_SIGNER, &c), SG_ERR_BAD_CONTAINER);
 
     /* Non-canonical JSON: the first key's opening brace followed by a space (length unchanged by
      * overwriting the brace's neighbour would break the JSON anyway): both refused before the signature. */
     {
         uint8_t saved = b[12 + 1];
         b[12 + 1] = ' ';
-        CHECK_RC(sg_asset_container_open(b, AVEC_CONTAINER_len, NULL, &c), SG_ERR_BAD_CONTAINER);
+        CHECK_RC(sg_asset_container_open(b, AVEC_CONTAINER_len, AVEC_SIGNER, &c), SG_ERR_BAD_CONTAINER);
         b[12 + 1] = saved;
     }
-    CHECK_RC(sg_asset_container_open(b, AVEC_CONTAINER_len, NULL, &c), SG_OK);
+    CHECK_RC(sg_asset_container_open(b, AVEC_CONTAINER_len, AVEC_SIGNER, &c), SG_OK);
     sg_asset_container_free(c);
     free(b);
+    return 0;
+}
+
+/* The open that leads to a decryption needs a pinned signer. A container sealed under the right key by
+ * someone else and signed with their own key verifies under the key its header names: only the pin
+ * refuses it. Inspection is integrity only, and its handle never binds a key. */
+static int container_requires_pinned_signer(void)
+{
+    sg_asset_container* c = (sg_asset_container*)(uintptr_t)1;
+    sg_asset_key* key = NULL;
+    const char* signer = NULL;
+    size_t count = 0;
+    CHECK_RC(sg_asset_container_open(AVEC_CONTAINER, AVEC_CONTAINER_len, NULL, &c), SG_ERR_INVALID_ARGUMENT);
+    CHECK(c == NULL);
+    CHECK_RC(sg_asset_container_open(AVEC_STRANGER_CONTAINER, AVEC_STRANGER_CONTAINER_len, NULL, &c), SG_ERR_INVALID_ARGUMENT);
+    CHECK_RC(sg_asset_container_open(AVEC_STRANGER_CONTAINER, AVEC_STRANGER_CONTAINER_len, AVEC_SIGNER, &c), SG_ERR_UNTRUSTED_SIGNER);
+    CHECK(c == NULL);
+
+    CHECK_RC(server_key(&key), SG_OK);
+    CHECK_RC(sg_asset_container_inspect(AVEC_STRANGER_CONTAINER, AVEC_STRANGER_CONTAINER_len, &c), SG_OK);
+    CHECK_RC(sg_asset_container_field(c, "signerPublicKey", &signer), SG_OK);
+    CHECK(signer != NULL && strlen(signer) == 43);
+    CHECK_RC(sg_asset_container_file_count(c, &count), SG_OK);
+    CHECK(count == AVEC_FILE_COUNT);
+    CHECK_RC(sg_asset_container_bind(c, key), SG_ERR_UNTRUSTED_SIGNER);
+    sg_asset_container_free(c);
+    c = NULL;
+
+    /* The genuine container, inspected, does not bind either: inspection is never a way to decrypt. */
+    CHECK_RC(sg_asset_container_inspect(AVEC_CONTAINER, AVEC_CONTAINER_len, &c), SG_OK);
+    CHECK_RC(sg_asset_container_bind(c, key), SG_ERR_UNTRUSTED_SIGNER);
+    sg_asset_container_free(c);
+    c = NULL;
+    /* Inspection still checks integrity. */
+    {
+        uint8_t* b = copy_of(AVEC_CONTAINER, AVEC_CONTAINER_len);
+        CHECK(b != NULL);
+        b[AVEC_CONTAINER_len - 1] ^= 1;
+        CHECK_RC(sg_asset_container_inspect(b, AVEC_CONTAINER_len, &c), SG_ERR_PAYLOAD_HASH);
+        free(b);
+    }
+    sg_asset_key_free(key);
     return 0;
 }
 
@@ -366,7 +408,7 @@ static int container_survives_mutations(void)
         old = b[pos];
         b[pos] = (uint8_t)(seed >> 3);
         if (i % 7 == 0) len = pos + 1;
-        if (sg_asset_container_open(b, len, NULL, &c) == SG_OK) {
+        if (sg_asset_container_open(b, len, AVEC_SIGNER, &c) == SG_OK) {
             opened++;
             sg_asset_container_free(c);
             CHECK(len == AVEC_CONTAINER_len && b[pos] == old); /* only a no-op change may still open */
@@ -386,8 +428,10 @@ static int handles_reject_misuse(void)
     uint8_t buf[4];
     size_t got = 0;
     const char* v = NULL;
-    CHECK_RC(sg_asset_container_open(NULL, 0, NULL, &c), SG_ERR_INVALID_ARGUMENT);
-    CHECK_RC(sg_asset_container_open(AVEC_CONTAINER, AVEC_CONTAINER_len, NULL, NULL), SG_ERR_INVALID_ARGUMENT);
+    CHECK_RC(sg_asset_container_open(NULL, 0, AVEC_SIGNER, &c), SG_ERR_INVALID_ARGUMENT);
+    CHECK_RC(sg_asset_container_open(AVEC_CONTAINER, AVEC_CONTAINER_len, AVEC_SIGNER, NULL), SG_ERR_INVALID_ARGUMENT);
+    CHECK_RC(sg_asset_container_inspect(NULL, 0, &c), SG_ERR_INVALID_ARGUMENT);
+    CHECK_RC(sg_asset_container_inspect(AVEC_CONTAINER, AVEC_CONTAINER_len, NULL), SG_ERR_INVALID_ARGUMENT);
     CHECK_RC(sg_asset_container_field(NULL, "package", &v), SG_ERR_INVALID_ARGUMENT);
     CHECK_RC(sg_asset_container_bind(NULL, NULL), SG_ERR_INVALID_ARGUMENT);
     CHECK_RC(sg_asset_reader_new(NULL, &r), SG_ERR_INVALID_ARGUMENT);
@@ -423,6 +467,7 @@ static const test_case CASES[] = {
     { "asset_container_good_path", container_good_path },
     { "asset_container_refuses_other_key", container_refuses_other_key },
     { "asset_container_refuses_tampering", container_refuses_tampering },
+    { "asset_container_requires_pinned_signer", container_requires_pinned_signer },
     { "asset_reader_refuses_changed_chunk", reader_refuses_changed_chunk },
     { "asset_escrowed_preload_vector", escrowed_preload_vector },
     { "asset_container_survives_mutations", container_survives_mutations },

@@ -26,7 +26,7 @@ console.log(`wrote ${out}`);
 // ------------------------------------------------------------------------------- the C header
 type Wrap = { epk: string; nonce: string; wrapped: string };
 const a = v.assetEscrow as {
-  contentKey: string; keyId: string; signerPublicKey: string; containerBase64: string;
+  contentKey: string; keyId: string; signerPublicKey: string; containerBase64: string; strangerContainerBase64: string;
   files: { path: string; bytes: number; sha256: string }[];
   server: { privateKey: string; publicKey: string; aad: string; wrapped: Wrap };
   client: { privateKey: string; publicKey: string; aad: string; wrapped: Wrap; otherWrapped: Wrap };
@@ -56,6 +56,7 @@ lines.push(
   "",
 );
 bytes("AVEC_CONTAINER", Buffer.from(a.containerBase64, "base64"));
+bytes("AVEC_STRANGER_CONTAINER", Buffer.from(a.strangerContainerBase64, "base64"));
 bytes("AVEC_CONTENT_KEY", Buffer.from(a.contentKey, "base64"));
 str("AVEC_KEY_ID", a.keyId);
 bytes("AVEC_SIGNER", b64u(a.signerPublicKey));

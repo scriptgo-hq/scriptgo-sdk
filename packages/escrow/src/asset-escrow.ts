@@ -206,6 +206,11 @@ export interface AssetContainerView {
  * pinned signer and ed25519 signature over the canonical header, file table (safe unique paths,
  * contiguous ranges, chunk counts that match the sizes), body length, then each file's ciphertext
  * SHA-256.
+ *
+ * Without `trustedSigner` this is INSPECTION: the signature is checked under the key the header
+ * names, which proves integrity, not origin. Never decrypt on that basis: `AssetContainerReader`
+ * requires a pinned signer (the native `sg_asset_container_open` too; `sg_asset_container_inspect`
+ * is the integrity-only door).
  */
 export function readAssetContainer(container: Uint8Array, opts: { trustedSigner?: string } = {}): AssetContainerView {
   const buf = Buffer.from(container.buffer, container.byteOffset, container.byteLength);
@@ -265,7 +270,12 @@ export class AssetContainerReader {
   readonly header: AssetEscrowHeader;
   private readonly bodyOffset: number;
 
-  constructor(container: Uint8Array, contentKey: Buffer, opts: { trustedSigner?: string } = {}) {
+  /** `trustedSigner` is required: the signer you trust, from a source the party that handed you the
+   * container does not control (docs/spec/assets.md, "The signer"). */
+  constructor(container: Uint8Array, contentKey: Buffer, opts: { trustedSigner: string }) {
+    if (typeof opts?.trustedSigner !== "string" || opts.trustedSigner.length === 0) {
+      throw new AssetEscrowError("untrusted_signer", "a pinned signer is required to decrypt a container (the key its header names proves integrity, not origin)");
+    }
     const view = readAssetContainer(container, opts);
     this.buf = Buffer.from(container.buffer, container.byteOffset, container.byteLength);
     this.header = view.header;

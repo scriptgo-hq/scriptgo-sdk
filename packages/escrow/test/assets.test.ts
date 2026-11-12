@@ -121,13 +121,14 @@ describe("asset escrow containers", () => {
   for (let i = 0; i < big.length; i++) big[i] = (i * 31) & 0xff;
   const files = new Map([["archive/pc/mod/a.archive", big], ["empty.bin", Buffer.alloc(0)]]);
   const seal = () => sealAssetContainer({ files, package: identity.package, version: identity.version, release: "rel_01", deployment: "dep_7", contentKey: key, signerSeed: MATERIAL.assetSignerSeed, chunkBytes: 4096 });
+  const pinned = { trustedSigner: ed25519FromSeed(MATERIAL.assetSignerSeed).publicKey.toString("base64url") };
 
   it("derives one key per deployment", () => {
     expect(deriveAssetContentKey(MATERIAL.releaseSecret, "dep_8").equals(key)).toBe(false);
   });
 
   it("round-trips random-access reads across chunk boundaries", () => {
-    const r = new AssetContainerReader(seal(), key);
+    const r = new AssetContainerReader(seal(), key, pinned);
     expect(r.readAll("archive/pc/mod/a.archive").equals(big)).toBe(true);
     for (const [o, l] of [[0, 1], [4095, 2], [4096, 4096], [8000, 5000], [9999, 1], [10_000, 5]] as const) {
       expect(r.read("archive/pc/mod/a.archive", o, l).equals(big.subarray(o, Math.min(big.length, o + l)))).toBe(true);
@@ -143,7 +144,7 @@ describe("asset escrow containers", () => {
 
   it("refuses a wrong key, a tampered chunk, a swapped chunk, a truncated body and an untrusted signer", () => {
     const c = seal();
-    expect(() => new AssetContainerReader(c, deriveAssetContentKey(MATERIAL.releaseSecret, "dep_8"))).toThrow(/key/);
+    expect(() => new AssetContainerReader(c, deriveAssetContentKey(MATERIAL.releaseSecret, "dep_8"), pinned)).toThrow(/key/);
     const view = readAssetContainer(c);
     const f = view.header.files.find((x) => x.path === "archive/pc/mod/a.archive")!;
     const flipped = Buffer.from(c);
@@ -151,6 +152,14 @@ describe("asset escrow containers", () => {
     expect(() => readAssetContainer(flipped)).toThrow(/hash mismatch/);
     expect(() => readAssetContainer(c.subarray(0, c.length - 1))).toThrow(/body length/);
     expect(() => readAssetContainer(c, { trustedSigner: "x" })).toThrow(/pinned/);
+    // Decrypting needs a pinned signer: the key the header names proves integrity, not origin.
+    expect(() => new AssetContainerReader(c, key, {} as { trustedSigner: string })).toThrow(/pinned signer is required/);
+    expect(() => new AssetContainerReader(c, key, { trustedSigner: "" })).toThrow(/pinned signer is required/);
+    // A container re-signed by another key verifies under its own header key, and is refused once pinned.
+    const strangerSeed = Buffer.alloc(32, 0x42);
+    const stranger = sealAssetContainer({ files, package: identity.package, version: identity.version, release: "rel_01", deployment: "dep_7", contentKey: key, signerSeed: strangerSeed, chunkBytes: 4096 });
+    expect(readAssetContainer(stranger).header.signerPublicKey).not.toBe(pinned.trustedSigner);
+    expect(() => new AssetContainerReader(stranger, key, pinned)).toThrow(/pinned/);
     // A header edited after signing.
     const headerText = c.subarray(12, 12 + c.readUInt32LE(8)).toString("utf8").replace('"rel_01"', '"rel_02"');
     const edited = Buffer.concat([c.subarray(0, 12), Buffer.from(headerText), c.subarray(12 + c.readUInt32LE(8))]);
@@ -175,7 +184,7 @@ describe("asset escrow containers", () => {
     const pre = Buffer.from(c.subarray(0, 12));
     pre.writeUInt32LE(headerBytes.length, 8);
     const resigned = Buffer.concat([pre, headerBytes, body]);
-    const r = new AssetContainerReader(resigned, key);
+    const r = new AssetContainerReader(resigned, key, pinned);
     expect(() => r.read(f.path, 0, 10)).toThrow(/does not authenticate/);
     expect(() => r.read(f.path, 4096, 10)).toThrow(/does not authenticate/);
   });
@@ -252,12 +261,12 @@ describe("OPEN//77 escrowed preloads", () => {
     const session = generateX25519KeyPair();
     const aad = assetClientAad(identity.package, identity.version, header.keyId);
     const onClient = unwrapAssetKeyOnClient(wrapAssetKeyForClient(onServer, session.publicKey, aad), session.privateKey, session.publicKey, aad);
-    const r = new AssetContainerReader(found.container, onClient);
+    const r = new AssetContainerReader(found.container, onClient, { trustedSigner: header.signerPublicKey });
     const original = unzipSync(releaseArchive().preload);
     expect(r.paths()).toEqual(Object.keys(original).sort());
     for (const p of r.paths()) expect(r.readAll(p).equals(Buffer.from(original[p]!))).toBe(true);
     // Another deployment's key does not open it, and the wrap is bound to its own aad.
-    expect(() => new AssetContainerReader(found.container, deriveAssetContentKey(releaseSecret, "dep_8"))).toThrow(/key/);
+    expect(() => new AssetContainerReader(found.container, deriveAssetContentKey(releaseSecret, "dep_8"), { trustedSigner: header.signerPublicKey })).toThrow(/key/);
     expect(() => unwrapContentKey(toServer, server.privateKey, server.publicKey, assetServerAad(identity.package, identity.version, "dep_8"))).toThrow();
   });
 

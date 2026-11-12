@@ -103,7 +103,8 @@ extern "C" {
 #define SG_ERR_EXISTS (-20)              /* the file already exists and was not replaced */
 #define SG_ERR_BAD_CONTAINER (-21)       /* an asset container's preamble, header or file table is malformed */
 #define SG_ERR_KEY_MISMATCH (-22)        /* the asset content key is not this container's key (keyId) */
-#define SG_ERR_UNTRUSTED_SIGNER (-23)    /* the container is signed by another key than the pinned one */
+#define SG_ERR_UNTRUSTED_SIGNER (-23)    /* the container is signed by another key than the pinned one, or was
+                                          * opened for inspection (no pinned signer) and cannot be bound */
 #define SG_ERR_TARGET_MISMATCH (-24)     /* client code compiled for another Lua VM than the host's (LUAC header) */
 
 /* ------------------------------------------------------------------------------------------ general */
@@ -281,10 +282,19 @@ SG_API void SG_CALL sg_bundle_free(sg_bundle* bundle);
  *                    sg_asset_key_unwrap(session identity, SG_ASSET_WRAP_CLIENT, ...)  the server's wrap
  *                    sg_asset_container_open / _bind / sg_asset_reader_read            in memory
  *
+ * The signer. A container's header names the key that signed it, so a signature that verifies under
+ * that key proves the bytes were not changed after signing, not who signed them. A reader that
+ * decrypts must pin the signer it trusts, from a source the party that hands it the container does
+ * not control (for a game client: built into the client, or fetched from SCRIPT//GO over TLS; never
+ * the game server's word). sg_asset_container_open refuses a NULL signer; sg_asset_container_inspect
+ * is the keyless, integrity-only door for a host that never decrypts (a server that relays
+ * containers), and the handle it returns refuses to bind a key.
+ *
  * Honest ceiling, as everywhere in this library: a client that draws an asset holds it in clear in
  * its memory and on its GPU, and whoever controls that machine can copy it there. This keeps the
- * files encrypted at rest and in transit, with a key per deployment handed to one session at a
- * time and refused after revocation. It does not make extraction from a running client impossible. */
+ * files encrypted at rest and in transit, with one key per deployment, wrapped afresh for each
+ * player session and refused after revocation. It does not make extraction from a running client
+ * impossible. */
 
 #define SG_ASSET_KEY_BYTES 32u
 #define SG_ASSET_KEY_ID_CHARS 22u                    /* base64url of 16 bytes, without the NUL */
@@ -340,13 +350,23 @@ typedef struct sg_asset_container sg_asset_container;
 
 /* Runs every check of docs/spec/assets.md "Reading" that needs no key, in that order: preamble,
  * header length, header JSON in canonical form, format / cipher / kdf, chunk size, the pinned signer
- * (`trusted_signer`, 32 bytes, or NULL to accept the key the header names), the ed25519 signature,
+ * (`trusted_signer`, 32 bytes, REQUIRED: the header's key must equal it), the ed25519 signature,
  * every file's path, chunk count, range and nonce prefix, the body length, and each file's
- * ciphertext SHA-256. Errors: SG_ERR_BAD_CONTAINER, SG_ERR_UNTRUSTED_SIGNER, SG_ERR_BAD_SIGNATURE,
- * SG_ERR_UNSAFE_PATH, SG_ERR_PAYLOAD_HASH (a file's ciphertext does not match the signed hash). */
+ * ciphertext SHA-256. Errors: SG_ERR_INVALID_ARGUMENT (a NULL `trusted_signer` among others: since
+ * library 0.2.0 there is no "accept the key the header names"), SG_ERR_BAD_CONTAINER,
+ * SG_ERR_UNTRUSTED_SIGNER, SG_ERR_BAD_SIGNATURE, SG_ERR_UNSAFE_PATH, SG_ERR_PAYLOAD_HASH (a file's
+ * ciphertext does not match the signed hash). */
 SG_API int SG_CALL sg_asset_container_open(const uint8_t* data, size_t len,
                                            const uint8_t* trusted_signer,
                                            sg_asset_container** out_container);
+
+/* The same checks with the signature verified under the key the header names: integrity only, not
+ * origin. For a host that reads a container's fields and file table and never decrypts it (a server
+ * that relays containers to clients). The handle answers every field and file call, and
+ * sg_asset_container_bind refuses it with SG_ERR_UNTRUSTED_SIGNER, so no reader is ever made from
+ * it. Compare the "signerPublicKey" field with the key you trust before relying on anything else. */
+SG_API int SG_CALL sg_asset_container_inspect(const uint8_t* data, size_t len,
+                                              sg_asset_container** out_container);
 
 /* A header field as a NUL-terminated string owned by the container: "package", "version",
  * "release", "deployment", "keyId", "signerPublicKey" or "fingerprint" (SG_ERR_NOT_FOUND when the
@@ -360,7 +380,8 @@ SG_API int SG_CALL sg_asset_container_file_at(const sg_asset_container* containe
                                               const char** out_path, uint64_t* out_size);
 
 /* Gives the container its content key (copied into the container's guarded memory). SG_ERR_KEY_MISMATCH
- * when the key's id is not the header's keyId. Call once, before any reader is made. */
+ * when the key's id is not the header's keyId; SG_ERR_UNTRUSTED_SIGNER for a handle from
+ * sg_asset_container_inspect. Call once, before any reader is made. */
 SG_API int SG_CALL sg_asset_container_bind(sg_asset_container* container, const sg_asset_key* key);
 
 /* Wipes the key and frees. Free every reader first. NULL is accepted. */
@@ -402,10 +423,14 @@ SG_API void SG_CALL sg_asset_reader_free(sg_asset_reader* reader);
  * into guarded memory, checked, compiled into the given lua_State with mode "b" and wiped. Compare
  * sg_asset_reader_read, the documented copy door asset escrow needs and client code does not.
  *
+ * The signer is pinned as for asset escrow (above): sg_clink_container_open refuses a NULL signer,
+ * because what it vouches for is bytecode that reaches luaL_loadbufferx, and Lua does not verify
+ * bytecode. sg_clink_container_inspect is the integrity-only door for a host that never loads it.
+ *
  * Honest ceiling: the VM runs the bytecode, so a player who reads their own game memory can copy the
  * compiled functions and decompile them into readable, de-identified Lua. This keeps client code
- * encrypted at rest and in transit, never as source, bound to one deployment and one session, and
- * refused to new sessions after revocation. It is not unbreakable. */
+ * encrypted at rest and in transit, never as source, under one key per deployment wrapped afresh for
+ * each player session, and refused to new sessions after revocation. It is not unbreakable. */
 
 #define SG_CLINK_LUAC_HEADER_BYTES 31u /* Lua 5.4 dump header: signature, version, format, LUAC_DATA, sizes, LUAC_INT, LUAC_NUM */
 #define SG_CLINK_MAX_CHUNKS 4096u
@@ -416,10 +441,18 @@ typedef struct sg_clink sg_clink;
 /* Runs every check of client-escrow.md "Reading" that needs no key: preamble ("SGCE", version 1),
  * header length, canonical header JSON, format / cipher / kdf, strip ("full" or "names"),
  * permGeneration (0: opcode permutation is not supported, any other generation is refused), the
- * target's shape, the pinned signer (`trusted_signer`, 32 bytes, or NULL), the ed25519 signature,
- * every chunk's path, size, nonce and contiguous range, and the body length. Borrows `data`: keep it
- * alive and unchanged until sg_clink_container_free. */
+ * target's shape, the pinned signer (`trusted_signer`, 32 bytes, REQUIRED; NULL is
+ * SG_ERR_INVALID_ARGUMENT since library 0.2.0), the ed25519 signature, every chunk's path, size,
+ * nonce and contiguous range, the body length, and each chunk's ciphertext SHA-256 when the header
+ * carries one ("ciphertextSha256"; a legacy chunk's plaintext "sha256" is checked after decryption
+ * instead). SG_ERR_PAYLOAD_HASH when a ciphertext does not match. Borrows `data`: keep it alive and
+ * unchanged until sg_clink_container_free. */
 SG_API int SG_CALL sg_clink_container_open(const uint8_t* data, size_t len, const uint8_t* trusted_signer, sg_clink** out_container);
+
+/* The same checks with the signature verified under the key the header names: integrity only. For a
+ * host that reads the fields and the chunk table and never loads the bytecode (a server that relays
+ * containers). sg_clink_container_bind refuses the handle with SG_ERR_UNTRUSTED_SIGNER. */
+SG_API int SG_CALL sg_clink_container_inspect(const uint8_t* data, size_t len, sg_clink** out_container);
 
 /* SG_OK when the container's bytecode target is the host VM's: `luac_header` is the first
  * SG_CLINK_LUAC_HEADER_BYTES bytes of a string.dump / lua_dump made by the host's own Lua. Otherwise
@@ -437,11 +470,12 @@ SG_API int SG_CALL sg_clink_chunk_count(const sg_clink* container, size_t* out_c
 SG_API int SG_CALL sg_clink_chunk_at(const sg_clink* container, size_t index, const char** out_path, size_t* out_size);
 
 /* Gives the container its client-code key (copied into guarded memory). SG_ERR_KEY_MISMATCH when the
- * key is not this container's (another deployment, or an asset key). Call once. */
+ * key is not this container's (another deployment, or an asset key); SG_ERR_UNTRUSTED_SIGNER for a
+ * handle from sg_clink_container_inspect. Call once. */
 SG_API int SG_CALL sg_clink_container_bind(sg_clink* container, const sg_asset_key* key);
 
-/* Decrypts the bytecode of `path` into guarded memory, verifies its tag, its SHA-256 and that it
- * starts with the checked LUAC header, then compiles it into `lua_state` through the host's own
+/* Decrypts the bytecode of `path` into guarded memory, verifies its tag (and, for a legacy chunk, the
+ * plaintext SHA-256 the header signs) and that it starts with the checked LUAC header, then compiles it into `lua_state` through the host's own
  * luaL_loadbufferx with mode "b" (bytecode only) and the chunk name "=" + path, and wipes it.
  * On SG_OK the main function is on top of the Lua stack. On SG_ERR_LUA_LOAD Lua's error message is on
  * top and `out_lua_status` (optional) holds its status. On any other error nothing was pushed:

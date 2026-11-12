@@ -46,6 +46,11 @@ export function clientVectors(): Record<string, unknown> {
   const keyId = clientKeyId(contentKey);
   const fingerprint = "fp_vector_marker";
   const container = sealClientContainer({ chunks, package: pkg, version, release: "rel_01", deployment, contentKey, signerSeed: MATERIAL.assetSignerSeed, strip: "full", fingerprint });
+  // The same container as a pre-0.1.12 writer sealed it (each chunk's plaintext sha256): readers still accept it.
+  // The same scripts sealed under the same key and signed by a key nobody pins (whoever holds the content
+  // key, a game server among them, can do this): a reader that pins its signer refuses it.
+  const stranger = sealClientContainer({ chunks, package: pkg, version, release: "rel_01", deployment, contentKey, signerSeed: MATERIAL.strangerSignerSeed, strip: "full", fingerprint });
+  const legacy = sealClientContainer({ chunks, package: pkg, version, release: "rel_01", deployment, contentKey, signerSeed: MATERIAL.assetSignerSeed, strip: "full", fingerprint, legacyPlaintextSha256: true });
 
   // A container whose declared target is another VM's (a 5.3-looking header): the target check refuses it.
   const otherTarget = { lua: "5.3.6", luacHeader: LUA_548_TARGET.luacHeader.replace(/^1b4c756154/, "1b4c756153") };
@@ -79,6 +84,8 @@ export function clientVectors(): Record<string, unknown> {
     signerPublicKey: ed25519FromSeed(MATERIAL.assetSignerSeed).publicKey.toString("base64url"),
     containerBase64: container.toString("base64"),
     containerSha256: sha(container),
+    legacyContainerBase64: legacy.toString("base64"),
+    strangerContainerBase64: stranger.toString("base64"),
     foreignTargetBase64: foreignTarget.toString("base64"),
     lyingBase64: lying.toString("base64"),
     permutedBase64: permuted.toString("base64"),

@@ -132,6 +132,10 @@ internal static partial class EscrowNative
     [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     internal static unsafe partial int sg_asset_container_open(byte* data, nuint length, byte* trustedSigner, out IntPtr container);
 
+    /// <summary>libscriptgo 0.2.0 and later.</summary>
+    [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static unsafe partial int sg_asset_container_inspect(byte* data, nuint length, out IntPtr container);
+
     [LibraryImport(Library, StringMarshalling = StringMarshalling.Utf8), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     internal static partial int sg_asset_container_field(AssetContainerHandle container, string name, out IntPtr value);
 
@@ -160,6 +164,10 @@ internal static partial class EscrowNative
 
     [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     internal static unsafe partial int sg_clink_container_open(byte* data, nuint length, byte* trustedSigner, out IntPtr container);
+
+    /// <summary>libscriptgo 0.2.0 and later.</summary>
+    [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static unsafe partial int sg_clink_container_inspect(byte* data, nuint length, out IntPtr container);
 
     [LibraryImport(Library), UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     internal static unsafe partial int sg_clink_target_check(ClientCodeContainerHandle container, byte* luacHeader, nuint length);

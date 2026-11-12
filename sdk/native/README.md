@@ -160,18 +160,32 @@ sg_bundle_open      sg_bundle_entry_count   sg_bundle_entry_at      sg_bundle_en
 sg_bundle_read      sg_bundle_copy          sg_bundle_set_marker    sg_bundle_memory_locked
 sg_bundle_lua_load  sg_bundle_free
 sg_asset_key_unwrap   sg_asset_key_wrap     sg_asset_key_id         sg_asset_key_free
-sg_asset_container_open  sg_asset_container_field  sg_asset_container_file_count
-sg_asset_container_file_at  sg_asset_container_bind  sg_asset_container_free
+sg_asset_container_open  sg_asset_container_inspect  sg_asset_container_field
+sg_asset_container_file_count  sg_asset_container_file_at  sg_asset_container_bind
+sg_asset_container_free
 sg_asset_reader_new   sg_asset_reader_read  sg_asset_reader_free
+sg_clink_container_open  sg_clink_container_inspect  sg_clink_target_check
+sg_clink_container_field  sg_clink_chunk_count  sg_clink_chunk_at  sg_clink_container_bind
+sg_clink_lua_load  sg_clink_container_free
 ```
 
 The `sg_asset_*` calls (asset escrow, `docs/spec/assets.md`) were added without changing
 `SG_ABI_VERSION`: nothing existing changed shape. A host that needs them and may meet an older
 library looks the symbol up (the .NET kit answers `native_library_unavailable` instead of
 crashing). They serve both ends of the asset key protocol: a licensed server unwraps the API's key
-and re-wraps it per player session; a game client unwraps its session wrap, opens a container
-(header, signer, signature, file table and ciphertext hashes checked before any key is used),
-binds the key and reads ranges. `sg_asset_reader_read` is the second call through which plaintext
+and re-wraps that one per-deployment key for each player session; a game client unwraps its session
+wrap, opens a container against the signer it pinned (header, signer, signature, file table and
+ciphertext hashes checked before any key is used), binds the key and reads ranges.
+
+**Library 0.2.0 (SDK 0.1.12) changes two things a host must know.** `sg_asset_container_open` and
+`sg_clink_container_open` require the trusted signer: NULL is `SG_ERR_INVALID_ARGUMENT` (0.1.0
+accepted NULL and trusted the key the header names, which a game server holding the content key can
+forge). A server or a tool that only reads a container's fields uses the new
+`sg_asset_container_inspect` / `sg_clink_container_inspect`, whose handles never bind a key
+(`SG_ERR_UNTRUSTED_SIGNER`). And client-code chunks now carry `ciphertextSha256` in place of the
+plaintext bytecode's `sha256` (`docs/spec/client-escrow.md`): 0.2.0 reads both, 0.1.0 refuses the
+new form, so game clients take 0.2.0 before the platform seals the new form. `SG_ABI_VERSION` stays
+1: the new functions are additive. `sg_asset_reader_read` is the second call through which plaintext
 leaves native memory: by design, into the buffer the engine's loader reads.
 
 Every function returns `SG_OK` or a negative `SG_ERR_*` code with a fixed number and meaning;

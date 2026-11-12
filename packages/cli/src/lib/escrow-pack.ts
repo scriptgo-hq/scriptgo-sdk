@@ -14,11 +14,12 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { unzipSync } from "fflate";
 import { buildEscrowRelease, openEscrowRelease, releaseSignerFromEnv, type BuiltEscrow, type ReleaseSigner } from "@scriptgo/escrow";
 import { clientFacingFiles, prepareEscrowFiles, type ParsedManifest } from "@scriptgo/manifest";
 import { sdkRoot } from "./sdk.ts";
+import { configDir, isInside, writeSecretFile } from "./secret-files.ts";
 
 // Kept as an export of this module for its callers; the rule itself lives in @scriptgo/manifest.
 export { clientFacingFiles };
@@ -26,6 +27,10 @@ export { clientFacingFiles };
 export interface EscrowPackResult {
   bundlePath: string;
   keyPath: string;
+  /** How the key file is protected on this OS, in one honest line. */
+  keyProtection: string;
+  /** Set when the key file could not be restricted to the current user. */
+  keyWarning: string | null;
   clearFiles: string[];
   encryptedFiles: string[];
   bytes: number;
@@ -90,9 +95,18 @@ export function buildEscrow(opts: {
   return built;
 }
 
+/** Where `pack --escrow` writes a content key by default: the CLI config folder, never the output folder. */
+export function defaultEscrowKeyPath(name: string, version: string, env: NodeJS.ProcessEnv = process.env): string {
+  return join(configDir(env), "escrow-keys", `${name}-${version}.escrow-key.json`);
+}
+
 /**
  * Turns the plain archive into an escrow bundle + a secret key file on disk (`scriptgo pack
  * --escrow`). Publish the pair later with `scriptgo publish --bundle <zip> --escrow-key <json>`.
+ *
+ * The key file goes to the CLI config folder (`defaultEscrowKeyPath`) unless `keyPath` says
+ * otherwise, and never into the output folder, where it would travel with the bundle. It is a key in
+ * clear on disk: 0600 on POSIX, an ACL for the current user on Windows (writeSecretFile).
  */
 export function packEscrow(opts: {
   archive: Uint8Array;
@@ -101,20 +115,28 @@ export function packEscrow(opts: {
   identifier: string;
   outDir: string;
   allowlist: string[];
+  keyPath?: string;
 }): EscrowPackResult {
   const m = opts.manifest;
+  const keyPath = resolve(opts.keyPath ?? defaultEscrowKeyPath(m.name, m.version));
+  if (isInside(keyPath, opts.outDir)) {
+    throw new Error(`escrow: the content key file ${keyPath} would be inside the output folder ${resolve(opts.outDir)}, next to the bundle; write it elsewhere (--escrow-key-out)`);
+  }
   const built = buildEscrow(opts);
 
   mkdirSync(opts.outDir, { recursive: true });
   const bundlePath = join(opts.outDir, `${m.name}-${m.version}.escrow.zip`);
-  const keyPath = join(opts.outDir, `${m.name}-${m.version}.escrow-key.json`);
   writeFileSync(bundlePath, built.bundle);
-  writeFileSync(keyPath, JSON.stringify({
+  const written = writeSecretFile(keyPath, JSON.stringify({
     note: "SECRET. Upload to the SCRIPT//GO master at publish; never commit or ship this with the bundle.",
     package: opts.identifier, version: m.version, aad: built.manifest.aad,
     contentKeyBase64: built.contentKey.toString("base64"),
     signerPublicKey: built.manifest.signerPublicKey,
-  }, null, 2) + "\n", { mode: 0o600 });
+  }, null, 2) + "\n");
+  built.contentKey.fill(0);
 
-  return { bundlePath, keyPath, clearFiles: built.clearFiles, encryptedFiles: built.encryptedFiles, bytes: built.bundle.length };
+  return {
+    bundlePath, keyPath: written.path, keyProtection: written.protection, keyWarning: written.warning,
+    clearFiles: built.clearFiles, encryptedFiles: built.encryptedFiles, bytes: built.bundle.length,
+  };
 }

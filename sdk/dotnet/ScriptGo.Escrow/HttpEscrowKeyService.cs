@@ -102,14 +102,24 @@ public sealed class HttpEscrowKeyService : IEscrowKeyService
         _options = options;
     }
 
+    /// <summary>True when <paramref name="master"/> may receive a deployment token: an absolute <c>https</c>
+    /// URL, or <c>http</c> to a loopback address (a master on the same machine, in tests and local runs).
+    /// Over plain http elsewhere the token and the key answer cross the network in clear.</summary>
+    public static bool IsAllowedMaster(Uri? master) =>
+        master is { IsAbsoluteUri: true } &&
+        (master.Scheme == Uri.UriSchemeHttps || (master.Scheme == Uri.UriSchemeHttp && master.IsLoopback));
+
     /// <summary>
     /// An <see cref="HttpClient"/> suited to the key endpoint: base address <paramref name="master"/>,
     /// no automatic redirects (the body carries a deployment token, and a redirect is how a token
     /// gets replayed to a host nobody configured), JSON accepted, a bounded timeout.
+    /// <paramref name="master"/> must be https, or http to a loopback address (<see cref="IsAllowedMaster"/>).
     /// </summary>
     public static HttpClient CreateClient(Uri master, string? userAgent = null, TimeSpan? timeout = null)
     {
         ArgumentNullException.ThrowIfNull(master);
+        if (!IsAllowedMaster(master))
+            throw new ArgumentException("The key service must be reached over https (plain http only to a loopback address): the request carries the deployment token.", nameof(master));
         var client = new HttpClient(new SocketsHttpHandler
         {
             AllowAutoRedirect = false,
@@ -161,6 +171,9 @@ public sealed class HttpEscrowKeyService : IEscrowKeyService
         try { options = _options() ?? throw new InvalidOperationException("no options"); }
         catch (Exception e) when (e is not OutOfMemoryException) { return EscrowKeyResult.Unreachable("token_unavailable"); }
 
+        // A caller-supplied client is held to the same rule as CreateClient: no token over plain http
+        // to another machine. Nothing is sent.
+        if (!IsAllowedMaster(_http.BaseAddress)) return EscrowKeyResult.Unreachable("insecure_master");
         var request = new KeyRequest(options.DeploymentToken, options.Package, version, options.Environment, options.AdapterVersion, identity.PublicKeyBase64Url, kind);
         try
         {

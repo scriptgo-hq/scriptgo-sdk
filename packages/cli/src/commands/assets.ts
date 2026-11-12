@@ -1,8 +1,11 @@
 // scriptgo assets fingerprint <release.zip|folder> [--trusted-signer <key>]
 // scriptgo assets seal <folder|preload.zip> --package <creator//name> --version <v> --release <id>
 //                      --deployment <id> --out <file.sgae> [--chunk-bytes <n>]
-// scriptgo assets open <file.sgae|preload.zip> --key <file.sgae.key.json> [--out <folder>] [--trusted-signer <key>]
+// scriptgo assets open <file.sgae|preload.zip> --key <file.sgae.key.json> --trusted-signer <key> [--out <folder>]
 //
+// `open` decrypts, so it needs the signer you pinned (--trusted-signer): the key a container's
+// header names proves its integrity, not who sealed it, and whoever holds the content key can seal
+// and sign a container of their own.
 // `open` also takes an escrowed OPEN//77 preload (the .zip of a deployment's copy, holding one
 // `archive/pc/mod/<stem>.sgae`): it reads the container inside it.
 //
@@ -31,13 +34,14 @@ import {
 } from "@scriptgo/escrow";
 import { parseArgs } from "../lib/args.ts";
 import { FINGERPRINT_FILE } from "../lib/assets.ts";
+import { writeSecretFile } from "../lib/secret-files.ts";
 
 export const summary = "Assets: read a copy's per-buyer fingerprint; seal or open an asset-escrow container (hook test tooling)";
 
 const USAGE = [
   "scriptgo assets fingerprint <release.zip|folder> [--trusted-signer <key>]",
   "scriptgo assets seal <folder|preload.zip> --package <creator//name> --version <v> --release <id> --deployment <id> --out <file.sgae> [--chunk-bytes <n>]",
-  "scriptgo assets open <file.sgae|preload.zip> --key <file.sgae.key.json> [--out <folder>] [--trusted-signer <key>]",
+  "scriptgo assets open <file.sgae|preload.zip> --key <file.sgae.key.json> --trusted-signer <key> [--out <folder>]",
 ].join("\n");
 
 /** Every file under a folder, relative with `/` (dot folders included: they are part of a copy). */
@@ -114,7 +118,7 @@ function seal(source: string, a: ReturnType<typeof parseArgs>): number {
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, container);
   const keyPath = `${out}.key.json`;
-  writeFileSync(keyPath, JSON.stringify({ note: "SECRET test key for scriptgo assets open; never ship it", keyId: assetKeyId(contentKey), contentKey: contentKey.toString("base64") }, null, 2) + "\n", { mode: 0o600 });
+  writeSecretFile(keyPath, JSON.stringify({ note: "SECRET test key for scriptgo assets open; never ship it", keyId: assetKeyId(contentKey), contentKey: contentKey.toString("base64") }, null, 2) + "\n");
   contentKey.fill(0);
   const header = readAssetContainer(container).header;
   console.log(`sealed ${files.size} files -> ${out} (${container.length} bytes, key ${header.keyId}, signer ${header.signerPublicKey})`);
@@ -123,11 +127,13 @@ function seal(source: string, a: ReturnType<typeof parseArgs>): number {
 }
 
 function open(file: string, a: ReturnType<typeof parseArgs>): number {
-  if (!a.flags.key) {
-    console.error(`--key is required\n${USAGE}`);
-    return 2;
+  for (const k of ["key", "trusted-signer"]) {
+    if (!a.flags[k]) {
+      console.error(`--${k} is required${k === "trusted-signer" ? " (the signer you pinned: a container's own header proves integrity, not origin)" : ""}\n${USAGE}`);
+      return 2;
+    }
   }
-  const key = Buffer.from((JSON.parse(readFileSync(resolve(a.flags.key), "utf8")) as { contentKey: string }).contentKey, "base64");
+  const key = Buffer.from((JSON.parse(readFileSync(resolve(a.flags.key!), "utf8")) as { contentKey: string }).contentKey, "base64");
   const bytes = readFileSync(file);
   // An escrowed OPEN//77 preload is a zip ("PK") holding one container.
   const container = bytes.subarray(0, 2).toString("latin1") === "PK" ? escrowedPreloadContainer(bytes)?.container : bytes;
@@ -135,7 +141,7 @@ function open(file: string, a: ReturnType<typeof parseArgs>): number {
     console.error(`${file}: a zip that is not an escrowed preload (exactly one .sgae entry)`);
     return 1;
   }
-  const reader = new AssetContainerReader(container, key, a.flags["trusted-signer"] ? { trustedSigner: a.flags["trusted-signer"] } : {});
+  const reader = new AssetContainerReader(container, key, { trustedSigner: a.flags["trusted-signer"]! });
   key.fill(0);
   try {
     const h = reader.header;

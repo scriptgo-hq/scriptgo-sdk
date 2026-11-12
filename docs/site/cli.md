@@ -232,7 +232,13 @@ scriptgo publish --escrow --escrow-ignore config.lua --owns-code
 
 `scriptgo pack --escrow` writes the bundle and a separate key file instead of uploading. Publish
 that pair later with `scriptgo publish --bundle <file.escrow.zip> --escrow-key <file.json> --package <slug> --owns-code`.
-The key file is a secret: never commit it and never ship it with the bundle.
+The key file is a secret, in clear on disk: it goes to `~/.scriptgo/escrow-keys/` (or
+`SCRIPTGO_CONFIG_DIR`), never next to the bundle; `--escrow-key-out <file>` picks another place
+outside the output folder. It is created 0600 on Linux and macOS and with an ACL for your account
+only on Windows; the command says so, and warns loudly when it cannot. Delete it once published.
+`pack` and `publish` refuse a resource or a bundle that would carry a key file (an
+`*.escrow-key.json`, `release-signing.key`, `credentials.json`, or a file holding a content key, a
+server identity or a PEM private key).
 
 Protection is deterrence and traceability, not DRM. A licensed operator can still read what their
 own host decrypts. See [Protect your work](/docs/protect-your-work).
@@ -259,8 +265,9 @@ scriptgo publish --client-escrow --client-lines ./client-lines.json --owns-code
 `--client-escrow` ships the release's `client_scripts` to players as **stripped Lua bytecode**, never
 as source. SCRIPT//GO compiles them from your uploaded source with its own Lua 5.4.8 compiler and seals
 them, for each licensed deployment, in `clientcode.sgce`; each script's path in the copy holds a stub.
-The licensed OPEN//77 server hands the key to each player session the master admits, and the game
-compiles the bytecode in native memory. It needs a release whose only environment is `open77` and
+The licensed OPEN//77 server wraps the deployment's one key for each player session the master admits
+(the same key for every session, protected in transit), and the game checks the container against the
+SCRIPT//GO signer it carries and compiles the bytecode in native memory. It needs a release whose only environment is `open77` and
 whose client scripts are Lua; it cannot be combined with `--escrow` in this version, and can with
 `--asset-escrow`. `web_files` stay clear.
 
@@ -346,8 +353,12 @@ scriptgo escrow lines    ./client-lines.json "my-package@1.0.0/client/main.lua:p
 
 - `inspect` prints what a bundle holds, readable and encrypted, and checks its signature. It needs
   no key.
-- `identity` creates the server's key pair. The private half stays in that file, on that server.
-  The licence page shows the fingerprint once the deployment is bound.
+- `identity` creates the server's key pair. The private half is **in clear** in that file (this
+  reference loader has no OS key store): mode 0600 on Linux and macOS, an ACL for the current user
+  only on Windows, and a warning when that cannot be set. Whoever copies the file has the identity,
+  so keep it outside the server and resource folders and back it up like a secret. `load` refuses
+  an identity file that group or others can read (Linux, macOS). The licence page shows the
+  fingerprint once the deployment is bound.
 - `load` is the **reference loader, not a compiled host**. It checks the bundle, asks SCRIPT//GO for
   the key wrapped to this server, decrypts in memory and adds the delivery marker. `--out` writes
   the decrypted copy to disk for a host that only reads files: that is licence-only protection,

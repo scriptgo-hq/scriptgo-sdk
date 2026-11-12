@@ -112,7 +112,7 @@ public sealed class AssetEscrowTests
         using var session = EscrowIdentity.ImportPrivateKey(Base64Url.Decode(S(V["client"]!["privateKey"])));
         using var other = AssetKey.UnwrapForClient(session, Wrap(V["client"]!["otherWrapped"]!), S(V["client"]!["aad"]));
         Assert.AreNotEqual(S(V["keyId"]), other.KeyId);
-        using var container = AssetContainer.Open(Convert.FromBase64String(S(V["containerBase64"])));
+        using var container = AssetContainer.Open(Convert.FromBase64String(S(V["containerBase64"])), Base64Url.Decode(S(V["signerPublicKey"])));
         Assert.AreEqual("key_mismatch", Assert.ThrowsExactly<EscrowException>(() => container.Bind(other)).Reason);
         Assert.ThrowsExactly<InvalidOperationException>(() => container.OpenReader());
     }
@@ -124,10 +124,44 @@ public sealed class AssetEscrowTests
         using var stranger = EscrowIdentity.Generate(); // any 32 bytes that are not the signer
         Assert.AreEqual(EscrowFailure.Signature, Assert.ThrowsExactly<EscrowException>(() =>
             AssetContainer.Open(bytes, stranger.PublicKey)).Failure);
+        var signer = Base64Url.Decode(S(V["signerPublicKey"]));
         var tampered = (byte[])bytes.Clone();
         tampered[^10] ^= 1; // in the body: the signed ciphertext hash no longer matches
-        Assert.ThrowsExactly<EscrowException>(() => AssetContainer.Open(tampered));
-        Assert.ThrowsExactly<EscrowException>(() => AssetContainer.Open(bytes.AsSpan(0, 40)));
+        Assert.ThrowsExactly<EscrowException>(() => AssetContainer.Open(tampered, signer));
+        Assert.ThrowsExactly<EscrowException>(() => AssetContainer.Open(bytes.AsSpan(0, 40), signer));
+        Assert.ThrowsExactly<EscrowException>(() => AssetContainer.Inspect(tampered));
+    }
+
+    [TestMethod]
+    public void DecryptingNeedsAPinnedSignerAndAnInspectedContainerNeverBinds()
+    {
+        var signer = Base64Url.Decode(S(V["signerPublicKey"]));
+        var genuine = Convert.FromBase64String(S(V["containerBase64"]));
+        // Sealed under the deployment's key by someone else and signed with their own key: it verifies
+        // under the key its header names, so only the pin refuses it.
+        var stranger = Convert.FromBase64String(S(V["strangerContainerBase64"]));
+        Assert.ThrowsExactly<ArgumentException>(() => AssetContainer.Open(genuine, ReadOnlySpan<byte>.Empty));
+        Assert.ThrowsExactly<ArgumentException>(() => AssetContainer.Open(genuine, new byte[31]));
+        Assert.AreEqual(EscrowFailure.Signature, Assert.ThrowsExactly<EscrowException>(() => AssetContainer.Open(stranger, signer)).Failure);
+
+        using var session = EscrowIdentity.ImportPrivateKey(Base64Url.Decode(S(V["client"]!["privateKey"])));
+        using var key = AssetKey.UnwrapForClient(session, Wrap(V["client"]!["wrapped"]!), S(V["client"]!["aad"]));
+        using (var inspected = AssetContainer.Inspect(stranger))
+        {
+            Assert.IsTrue(inspected.IsInspectOnly);
+            Assert.AreNotEqual(S(V["signerPublicKey"]), inspected.SignerPublicKey);
+            Assert.AreEqual(S(V["keyId"]), inspected.KeyId);
+            StringAssert.StartsWith(Assert.ThrowsExactly<EscrowException>(() => inspected.Bind(key)).Reason, "untrusted_signer");
+            Assert.ThrowsExactly<InvalidOperationException>(() => inspected.OpenReader());
+        }
+        using (var inspected = AssetContainer.Inspect(genuine))
+        {
+            Assert.AreEqual(S(V["signerPublicKey"]), inspected.SignerPublicKey);
+            Assert.AreEqual(EscrowFailure.Signature, Assert.ThrowsExactly<EscrowException>(() => inspected.Bind(key)).Failure);
+        }
+        using var opened = AssetContainer.Open(genuine, signer);
+        Assert.IsFalse(opened.IsInspectOnly);
+        opened.Bind(key);
     }
 
     [TestMethod]

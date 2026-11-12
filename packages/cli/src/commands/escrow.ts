@@ -154,6 +154,8 @@ async function load(a: ParsedArgs): Promise<number> {
 
   console.log(`[escrow] ${LOADER_LABEL}`);
   console.log(`[escrow] server identity ${identity.fingerprint}${identity.created ? " (created now)" : ""}`);
+  if (identity.protection) console.log(`[escrow] its private key is ${identity.protection}; keep the file outside the server folder and back it up like a secret`);
+  if (identity.warning) console.error(`[escrow] ${identity.warning}`);
   if (!trustedSigner) console.log("[escrow] warning: no --trusted-signer: the bundle's signature is checked against the key it names, and the master's, not one you pinned");
 
   let temp: string | null = null;
@@ -247,6 +249,8 @@ export async function run(args: string[]): Promise<number> {
   if (sub === "identity") {
     const identity = loadIdentity(a.flags.identity);
     console.log(`${identity.created ? "created" : "found"} server identity ${resolve(a.flags.identity)}`);
+    if (identity.protection) console.log(`  private key ${identity.protection}; keep the file outside the server folder and back it up like a secret`);
+    if (identity.warning) console.error(identity.warning);
     console.log(`public key   ${identity.publicKey.toString("base64url")}`);
     console.log(`fingerprint  ${identity.fingerprint}   (the licence page shows it once the deployment is bound)`);
     console.log("keep the file on this server: its private key is what a released content key is wrapped to");

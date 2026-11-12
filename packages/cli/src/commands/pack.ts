@@ -48,6 +48,7 @@ import { packEscrow } from "../lib/escrow-pack.ts";
 import { copyFiles, copyFingerprint, describePlan, planAssets, uploadAssetErrors, type AssetPlan } from "../lib/assets.ts";
 import { packAssetTargetCommand } from "../lib/asset-targets.ts";
 import { CLIENT_ESCROW_ENTRY } from "@scriptgo/escrow";
+import { secretFiles } from "../lib/secret-files.ts";
 
 export const summary = "Package a resource: a publishable .zip, or a folder for OPEN//77, Garry's Mod, BeamMP or FiveM";
 
@@ -96,6 +97,9 @@ export async function scriptgoArchive(
   const files = [...included].sort();
   const entries: Record<string, Uint8Array> = {};
   for (const f of files) entries[`${m.name}/${f}`] = compiled.get(f) ?? readFileSync(join(root, f));
+  // A key file never travels in an upload, whatever glob picked it up.
+  const secrets = secretFiles(files.map((f) => [f, entries[`${m.name}/${f}`]] as const));
+  if (secrets.length > 0) return { zip: new Uint8Array(), files: [], errors: secrets.map((message) => ({ code: "secret_file", message: `${message}: remove it from the resource folder (or from the manifest's globs)` })) };
   const zip = zipSync(entries, { level: 9, mtime: new Date("2026-01-01T00:00:00Z") });
   return { zip, files, errors: [] };
 }
@@ -191,7 +195,7 @@ export function packForOpen77(
 export async function run(args: string[]): Promise<number> {
   const a = parseArgs(args, { booleans: ["help", "allow-unportable", "no-runtime", "escrow", "without-assets"], repeatable: ["escrow-ignore"] });
   if (a.bools.has("help") || a.positional.length === 0) {
-    console.log(`scriptgo pack <resourceDir> [--target ${PACK_TARGETS.join("|")}] [--out dist] [--allow-unportable] [--no-runtime] [--without-assets] [--escrow [--escrow-ignore <glob>]...]`);
+    console.log(`scriptgo pack <resourceDir> [--target ${PACK_TARGETS.join("|")}] [--out dist] [--allow-unportable] [--no-runtime] [--without-assets] [--escrow [--escrow-ignore <glob>]... [--escrow-key-out <file>]]`);
     return a.bools.has("help") ? 0 : 2;
   }
   const res = readResource(a.positional[0]!);
@@ -209,6 +213,13 @@ export async function run(args: string[]): Promise<number> {
   const target = a.flags.target ?? "scriptgo";
   const out = resolve(a.flags.out ?? "dist");
   const withoutAssets = a.bools.has("without-assets");
+  // Whatever the target, a key file referenced by the manifest or its assets is never packed.
+  const shipped = new Set([...referencedFiles(m, files, res.manifestFile), ...allAssetFiles(m, files)]);
+  const secrets = secretFiles([...shipped].map((f) => [f, readFileSync(join(res.root, f))] as const));
+  if (secrets.length > 0) {
+    for (const s of secrets) console.error(`error secret_file: ${s}: remove it from the resource folder (or from the manifest's globs)`);
+    return 1;
+  }
   if (target === "scriptgo") {
     // The upload carries every environment's assets: check them all before building it.
     const { report: assets, errors: assetErrors } = uploadAssetErrors(res);
@@ -224,12 +235,14 @@ export async function run(args: string[]): Promise<number> {
       const identifier = m.author ? `${m.author}//${m.name.replace(/_/g, "-")}` : m.name;
       const r = packEscrow({
         archive: zip, manifest: m, manifestFile: res.manifestFile, identifier, outDir: out,
-        allowlist: a.multi["escrow-ignore"] ?? [],
+        allowlist: a.multi["escrow-ignore"] ?? [], keyPath: a.flags["escrow-key-out"],
       });
       console.log(`escrow bundle -> ${r.bundlePath} (${r.bytes} bytes)`);
       console.log(`  clear:     ${r.clearFiles.join(", ")}`);
       console.log(`  encrypted: ${r.encryptedFiles.join(", ")}`);
       console.log(`  content key (SECRET, master only) -> ${r.keyPath}`);
+      console.log(`    ${r.keyProtection}; delete it once published (scriptgo publish --bundle ... --escrow-key ...)`);
+      if (r.keyWarning) console.error(r.keyWarning);
       console.log("  note: real code secrecy only on a host that can hold the key (.NET / native kit);");
       console.log("        on a pure-Lua host escrow degrades to license-only — do not claim code secrecy there.");
       return 0;

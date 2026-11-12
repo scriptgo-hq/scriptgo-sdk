@@ -16,7 +16,7 @@
 
 #include "internal.h"
 
-#define SG_VERSION_STRING "0.1.0"
+#define SG_VERSION_STRING "0.2.0"
 #define SG_BUNDLE_MAGIC 0x5347424eu  /* "SGBN" */
 #define SG_ARCHIVE_MAGIC 0x53474152u /* "SGAR" */
 
@@ -80,7 +80,7 @@ const char* SG_CALL sg_strerror(int code)
     case SG_ERR_EXISTS: return "the file already exists";
     case SG_ERR_BAD_CONTAINER: return "the container is malformed";
     case SG_ERR_KEY_MISMATCH: return "the key is not this container's key";
-    case SG_ERR_UNTRUSTED_SIGNER: return "the container is signed by another key than the pinned one";
+    case SG_ERR_UNTRUSTED_SIGNER: return "the container is not signed by the pinned key (or was opened for inspection only)";
     case SG_ERR_TARGET_MISMATCH: return "the client code was compiled for another Lua VM";
     default: return "unknown error";
     }

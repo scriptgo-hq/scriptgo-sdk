@@ -28,7 +28,7 @@ for (const file of [out]) {
 
 type Wrap = { epk: string; nonce: string; wrapped: string };
 const c = v as {
-  keyId: string; signerPublicKey: string; containerBase64: string; foreignTargetBase64: string; lyingBase64: string; permutedBase64: string;
+  keyId: string; signerPublicKey: string; containerBase64: string; legacyContainerBase64: string; strangerContainerBase64: string; foreignTargetBase64: string; lyingBase64: string; permutedBase64: string;
   target: { luacHeader: string };
   chunks: { path: string; bytes: number; sha256: string; lines: number[] }[];
   server: { privateKey: string; aad: string; wrapped: Wrap };
@@ -57,6 +57,8 @@ lines.push(
   "",
 );
 bytes("CVEC_CONTAINER", Buffer.from(c.containerBase64, "base64"));
+bytes("CVEC_LEGACY_CONTAINER", Buffer.from(c.legacyContainerBase64, "base64"));
+bytes("CVEC_STRANGER_CONTAINER", Buffer.from(c.strangerContainerBase64, "base64"));
 bytes("CVEC_FOREIGN_TARGET", Buffer.from(c.foreignTargetBase64, "base64"));
 bytes("CVEC_LYING", Buffer.from(c.lyingBase64, "base64"));
 bytes("CVEC_PERMUTED", Buffer.from(c.permutedBase64, "base64"));

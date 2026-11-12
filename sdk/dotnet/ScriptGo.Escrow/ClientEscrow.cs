@@ -76,11 +76,25 @@ public sealed class ClientCodeContainer : IDisposable
     public IReadOnlyList<ClientCodeChunk> Chunks { get; }
     public bool IsBound { get; private set; }
     public bool TargetChecked { get; private set; }
+    /// <summary>True for a container from <see cref="Inspect"/>: integrity only, it never takes a key.</summary>
+    public bool IsInspectOnly { get; private init; }
 
-    /// <summary>Opens and checks a container; pin <paramref name="trustedSigner"/> (32 bytes) to the key you trust.</summary>
-    public static ClientCodeContainer Open(ReadOnlySpan<byte> container, ReadOnlySpan<byte> trustedSigner = default)
+    /// <summary>Opens and checks a container whose bytecode will be loaded. <paramref name="trustedSigner"/>
+    /// (32 bytes, required) is the signer you trust, from a source the party that handed you the container
+    /// does not control: Lua does not verify bytecode, so this signature is what vouches for it. Since
+    /// 0.5.0 there is no "accept the key the header names"; that is <see cref="Inspect"/>.</summary>
+    public static ClientCodeContainer Open(ReadOnlySpan<byte> container, ReadOnlySpan<byte> trustedSigner)
     {
-        if (!trustedSigner.IsEmpty && trustedSigner.Length != 32) throw new ArgumentException("A signer public key is 32 bytes.", nameof(trustedSigner));
+        if (trustedSigner.Length != 32) throw new ArgumentException("A pinned signer public key (32 bytes) is required.", nameof(trustedSigner));
+        return OpenCore(container, trustedSigner, inspect: false);
+    }
+
+    /// <summary>The same checks with the signature verified under the key the header names: integrity only.
+    /// For a host that relays containers and never loads them; <see cref="Bind"/> refuses the result.</summary>
+    public static ClientCodeContainer Inspect(ReadOnlySpan<byte> container) => OpenCore(container, default, inspect: true);
+
+    private static ClientCodeContainer OpenCore(ReadOnlySpan<byte> container, ReadOnlySpan<byte> trustedSigner, bool inspect)
+    {
         if (container.IsEmpty) throw new EscrowException(EscrowFailure.InvalidBundle, "bad_container:empty");
         EnsureAvailable();
         unsafe
@@ -89,8 +103,19 @@ public sealed class ClientCodeContainer : IDisposable
             container.CopyTo(new Span<byte>(data, container.Length));
             IntPtr handle = IntPtr.Zero;
             int rc;
-            fixed (byte* signer = trustedSigner)
-                rc = EscrowNative.sg_clink_container_open(data, (nuint)container.Length, trustedSigner.IsEmpty ? null : signer, out handle);
+            try
+            {
+                fixed (byte* signer = trustedSigner)
+                    rc = inspect
+                        ? EscrowNative.sg_clink_container_inspect(data, (nuint)container.Length, out handle)
+                        : EscrowNative.sg_clink_container_open(data, (nuint)container.Length, signer, out handle);
+            }
+            catch (EntryPointNotFoundException)
+            {
+                NativeMemory.Free(data);
+                throw new EscrowException(EscrowFailure.NativeLibraryUnavailable,
+                    "native_library_unavailable:this libscriptgo predates sg_clink_container_inspect (0.2.0); use the library that ships with this package");
+            }
             if (rc != EscrowNative.Ok)
             {
                 NativeMemory.Free(data);
@@ -98,10 +123,11 @@ public sealed class ClientCodeContainer : IDisposable
                 {
                     EscrowNative.ErrBadSignature or EscrowNative.ErrUntrustedSigner =>
                         new EscrowException(EscrowFailure.Signature, "bad_signature:" + EscrowNative.ErrorText(rc)),
+                    EscrowNative.ErrPayloadHash => new EscrowException(EscrowFailure.DecryptFailed, "payload_hash:" + EscrowNative.ErrorText(rc)),
                     _ => new EscrowException(EscrowFailure.InvalidBundle, "bad_container:" + EscrowNative.ErrorText(rc)),
                 };
             }
-            return new ClientCodeContainer(new ClientCodeContainerHandle(handle, (IntPtr)data));
+            return new ClientCodeContainer(new ClientCodeContainerHandle(handle, (IntPtr)data)) { IsInspectOnly = inspect };
         }
     }
 
@@ -129,6 +155,7 @@ public sealed class ClientCodeContainer : IDisposable
         ArgumentNullException.ThrowIfNull(key);
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (IsBound) throw new InvalidOperationException("The container already has its key.");
+        if (IsInspectOnly) throw new EscrowException(EscrowFailure.Signature, "untrusted_signer:an inspected container is never loaded; open it with the signer you trust");
         var rc = EscrowNative.sg_clink_container_bind(_handle, key.Handle);
         if (rc == EscrowNative.ErrKeyMismatch) throw new EscrowException(EscrowFailure.UnwrapFailed, "key_mismatch");
         if (rc != EscrowNative.Ok) throw new EscrowException(EscrowFailure.UnwrapFailed, "bind_failed:" + EscrowNative.ErrorText(rc));

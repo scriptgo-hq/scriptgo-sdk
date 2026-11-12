@@ -11,13 +11,16 @@ payment.
 
 What you do, in short: publish your scripts to SCRIPT//GO as a **private** package with an
 **encrypted** release, grant a free licence to **your server's own key**, and put the deployment
-token on that server. The scripts are decrypted on that server only, in memory where the platform
-allows it. A copy of the folder does not run anywhere else, and you can cut it off.
+token on that server. The key is released only to the holder of your server's **identity** (a key
+pair the loader creates), and the scripts are decrypted in memory where the platform allows it. A
+copy of the resources that does not carry that identity does not run, and you can cut it off.
 
 > [!NOTE]
 > This is deterrence, traceability and revocation, not a guarantee. Whoever controls the machine
-> can, with real effort, read what their own server runs. What it stops is the copied folder:
-> without your server's key, it is ciphertext. See [what it does not do](#what-it-does-not-do).
+> can, with real effort, read what their own server runs. What it stops is a copied resource folder:
+> without your server's identity, it is ciphertext. **The identity file is what must not travel with
+> it**: how well it is held depends on the OS ([below](#where-the-identity-lives)). See
+> [what it does not do](#what-it-does-not-do).
 
 ## Where it works
 
@@ -75,9 +78,25 @@ or use **Dashboard → Packages → your package → Details → Visibility**.
 ### 2. Get your server's public key
 
 The loader on your server creates the server's key pair the first time it runs with protection on,
-and prints the public half. The private half never leaves the server. The exact place is in the
-platform sections [below](#on-open77). Keep the identity file in your server backups: a new
-identity is a new server.
+and prints the public half. Only the public half is sent to SCRIPT//GO. The exact place is in the
+platform sections [below](#on-open77). A new identity is a new server, so back the identity file up;
+how it must be kept depends on the OS.
+
+#### Where the identity lives
+
+- **Windows.** The native loaders (OPEN//77, Rust, the .NET kit) seal the private key with DPAPI for
+  the **Windows account the server runs as** (user scope). A copy of the file, alone, does not open
+  on another machine or under another account. It is not bound to the hardware: whoever can run code
+  as that account opens it, an administrator of the machine can extract it, and the account's DPAPI
+  master key (in its profile) plus its password open it elsewhere. Run the server under its own
+  account; a backup of the identity file is useful only with that account.
+- **Linux (and other POSIX).** There is no OS key store: the private key sits **in clear** in a file
+  of mode 0600, readable by that user and by root. Whoever copies the file has the identity: a copied
+  server folder **with** the identity file and the token runs anywhere, and the platform sees the
+  same server. Keep the identity file **outside the server folder** (an absolute path in the
+  settings below) and outside anything you share or hand to staff, and back it up like a secret.
+- **The reference loader** (`scriptgo escrow load`, any OS) also writes the key in clear: 0600 on
+  POSIX, an ACL for the current user only on Windows (it says so, loudly, if it cannot set one).
 
 ### 3. Grant the package to that key
 
@@ -127,7 +146,7 @@ because the refusal of a revoked licence is marked final and it reads that mark.
      "enabled": true,
      "master": "https://api.scriptgo.dev",
      "environment": "open77",
-     "identityFile": ".open77/escrow-identity.bin",
+     "identityFile": "/srv/scriptgo-state/escrow-identity.bin",   // outside the server folder
      "tokensDirectory": ".open77/escrow-tokens",
      "trustedSigners": []
    }
@@ -153,7 +172,9 @@ because the refusal of a revoked licence is marked final and it reads that mark.
    resource starts. Refusals are named in the log: `unbound`, `revoked`, `adapter_missing`...
 
 On Windows the identity file is sealed for the account the server runs as; run the server under
-that same account. `trustedSigners` may list your bundle signer (`scriptgo escrow inspect` prints
+that same account. On Linux it is the raw key: the default `.open77/escrow-identity.bin` sits inside
+the server folder and travels with any copy of it, so point `identityFile` outside (as above) and
+keep the token files out of shared copies too. `trustedSigners` may list your bundle signer (`scriptgo escrow inspect` prints
 it) so that a bundle signed by any other key is refused.
 
 **Assets too.** Maps and other preload packages can be protected the same way, in a package of their
@@ -185,7 +206,8 @@ packages. See [Selling assets](/docs/selling-assets#encrypted-assets-on-open77).
    ```
 
 4. The first protected start creates the server's identity in
-   `oxide/data/ScriptGo/escrow/identity.key` and logs
+   `oxide/data/ScriptGo/escrow/identity.key` (sealed for the server's account on Windows, the raw key
+   in a 0600 file on Linux: [where the identity lives](#where-the-identity-lives)) and logs
    `this server's public key is <43 characters>`. Grant to that key (step 3), then write the token:
 
    ```text
@@ -199,9 +221,11 @@ Rust has no client-side plugins, so everything a SCRIPT//GO resource runs there 
 
 ## What it buys you
 
-- **A leaked folder runs nowhere else.** The release is ciphertext; the key is released only to the
-  server whose key you granted, wrapped for that key. Another machine with the same folder and the
-  same token is refused (`server_key_mismatch`).
+- **A leaked resource folder runs nowhere else.** The release is ciphertext; the key is released
+  only to the server whose key you granted, wrapped for that key. Another machine with the same
+  folder and the same token but another identity is refused (`server_key_mismatch`). A copy that
+  carries the identity file too is the same server to SCRIPT//GO: on Windows that file only opens for
+  the server's account, on Linux it opens anywhere ([where the identity lives](#where-the-identity-lives)).
 - **Revocation.** You can cut a server off at any time; refunds and staff decisions do the same for
   sold licences.
 - **A watermark names the copy.** Each delivery carries a marker tied to the licence and the

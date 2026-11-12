@@ -8,7 +8,7 @@
 # libsodium is linked statically on purpose: a libsodium.dll / libsodium.so dropped next to the host
 # must not be able to stand between this library and its keys.
 cmake_minimum_required(VERSION 3.21)
-project(scriptgo VERSION 0.1.0 LANGUAGES C)
+project(scriptgo VERSION 0.2.0 LANGUAGES C)
 if(WIN32)
   enable_language(RC)
 endif()
@@ -230,6 +230,7 @@ if(SG_BUILD_TESTS)
     asset_container_good_path
     asset_container_refuses_other_key
     asset_container_refuses_tampering
+    asset_container_requires_pinned_signer
     asset_reader_refuses_changed_chunk
     asset_escrowed_preload_vector
     asset_container_survives_mutations
@@ -257,6 +258,8 @@ if(SG_BUILD_TESTS)
     clink_keys_unwrap_and_rewrap
     clink_container_good_path
     clink_refuses_other_keys
+    clink_requires_pinned_signer
+    clink_reads_legacy_containers
     clink_refuses_tampering
     clink_refuses_other_targets
     clink_container_survives_mutations

@@ -180,10 +180,13 @@ scriptgo publish --client-escrow --client-lines ./client-lines.json --owns-code
 - **Encrypted at rest and in transit.** Each licensed deployment's copy seals the bytecode in
   `clientcode.sgce` with a key for that deployment. The player's cache holds only that container and
   a stub at each script's path.
-- **A key per session.** The licensed server gets the key from SCRIPT//GO and wraps it for each
-  player session the OPEN//77 master admits (a connect ticket). The game decrypts the bytecode in
-  native memory, compiles it, and wipes the buffer. There is no way for a script to load bytecode
-  itself.
+- **One key per deployment, wrapped for each session.** The licensed server gets the deployment's key
+  from SCRIPT//GO and wraps it afresh for each player session the OPEN//77 master admits (a connect
+  ticket): the wrap protects the key in transit, but every session unwraps the same key, so a key
+  lifted from one player's memory opens that deployment's container. The game checks the container
+  against the SCRIPT//GO signer built into the client (never one the server names), decrypts the
+  bytecode in native memory, compiles it, and wipes the buffer. There is no way for a script to load
+  bytecode itself.
 - **Revocation.** After a refund or a revocation, the server's next key request is refused and no new
   session gets the key: players who join then are refused the resource. A session already running
   keeps what it compiled until it disconnects.

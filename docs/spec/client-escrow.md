@@ -111,14 +111,39 @@ a reader cannot confuse the two:
 `header`: `{ format: "scriptgo-client-escrow/1", cipher: "AES-256-GCM", kdf: "HKDF-SHA256+X25519",
 package, version, release, deployment, target: { lua, luacHeader }, strip ("full" | "names"),
 permGeneration (0; readers refuse any other in v1), keyId, fingerprint,
-chunks: [{ path, bytes, sha256, nonce, offset, length }], signerPublicKey, signature }`.
+chunks: [{ path, bytes, ciphertextSha256, nonce, offset, length }], signerPublicKey, signature }`.
 
 - `path` is the resource-relative client-script path (a clear manifest value; not a secret).
-- `bytes` is the stripped-bytecode length; `sha256` is over the **plaintext bytecode**; `length =
-  bytes + 16` (one AEAD tag per chunk); chunks are contiguous at `offset` in the body.
+- `bytes` is the stripped-bytecode length; `length = bytes + 16` (one AEAD tag per chunk); chunks are
+  contiguous at `offset` in the body.
+- `ciphertextSha256` is the SHA-256 (hex) of the chunk's `length` body bytes: ciphertext and tag. It
+  reveals nothing about the bytecode. With `keyId` fixing the key, the signed hash of the ciphertext
+  still fixes the bytecode the signature vouches for: a holder of the content key (a game server)
+  cannot swap a chunk under the platform's signature.
+- **Legacy chunks** (containers sealed before SDK 0.1.12 / libscriptgo 0.2.0) carry `sha256`, the
+  SHA-256 of the **plaintext bytecode**, instead of `ciphertextSha256`. Bytecode compiles
+  deterministically, so that hash lets anyone confirm a guessed source or match a copy. Readers accept
+  both; a chunk carries exactly one of the two. Writers emit `sha256` only with the transition option
+  `legacyPlaintextSha256` (`sealClientContainer`), for game clients whose libscriptgo predates 0.2.0:
+  those refuse a chunk without `sha256` (`SG_ERR_BAD_CONTAINER`). The format string stays
+  `scriptgo-client-escrow/1`, so AADs, nonces and wraps are unchanged.
 - `signature` is ed25519 over `canonicalJson(header with signature = "")` by the platform's
-  fingerprint signer (the same signer asset escrow uses); `fingerprint` is the copy's delivery marker
+  container signer (the same signer asset escrow uses); `fingerprint` is the copy's delivery marker
   or null. Header at most 4 MiB.
+
+**The signer is pinned by the client, never taken from the container or from the game server.**
+`signerPublicKey` in the header only says which key signed; a signature that verifies under it proves
+integrity, not origin. A game server holds the deployment's content key (it re-wraps it to each
+session), so it can seal bytecode of its choice under that key and sign the header with a key of its
+own: that container verifies under the key it names. Only a signer the client pinned refuses it. A
+client builds the signer into its own binary or configuration, from a source the game server does not
+control; for containers the SCRIPT//GO platform seals that source is `PLATFORM_CONTAINER_SIGNERS` in
+`@scriptgo/shared` (`packages/shared/src/signers.ts`) at the SDK tag the client ships with. Every
+decrypting entry point requires it: `sg_clink_container_open` with a NULL signer is
+`SG_ERR_INVALID_ARGUMENT` (libscriptgo 0.2.0), the .NET `ClientCodeContainer.Open(container,
+trustedSigner)` and the TypeScript `ClientContainerReader` throw without one. Integrity-only reading
+(a server that relays keys, a tool) uses `sg_clink_container_inspect` / `ClientCodeContainer.Inspect`
+/ `readClientContainer` without a signer, and such a handle never binds a key.
 
 In a delivered copy the container is `<root>clientcode.sgce`, and each escrowed client script's path
 holds a stub that raises an error if a host ever runs it as source (a host without the loader fails
@@ -179,8 +204,9 @@ game client ──(3) in native memory──────────────
    answers each `keyId` it holds, re-wrapped to that session (client aad). The asset-key door and the
    client-code door are separate: neither ever hands out the other's key.
 3. **Client.** Unwrap the session wrap (`SG_CLIENT_WRAP_SESSION`), open the container with the signer
-   pinned, check the LUAC target, bind, then **per chunk** `sg_clink_lua_load` — decrypt the bytecode
-   in `sodium_malloc` memory, verify the AEAD tag, the bytecode's SHA-256 and its header, compile it
+   the client pinned (above: never one the server names), check the LUAC target, bind, then **per
+   chunk** `sg_clink_lua_load` — decrypt the bytecode in `sodium_malloc` memory, verify the AEAD tag
+   (and a legacy chunk's plaintext SHA-256) and the LUAC header, compile it
    with the host's own `luaL_loadbufferx(state, bytecode, n, "=" + path, "b")` (passed in as a function
    pointer, so the library links no Lua), wipe the buffer. No plaintext bytecode enters the host
    language heap and none is written to disk.
@@ -198,12 +224,13 @@ calls; `SG_ABI_VERSION` stays 1:
 
 | Call | Does |
 |---|---|
-| `sg_clink_container_open(data, len, trustedSignerOrNull, &container)` | every keyless check of "Reading" over an `SGCE` container, the signer pinned when given; borrows `data` |
+| `sg_clink_container_open(data, len, trustedSigner, &container)` | every keyless check of "Reading" over an `SGCE` container, the signer pinned (32 bytes, required: NULL is `SG_ERR_INVALID_ARGUMENT` since 0.2.0; another signer is `SG_ERR_UNTRUSTED_SIGNER`, -23); borrows `data` |
+| `sg_clink_container_inspect(data, len, &container)` | the same checks against the key the header names: integrity, not origin. The handle reads fields and chunks; `sg_clink_container_bind` refuses it (`SG_ERR_UNTRUSTED_SIGNER`), so nothing it holds is ever decrypted. For a server or a tool, never for a client that runs the code |
 | `sg_clink_target_check(container, luacHeader, len)` | the container's target equals the host VM's 31-byte LUAC header, else `SG_ERR_TARGET_MISMATCH` (-24); required before any load |
 | `sg_clink_container_field(container, name, &value)` | a header field: `package`, `version`, `release`, `deployment`, `keyId`, `signerPublicKey`, `strip`, `lua`, `fingerprint` |
 | `sg_clink_chunk_count(container, &n)`, `sg_clink_chunk_at(container, i, &path, &size)` | the chunks, in path order |
-| `sg_clink_container_bind(container, key)` | binds the client-code key; `SG_ERR_KEY_MISMATCH` for another deployment's key or an asset key |
-| `sg_clink_lua_load(container, path, lua_State*, loadbufferx, &luaStatus)` | decrypts that chunk into guarded memory, verifies tag, SHA-256 and header, compiles it with the host's `luaL_loadbufferx` (mode `"b"`), wipes; `SG_OK` leaves the function on the stack, `SG_ERR_LUA_LOAD` (-17) leaves Lua's message, any other error pushes nothing |
+| `sg_clink_container_bind(container, key)` | binds the client-code key; `SG_ERR_KEY_MISMATCH` for another deployment's key or an asset key; `SG_ERR_UNTRUSTED_SIGNER` on an inspected container |
+| `sg_clink_lua_load(container, path, lua_State*, loadbufferx, &luaStatus)` | decrypts that chunk into guarded memory, verifies tag, a legacy chunk's plaintext SHA-256 and the header, compiles it with the host's `luaL_loadbufferx` (mode `"b"`), wipes; `SG_OK` leaves the function on the stack, `SG_ERR_LUA_LOAD` (-17) leaves Lua's message, any other error pushes nothing |
 | `sg_clink_container_free(container)` | wipes the key and frees; functions already compiled keep running |
 
 `sg_clink_lua_load` is the **only** way bytecode enters a VM through this library. There is no
@@ -213,10 +240,13 @@ client code deliberately lacks.) The .NET kit wraps the same calls as `ClientCod
 
 **Reading (normative, as `assets.md` "Reading").** Before any key is used: magic, version, zero
 bytes, header length, canonical header JSON, `format`, `cipher`, `kdf`, `strip`, `permGeneration`, the
-target's shape, the ed25519 signature (and the pinned signer when configured), every chunk's path
-rules, `length = bytes + 16`, contiguous offsets, a body length equal to the sum; each chunk's
-plaintext-bytecode `sha256` is checked after decryption. Then the LUAC target must match and `keyId`
-must match the key. Any tag failure is an error, never a partial result. Closing wipes the key.
+target's shape, the pinned signer and the ed25519 signature, every chunk's path rules, its keys
+(`bytes`, `length`, `nonce`, `offset`, `path` and exactly one of `ciphertextSha256` / `sha256`),
+`length = bytes + 16`, contiguous offsets, a body length equal to the sum, then each chunk's
+`ciphertextSha256` over its body bytes (`SG_ERR_PAYLOAD_HASH`). A legacy chunk's plaintext `sha256`
+is checked after decryption. Then the LUAC target must match and `keyId` must match the key. Any tag
+failure is an error, never a partial result. Closing wipes the key. Inspection runs the same checks
+with the header's own key in place of the pinned one.
 
 **Path rules** are `escrow.md`/`assets.md`'s: resource-relative, `/` separators; refused leading `/`,
 empty/`.`/`..` segment, backslash, colon, control character.
@@ -234,17 +264,21 @@ empty/`.`/`..` segment, backslash, colon, control character.
   clients a release loads on), so deferred. It would only cost a reverser the time to read the
   permutation out of the client binary: a speed bump, not secrecy. v1 containers carry generation 0
   and readers refuse any other. Constant-pool encryption is **not** pursued separately: the whole
-  container is already AEAD-encrypted, so it adds nothing once the per-session key is lifted from
-  memory, at which point the opcodes are too.
+  container is already AEAD-encrypted, so it adds nothing once the content key is lifted from
+  memory (the session only wraps the deployment's one key: lifting it from one client's memory opens
+  that deployment's container for every session), at which point the opcodes are too.
 
 ## Vector
 
 `packages/escrow/test/vectors/client-vectors.json` (built by `packages/escrow/tools/gen-client-vectors.ts`,
 compiled into `sdk/native/tests/client_vector.h`): an `SGCE` container with stripped-bytecode chunks,
 their source, the deployment content key, a server wrap, a session wrap, another deployment's key (must
-not open it), the plaintext-bytecode hashes and the line map. The TypeScript, C and .NET tests open the
-same container and refuse the same tampering (bad tag, wrong `keyId`, a foreign LUAC target, a wrong
-signer, path traversal); the C test compiles the chunks into a real Lua 5.4.8 and runs them, and
+not open it), the plaintext-bytecode hashes and the line map; the same chunks sealed the legacy way
+(`legacyContainerBase64`, plaintext `sha256`, which every reader must still load); and a container
+sealed under the same key but signed by a stranger (`strangerContainerBase64`, which a pinned open
+must refuse and an inspection must read). The TypeScript, C and .NET tests open the same container and
+refuse the same tampering (a flipped ciphertext byte, a bad tag, wrong `keyId`, a foreign LUAC target,
+a wrong signer, a missing signer, path traversal); the C test compiles the chunks into a real Lua 5.4.8 and runs them, and
 OPEN//77's client tests do the same through its own Lua.
 
 ## OPEN//77 (the one client VM host today)
@@ -262,6 +296,11 @@ OPEN//77's client tests do the same through its own Lua.
   sandbox. A key that cannot be had (revoked licence, unknown key, no native library, a foreign target,
   no answer) disconnects the player with `client_code_escrow:<resource>:<reason>` instead of running a
   resource with its client half missing.
+- **Signer: pinned in the client build.** The OPEN//77 client opens `clientcode.sgce` with the platform
+  signer it carries (`PLATFORM_CONTAINER_SIGNERS`, "Bundle layout" above), never with a key the game
+  server sends and never with NULL: libscriptgo 0.2.0 refuses NULL, and a client on an older DLL that
+  passes NULL accepts any container a server signs itself. The game server only relays keys; when it
+  reads a container (to learn its `keyId`s) it inspects it (`ClientCodeContainer.Inspect`).
 - **NUI / WebUI: clear in v1.** `web_files` (HTML, JavaScript, CSS) are **not** escrowed: they reach
   the player as clear files, like FiveM's `nui` files. Feeding CEF from memory through the client's
   scheme handler is feasible later and is not built.

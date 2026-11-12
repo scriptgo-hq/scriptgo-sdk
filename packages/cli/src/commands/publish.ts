@@ -46,6 +46,7 @@ import { hasAssets } from "@scriptgo/manifest";
 import { listFiles, readResource } from "../lib/sdk.ts";
 import { buildClientLineMap } from "../lib/client-escrow.ts";
 import { scriptgoArchive } from "./pack.ts";
+import { secretFiles } from "../lib/secret-files.ts";
 import { ApiClient, ApiError, describeError } from "./_api-client.ts";
 
 export const summary = "Upload a resource as a new release and publish it (needs login)";
@@ -208,7 +209,11 @@ export async function run(args: string[]): Promise<number> {
       const bytes = readFileSync(a.flags.bundle!);
       const key = JSON.parse(readFileSync(a.flags["escrow-key"]!, "utf8")) as { contentKeyBase64?: string };
       if (!key.contentKeyBase64) throw new Error(`${a.flags["escrow-key"]} has no contentKeyBase64: it is not a key file written by scriptgo pack --escrow`);
-      const m = readBundle(bytes).manifest;
+      const read = readBundle(bytes);
+      const m = read.manifest;
+      // A key file never travels in an upload: not as a clear file of a bundle packed earlier.
+      const secrets = secretFiles([...read.clear.entries()]);
+      if (secrets.length > 0) throw new Error(`${a.flags.bundle} carries a secret file: ${secrets.join("; ")}`);
       upload = { bytes, fileName: `${slug}-${m.version}.escrow.zip`, contentKey: key.contentKeyBase64, escrowSummary: `${m.encryptedFiles.length} encrypted, ${m.clearFiles.length} clear, signer ${keyIdOf(m.signerPublicKey)}` };
     } else if (a.bools.has("escrow")) {
       // The bundle's identity is the registry identifier, so the master and every loader agree on it.
