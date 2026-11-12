@@ -21,7 +21,7 @@ see [Languages](#languages) at the end.
 Install the CLI first (Node.js 22 or later):
 
 ```bash
-npm install -g https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.8/scriptgo-cli-0.1.8.tgz
+npm install -g @scriptgo/cli
 ```
 
 `scriptgo test` also needs a Lua interpreter (`lua`, `lua5.4` or `luajit`) on the `PATH`.
@@ -316,11 +316,10 @@ end)
 ```
 
 esbuild removes the types without checking them, so run `tsc --noEmit` for type errors. The
-typings are `@scriptgo/types`, generated from the runtime contract. The package is not on the npm
-registry yet; install it from the SDK's GitHub release:
+typings are `@scriptgo/types`, generated from the runtime contract. Install them from npm:
 
 ```bash
-npm install -D https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.8/scriptgo-types-0.1.8.tgz
+npm install -D @scriptgo/types
 ```
 
 A resource's `tsconfig.json`:

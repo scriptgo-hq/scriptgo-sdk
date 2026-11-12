@@ -13,16 +13,18 @@ The CLI is called `scriptgo`. It talks to the same HTTP API as the website (see
 
 ## Install
 
-The CLI is the `@scriptgo/cli` package. It runs on Node.js 22 or later. Install it from the SDK's
-GitHub release:
+The CLI is the [`@scriptgo/cli`](https://www.npmjs.com/package/@scriptgo/cli) package on npm. It
+runs on Node.js 22 or later:
 
 ```bash
-npm install -g https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.8/scriptgo-cli-0.1.8.tgz
+npm install -g @scriptgo/cli
 scriptgo --version
 ```
 
-It is not on the npm registry yet. To update, run the same command with a newer release's URL. In
-a checkout of the SDK, `node packages/cli/bin/scriptgo.mjs <command>` runs it from its sources.
+The same command updates it. Each version is also attached to its
+[GitHub release](https://github.com/scriptgo-hq/scriptgo-sdk/releases) as a tarball, which
+`npm install -g <tarball URL>` installs without the registry. In a checkout of the SDK,
+`node packages/cli/bin/scriptgo.mjs <command>` runs it from its sources.
 
 `test`, `run` and `verify` also need a Lua interpreter: `lua`, `lua5.4`, `lua54` or `luajit` on the
 `PATH`, or, in a checkout, the ones `tools/build-lua.ps1` builds into `tools/runtimes/bin`. The

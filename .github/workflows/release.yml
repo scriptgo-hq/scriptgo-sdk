@@ -1,8 +1,8 @@
 name: Release
 
 # Push a tag `v<version>` whose version matches every published package.json, for example v0.1.0.
-# The GitHub release of the tag gets the packed tarballs (installable by URL). npm also gets them when
-# the repository secret NPM_TOKEN is set (an automation token with publish rights on @scriptgo).
+# The GitHub release of the tag gets the packed tarballs (installable by URL), and npm gets them
+# through the repository secret NPM_TOKEN (an automation token with publish rights on @scriptgo).
 on:
   push:
     tags: ["v*"]
@@ -41,7 +41,7 @@ jobs:
           for p in shared manifest escrow types cli; do (cd "packages/$p" && pnpm pack --pack-destination ../../release); done
           # The CLI tarball installs on its own (one bundle, esbuild its only dependency): prove it.
           npm install -g ./release/scriptgo-cli-*.tgz && scriptgo --version && scriptgo init demo_pkg --dir "$RUNNER_TEMP" && scriptgo validate "$RUNNER_TEMP/demo_pkg"
-          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "SCRIPT//GO SDK ${GITHUB_REF_NAME#v}" --notes "npm packages as tarballs. The CLI: npm install -g https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/${GITHUB_REF_NAME}/scriptgo-cli-${GITHUB_REF_NAME#v}.tgz"
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "SCRIPT//GO SDK ${GITHUB_REF_NAME#v}" --notes "The CLI: npm install -g @scriptgo/cli@${GITHUB_REF_NAME#v} (https://www.npmjs.com/package/@scriptgo/cli). The npm packages are also attached as tarballs: npm install -g https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/${GITHUB_REF_NAME}/scriptgo-cli-${GITHUB_REF_NAME#v}.tgz"
           gh release upload "$GITHUB_REF_NAME" release/*.tgz --clobber
       - name: Publish to npm
         if: env.HAS_NPM_TOKEN == 'true'

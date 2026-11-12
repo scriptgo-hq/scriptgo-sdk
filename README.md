@@ -76,15 +76,16 @@ decryptor from a server package, so they get the protection above.
 Node.js 22 or later:
 
 ```bash
-npm install -g https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.8/scriptgo-cli-0.1.8.tgz
+npm install -g @scriptgo/cli
 scriptgo init my_script
 scriptgo test my_script        # needs lua, lua5.4 or luajit on the PATH
 ```
 
 The CLI talks to the production API, `https://api.scriptgo.dev`. `--api <url>` or `SCRIPTGO_API`
-points it at another one (a local API in development). Every version is on the
-[releases page](https://github.com/scriptgo-hq/scriptgo-sdk/releases); the commands are in
-[the CLI docs](https://scriptgo.dev/docs/cli).
+points it at another one (a local API in development). The package is
+[`@scriptgo/cli` on npm](https://www.npmjs.com/package/@scriptgo/cli); every version is also a
+tarball on the [releases page](https://github.com/scriptgo-hq/scriptgo-sdk/releases). The commands
+are in [the CLI docs](https://scriptgo.dev/docs/cli).
 
 ## Work on the SDK
 
@@ -112,17 +113,16 @@ dotnet test --project sdk/dotnet/ScriptGo.Host.Tests
 
 | Package | What it is |
 |---|---|
-| `@scriptgo/shared` | The API contract: zod schemas and TypeScript types |
-| `@scriptgo/manifest` | The manifest parser and validator |
-| `@scriptgo/escrow` | Protected releases: format, signing, sealing, watermarking |
-| `@scriptgo/types` | TypeScript declarations of the runtime API, for scripts in TypeScript |
-| `@scriptgo/cli` | The `scriptgo` command line, bundled into one file with the SDK's Lua core and adapters |
+| [`@scriptgo/shared`](https://www.npmjs.com/package/@scriptgo/shared) | The API contract: zod schemas and TypeScript types |
+| [`@scriptgo/manifest`](https://www.npmjs.com/package/@scriptgo/manifest) | The manifest parser and validator |
+| [`@scriptgo/escrow`](https://www.npmjs.com/package/@scriptgo/escrow) | Protected releases: format, signing, sealing, watermarking |
+| [`@scriptgo/types`](https://www.npmjs.com/package/@scriptgo/types) | TypeScript declarations of the runtime API, for scripts in TypeScript |
+| [`@scriptgo/cli`](https://www.npmjs.com/package/@scriptgo/cli) | The `scriptgo` command line, bundled into one file with the SDK's Lua core and adapters |
 
 In this repository they run from their TypeScript sources; `pnpm run build` emits `dist/`, which is
-what npm receives. A tag `v<version>` publishes them (`.github/workflows/release.yml`): its GitHub
-release carries the tarballs, installable by URL
-(`https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v<version>/scriptgo-<package>-<version>.tgz`),
-and npm gets them once the scope is live. `ScriptGo.Escrow` for NuGet is packed by
+what npm receives. A tag `v<version>` publishes them (`.github/workflows/release.yml`): to npm,
+with provenance, and as tarballs on its GitHub release, installable by URL
+(`https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v<version>/scriptgo-<package>-<version>.tgz`). `ScriptGo.Escrow` for NuGet is packed by
 [`sdk/dotnet/pack.ps1`](sdk/dotnet/pack.ps1).
 
 ## Bring SCRIPT//GO to your platform

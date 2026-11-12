@@ -3,7 +3,7 @@
 SCRIPT//GO manifest parser and validator (scriptgo.toml), with the package file rules.
 
 ```bash
-npm install https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.8/scriptgo-manifest-0.1.8.tgz
+npm install @scriptgo/manifest
 ```
 
 Part of the [SCRIPT//GO SDK](https://github.com/scriptgo-hq/scriptgo-sdk). Documentation:
