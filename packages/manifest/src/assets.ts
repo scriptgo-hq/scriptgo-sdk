@@ -167,6 +167,19 @@ export const OPEN77_PRELOAD = {
   ],
   /** First four bytes of a REDengine 4 archive: "RDAR". */
   archiveMagic: Buffer.from("RDAR", "ascii"),
+  /**
+   * An escrowed preload (docs/spec/assets.md, "OPEN//77 (escrowed preloads)"): the preload's files
+   * sealed in one asset-escrow container, `archive/pc/mod/<stem>.sgae`, directly under that root,
+   * next to the fingerprint record. OPEN//77 registers the container and its launcher installs it as
+   * an inert file. Its first eight bytes: "SGAE", version 1, three zero bytes.
+   */
+  escrowed: {
+    root: "archive/pc/mod/",
+    extension: "sgae",
+    magic: Buffer.from([0x53, 0x47, 0x41, 0x45, 0x01, 0x00, 0x00, 0x00]),
+    format: "scriptgo-asset-escrow/1",
+    maxHeaderBytes: 4 * 1024 * 1024,
+  },
 };
 
 /** GTA V streamed formats a FiveM resource's stream/ folder carries. */
@@ -227,8 +240,10 @@ export interface AssetReport {
   /** Per environment that receives assets. */
   environments: Record<string, AssetEnvironmentReport>;
   /**
-   * Containers that already carry a per-buyer fingerprint (`.scriptgo/fingerprint.json`): normal in
-   * a buyer's copy, refused by the platform in an upload (the stamper adds it, once).
+   * Containers that already carry a per-buyer fingerprint (`.scriptgo/fingerprint.json`, or an
+   * OPEN//77 preload's `<stem>.scriptgo-fingerprint.json`), and OPEN//77 preloads already escrowed
+   * (an `archive/pc/mod/<stem>.sgae`, sealed for one deployment): normal in a buyer's copy, refused
+   * by the platform in an upload (the stamper adds them, once).
    */
   fingerprinted: string[];
 }
@@ -301,10 +316,18 @@ interface Ctx {
 const err = (c: Ctx, code: string, message: string): void => void c.errors.push({ code, message });
 const warn = (c: Ctx, code: string, message: string): void => void c.warnings.push({ code, message });
 
-/** Reads a container and checks every entry is data (and not an archive). Null when unreadable. */
+const markFingerprinted = (c: Ctx, path: string): void => {
+  if (!c.fingerprinted.includes(path)) c.fingerprinted.push(path);
+};
+
+/**
+ * Reads a container and checks every entry is data (and not an archive). Null when unreadable.
+ * `fingerprintCheck` judges where a fingerprint entry sits (an environment with fixed roots).
+ */
 function inspectContainer(
   c: Ctx, path: string, env: string, data: Buffer,
   entryCheck: (name: string, entry: ZipEntry, bytes: Buffer) => void,
+  fingerprintCheck?: (name: string) => void,
 ): AssetContainer | null {
   let zip;
   try {
@@ -325,7 +348,8 @@ function inspectContainer(
     if (isFingerprintEntryName(entry.name)) {
       // A buyer's copy: the stamper's entry is not an asset. Its record is checked by
       // `scriptgo assets fingerprint`; an upload that carries one is refused by the platform.
-      c.fingerprinted.push(path);
+      markFingerprinted(c, path);
+      fingerprintCheck?.(entry.name);
       continue;
     }
     if (entry.name.startsWith(".scriptgo/")) {
@@ -446,24 +470,88 @@ const ENV_CHECKS: Record<string, (x: EnvCheck) => void> = {
     if (zips.length > OPEN77_PRELOAD.maxPackages) err(c, "open77_too_many_preloads", `${zips.length} preload packages: OPEN//77 takes at most ${OPEN77_PRELOAD.maxPackages} per resource.`);
     let xl = false;
     let tweaks = false;
+    const E = OPEN77_PRELOAD.escrowed;
+    const directlyUnderEscrowRoot = (name: string): boolean => name.startsWith(E.root) && !name.slice(E.root.length).includes("/");
+    /** Checks a file's root and type; true when it is placed where OPEN//77 takes it. */
+    const placed = (where: string, name: string, clear: boolean): boolean => {
+      const root = OPEN77_PRELOAD.roots.find((r) => name.startsWith(r.prefix));
+      const ext = extensionOf(name);
+      if (!root) {
+        err(c, "open77_preload_root", `${where}: ${name}: outside the inert roots OPEN//77 accepts (${OPEN77_PRELOAD.roots.map((r) => r.prefix).join(", ")}).`);
+        return false;
+      }
+      if (!root.extensions.includes(ext)) {
+        const escrow = clear && root.prefix === E.root ? `; .${E.extension} directly under it, for an escrowed preload` : "";
+        err(c, "open77_preload_type", `${where}: ${name}: .${ext} is not accepted under ${root.prefix} (${root.extensions.map((e) => `.${e}`).join(", ")}${escrow}).`);
+        return false;
+      }
+      if (ext === "xl") xl = true;
+      if (root.prefix === "r6/tweaks/") tweaks = true;
+      return true;
+    };
+    /**
+     * An escrowed preload's container: directly under archive/pc/mod/, "SGAE" version 1, and a header
+     * whose files obey the same roots and types as a clear preload (the header is clear JSON; its
+     * signature is checked by OPEN//77 with the signer it trusts, and by `scriptgo assets open`).
+     */
+    const escrowed = (f: string, name: string, bytes: Buffer): void => {
+      if (!directlyUnderEscrowRoot(name)) {
+        if (!OPEN77_PRELOAD.roots.some((r) => name.startsWith(r.prefix))) {
+          err(c, "open77_preload_root", `${f}: ${name}: outside the inert roots OPEN//77 accepts (${OPEN77_PRELOAD.roots.map((r) => r.prefix).join(", ")}).`);
+        } else {
+          err(c, "open77_preload_type", `${f}: ${name}: a .${E.extension} container is accepted directly under ${E.root} only, not in a subfolder or another root.`);
+        }
+        return;
+      }
+      if (bytes.length < E.magic.length + 4 || !bytes.subarray(0, E.magic.length).equals(E.magic)) {
+        err(c, "open77_escrow_magic", `${f}: ${name}: not an asset-escrow container (it does not start with "SGAE", version 1).`);
+        return;
+      }
+      const headerLength = bytes.readUInt32LE(E.magic.length);
+      const start = E.magic.length + 4;
+      let header: unknown = null;
+      if (headerLength > 0 && headerLength <= E.maxHeaderBytes && start + headerLength <= bytes.length) {
+        try {
+          header = JSON.parse(bytes.subarray(start, start + headerLength).toString("utf8"));
+        } catch {
+          header = null;
+        }
+      }
+      const files = (header as { format?: unknown; files?: unknown } | null)?.files;
+      if ((header as { format?: unknown } | null)?.format !== E.format || !Array.isArray(files) || files.length === 0 || !files.every((x) => typeof (x as { path?: unknown })?.path === "string")) {
+        err(c, "open77_escrow_header", `${f}: ${name}: the container's header is not a ${E.format} header listing its files.`);
+        return;
+      }
+      for (const x of files as Array<{ path: string }>) placed(`${f}: ${name}`, x.path, false);
+    };
     for (const f of zips) {
       const data = bytesOf(f);
       if (data.length > OPEN77_PRELOAD.maxBytes) err(c, "open77_preload_too_large", `${f}: OPEN//77 takes a preload of at most ${OPEN77_PRELOAD.maxBytes} bytes.`);
+      const sealed: string[] = [];
+      const clear: string[] = [];
       const box = inspectContainer(c, f, "open77", data, (name, _entry, bytes) => {
-        const root = OPEN77_PRELOAD.roots.find((r) => name.startsWith(r.prefix));
-        const ext = extensionOf(name);
-        if (!root) {
-          err(c, "open77_preload_root", `${f}: ${name}: outside the inert roots OPEN//77 accepts (${OPEN77_PRELOAD.roots.map((r) => r.prefix).join(", ")}).`);
+        if (extensionOf(name) === E.extension) {
+          sealed.push(name);
+          escrowed(f, name, bytes);
           return;
         }
-        if (!root.extensions.includes(ext)) {
-          err(c, "open77_preload_type", `${f}: ${name}: .${ext} is not accepted under ${root.prefix} (${root.extensions.map((e) => `.${e}`).join(", ")}).`);
-          return;
+        clear.push(name);
+        if (placed(f, name, true) && extensionOf(name) === "archive" && !bytes.subarray(0, 4).equals(OPEN77_PRELOAD.archiveMagic)) {
+          err(c, "open77_archive_magic", `${f}: ${name}: not a REDengine archive (it does not start with "RDAR").`);
         }
-        if (ext === "archive" && !bytes.subarray(0, 4).equals(OPEN77_PRELOAD.archiveMagic)) err(c, "open77_archive_magic", `${f}: ${name}: not a REDengine archive (it does not start with "RDAR").`);
-        if (ext === "xl") xl = true;
-        if (root.prefix === "r6/tweaks/") tweaks = true;
+      }, (name) => {
+        // OPEN//77 takes a preload's files under its mod roots only: the record goes next to the archives.
+        if (!directlyUnderEscrowRoot(name) || !name.endsWith(FINGERPRINT_ENTRY_SUFFIX)) {
+          err(c, "open77_preload_root", `${f}: ${name}: OPEN//77 takes a preload's fingerprint record as ${E.root}<stem>${FINGERPRINT_ENTRY_SUFFIX} only.`);
+        }
       });
+      if (sealed.length > 0) {
+        // A deployment's copy: the preload was sealed for one deployment by the platform.
+        markFingerprinted(c, f);
+        if (sealed.length > 1 || clear.length > 0) {
+          err(c, "open77_escrow_mixed", `${f}: an escrowed preload holds one .${E.extension} container and its fingerprint record, nothing else (found ${[...sealed, ...clear].join(", ")}).`);
+        }
+      }
       if (box) report.containers.push(box);
     }
     if (xl) report.needs.push("archivexl");

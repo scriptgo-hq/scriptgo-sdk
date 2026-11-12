@@ -126,7 +126,7 @@ assets and no `game_build` for that environment gets the warning `asset_game_bui
 
 | Environment | Support | Generic `assets` | `environment_asset` | `scriptgo pack --target` writes | Real run |
 |---|---|---|---|---|---|
-| OPEN//77 | supported | resource `files`: every player downloads them before the resource starts; scripts and the WebUI read them | `.zip` preload packages under `archive/pc/mod/` (`.archive`, `.xl`), `r6/tweaks/` (`.yaml`, `.yml`, `.tweak`), `engine/config/` (`.ini`); `.archive` must start with `RDAR` | `open77/<name>/` with `preload_mod(s)` lines, `dependency "archivexl"` when a preload holds `.xl` | not run (needs an OPEN//77 server and a game client; see below) |
+| OPEN//77 | supported | resource `files`: every player downloads them before the resource starts; scripts and the WebUI read them | `.zip` preload packages under `archive/pc/mod/` (`.archive`, `.xl`), `r6/tweaks/` (`.yaml`, `.yml`, `.tweak`), `engine/config/` (`.ini`); `.archive` must start with `RDAR`; in a deployment's copy, an escrowed preload: one `.sgae` directly under `archive/pc/mod/` (starts with `SGAE`, version 1) and its fingerprint record | `open77/<name>/` with `preload_mod(s)` lines, `dependency "archivexl"` when a preload holds `.xl` | not run (needs an OPEN//77 server and a game client; see below) |
 | FiveM | supported | `stream/` files are streamed; others listed in `files {}` | `stream/` (`.ydr .ydd .yft .ytd .ybn .ymap .ytyp .ynd .ynv .ycd .ypt .ymt ...`) and `data_file` targets | `fivem/<name>/fxmanifest.lua` with `files`, `data_file`, `this_is_a_map "yes"` for a `.ymap`; no shim for an asset-only package | not run (an FXServer run needs a Cfx.re licence key; no client) |
 | RedM | partial | as FiveM | as FiveM | not built yet (validated only) | not run |
 | Garry's Mod | supported | content under `materials/ models/ sound/ maps/ resource/ particles/` | the same, `.bsp` maps in `maps/` | `garrysmod/scriptgo_<name>/` with the content and `lua/autorun/server/sgassets_<name>.lua` (`resource.AddSingleFile` per file) | **run**: srcds loads the addon, every file is found in the GAME file system and added to the download list |
@@ -142,7 +142,17 @@ Notes per environment:
 - **OPEN//77.** Preload packages are mounted when the game boots, so a new or changed package needs
   a server restart, and every player downloads it before joining. The OPEN//77 server accepts a
   preload only when every file lands under one of its mod roots and none executes; a file anywhere
-  else refuses the whole package (OPEN//77's `ModRootPolicy`). ArchiveXL is executable on the
+  else refuses the whole package (OPEN//77's `ModRootPolicy`). A preload's fingerprint record is
+  `archive/pc/mod/<stem>.scriptgo-fingerprint.json`, directly under that root; anywhere else it is
+  refused (`open77_preload_root`). An escrowed preload (a deployment's copy, see "OPEN//77 (escrowed
+  preloads)") is accepted so that an operator can pack that copy: one `archive/pc/mod/<stem>.sgae`,
+  directly under that root (a `.sgae` in a subfolder or another root is `open77_preload_type`),
+  starting with `SGAE` and version 1 (`open77_escrow_magic`), whose clear header lists files that
+  obey the roots and types above (`open77_escrow_header` when it does not parse; the files' own codes
+  otherwise), next to the fingerprint record and nothing else (`open77_escrow_mixed`). The `needs`
+  come from that header, so an escrowed preload holding `.xl` files still needs ArchiveXL. The
+  header's signature is checked by OPEN//77 with the signer it trusts (and by `scriptgo assets
+  open`), not by the inspection. ArchiveXL is executable on the
   client: a server whose preloads need it runs in OPEN//77's unsecured mode, and `pack` says so.
 - **FiveM / RedM.** FXServer streams `stream/` itself; `files` makes clients download the rest,
   and `data_file` tells the game to load a file as data. A native file outside `stream/` that no
@@ -176,7 +186,9 @@ Nothing is dropped silently:
   `--without-assets` asks for that build on purpose; the output then lists what was left for the
   other targets;
 - `pack --target scriptgo` (the upload) carries every environment's assets, and `publish` and that
-  target refuse a buyer's fingerprinted copy (`asset_fingerprinted`).
+  target refuse a buyer's fingerprinted copy (`asset_fingerprinted`), an escrowed OPEN//77 preload
+  included (`fingerprinted` lists it). `pack --target open77` packs a deployment's copy as is: its
+  escrowed preloads keep their path, so the `preload_mod` lines do not change.
 
 `scriptgo validate` runs the same inspection and prints the per-environment report.
 
@@ -406,7 +418,8 @@ account copies stay plain and fingerprinted.
 
 The OPEN//77 server distributes the escrowed preload through its existing preload channel
 (`/mods/v1/`), and the launcher copies the `.sgae` into `<game>/archive/pc/mod/`, where the engine
-ignores it. The key path:
+ignores it. `scriptgo pack <copy> --target open77` accepts such a copy ("Notes per environment",
+OPEN//77) and writes the escrowed preload unchanged. The key path:
 
 | Step | Who | What |
 |---|---|---|
@@ -487,8 +500,8 @@ The SDK fixes the formats; the API and website build these.
 - Run `inspectAssets` (`@scriptgo/manifest`, the same version as the CLI tag) on the stored archive
   with the strict reader, reading entries one at a time; refuse the release on any error and show
   the errors to the creator verbatim. Refuse an upload whose report lists `fingerprinted`
-  containers or that holds `<root>/.scriptgo/` (`asset_fingerprinted`): a buyer's copy is never
-  re-published.
+  containers (an escrowed OPEN//77 preload is one) or that holds `<root>/.scriptgo/`
+  (`asset_fingerprinted`): a buyer's copy is never re-published.
 - Store the report in `release_assets`; show per environment on the package page: support, files,
   download size per player, needs (`archivexl`, `tweakxl`, `levelurl`, `fastdl`,
   `this_is_a_map`), game builds.

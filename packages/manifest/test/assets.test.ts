@@ -112,6 +112,64 @@ describe("OPEN//77 preloads", () => {
     const r = inspect(head("no_build", 'environment_asset "open77" "dist/a.zip"\n'), { "dist/a.zip": storedZip({ "archive/pc/mod/a.archive": RDAR() }) });
     expect(codes(r, "warnings")).toEqual(["asset_game_build_missing"]);
   });
+
+  // An escrowed preload, as a deployment's copy carries it (docs/spec/assets.md, "OPEN//77 (escrowed
+  // preloads)"). The SDK's own sealer builds one in the CLI tests; here the preamble and header only.
+  const sgae = (paths: string[], opts: { magic?: Buffer; header?: string } = {}): Buffer => {
+    const header = Buffer.from(opts.header ?? JSON.stringify({ format: "scriptgo-asset-escrow/1", files: paths.map((path) => ({ path })) }), "utf8");
+    const len = Buffer.alloc(4);
+    len.writeUInt32LE(header.length, 0);
+    return Buffer.concat([opts.magic ?? Buffer.from([0x53, 0x47, 0x41, 0x45, 1, 0, 0, 0]), len, header, Buffer.alloc(64, 3)]);
+  };
+  const FP = Buffer.from('{"format":"scriptgo-fingerprint/1"}');
+  const escrowedZip = (entries: Record<string, Buffer>): Buffer => storedZip({ ...entries, "archive/pc/mod/night_market.scriptgo-fingerprint.json": FP });
+
+  it("accepts an escrowed preload: one SGAE container directly under archive/pc/mod/ and its fingerprint record", () => {
+    const zip = escrowedZip({ "archive/pc/mod/night_market.sgae": sgae(["archive/pc/mod/night_market.archive", "archive/pc/mod/night_market.archive.xl"]) });
+    const r = inspect(pkg, { "dist/night_market.zip": zip });
+    expect(r.errors).toEqual([]);
+    // Packing for OPEN//77 still knows the loader the sealed files need, from the clear header.
+    expect(r.environments["open77"]).toMatchObject({ files: ["dist/night_market.zip"], needs: ["archivexl"] });
+    expect(r.environments["open77"]!.containers[0]).toMatchObject({ entries: 2, roots: ["archive/"] });
+    // A deployment's copy: never re-published (the platform refuses it at upload).
+    expect(r.fingerprinted).toEqual(["dist/night_market.zip"]);
+  });
+
+  it("refuses a .sgae without the container magic, in a subfolder, in another root or outside the roots", () => {
+    const files = ["archive/pc/mod/night_market.archive"];
+    const fake = inspect(pkg, { "dist/night_market.zip": escrowedZip({ "archive/pc/mod/night_market.sgae": Buffer.concat([Buffer.from("NOPE"), Buffer.alloc(64, 1)]) }) });
+    expect(codes(fake)).toEqual(["open77_escrow_magic"]);
+    const v2 = inspect(pkg, { "dist/night_market.zip": escrowedZip({ "archive/pc/mod/night_market.sgae": sgae(files, { magic: Buffer.from([0x53, 0x47, 0x41, 0x45, 2, 0, 0, 0]) }) }) });
+    expect(codes(v2)).toEqual(["open77_escrow_magic"]);
+    const nested = inspect(pkg, { "dist/night_market.zip": escrowedZip({ "archive/pc/mod/sub/night_market.sgae": sgae(files) }) });
+    expect(codes(nested)).toEqual(["open77_preload_type"]);
+    expect(nested.errors[0]!.message).toMatch(/directly under archive\/pc\/mod\/ only/);
+    const tweaks = inspect(pkg, { "dist/night_market.zip": escrowedZip({ "r6/tweaks/night_market.sgae": sgae(files) }) });
+    expect(codes(tweaks)).toEqual(["open77_preload_type"]);
+    const outside = inspect(pkg, { "dist/night_market.zip": escrowedZip({ "bin/x64/night_market.sgae": sgae(files) }) });
+    expect(codes(outside)).toEqual(["open77_preload_root"]);
+  });
+
+  it("refuses an escrowed preload whose header is broken or lists files OPEN//77 does not take, or that mixes in clear files", () => {
+    const broken = inspect(pkg, { "dist/night_market.zip": escrowedZip({ "archive/pc/mod/night_market.sgae": sgae([], { header: "{not json" }) }) });
+    expect(codes(broken)).toEqual(["open77_escrow_header"]);
+    const foreign = inspect(pkg, { "dist/night_market.zip": escrowedZip({ "archive/pc/mod/night_market.sgae": sgae(["bin/x64/plugins/a.dat", "archive/pc/mod/a.dll"]) }) });
+    expect(codes(foreign)).toEqual(["open77_preload_root", "open77_preload_type"]);
+    const mixed = inspect(pkg, { "dist/night_market.zip": escrowedZip({ "archive/pc/mod/night_market.sgae": sgae(["archive/pc/mod/a.archive"]), "archive/pc/mod/a.archive": RDAR() }) });
+    expect(codes(mixed)).toEqual(["open77_escrow_mixed"]);
+    const two = inspect(pkg, { "dist/night_market.zip": escrowedZip({ "archive/pc/mod/a.sgae": sgae(["archive/pc/mod/a.archive"]), "archive/pc/mod/b.sgae": sgae(["archive/pc/mod/b.archive"]) }) });
+    expect(codes(two)).toEqual(["open77_escrow_mixed"]);
+  });
+
+  it("takes a preload's fingerprint record directly under archive/pc/mod/ only", () => {
+    const ok = inspect(pkg, { "dist/night_market.zip": escrowedZip({ "archive/pc/mod/night_market.archive": RDAR() }) });
+    expect(ok.errors).toEqual([]);
+    expect(ok.fingerprinted).toEqual(["dist/night_market.zip"]);
+    const generic = inspect(pkg, { "dist/night_market.zip": storedZip({ "archive/pc/mod/night_market.archive": RDAR(), ".scriptgo/fingerprint.json": FP }) });
+    expect(codes(generic)).toEqual(["open77_preload_root"]);
+    const nested = inspect(pkg, { "dist/night_market.zip": storedZip({ "archive/pc/mod/night_market.archive": RDAR(), "archive/pc/mod/x/night_market.scriptgo-fingerprint.json": FP }) });
+    expect(codes(nested)).toEqual(["open77_preload_root"]);
+  });
 });
 
 describe("FiveM", () => {

@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { unzipSync, zipSync } from "fflate";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { randomBytes } from "node:crypto";
-import { buildFingerprinted, escrowPreload } from "@scriptgo/escrow";
+import { buildFingerprinted, escrowedPreloadTransform, escrowPreload } from "@scriptgo/escrow";
 import { fingerprintEntryPath, parseManifest } from "@scriptgo/manifest";
 import { run as assetsCommand } from "../src/commands/assets.ts";
 import { packForOpen77, run as packCommand, scriptgoArchive } from "../src/commands/pack.ts";
@@ -321,6 +321,65 @@ describe("the publish archive and the buyer's copy", () => {
     const republish = await capture(() => packCommand([buyerDir, "--target", "scriptgo", "--out", out("republish")]));
     expect(republish.code).toBe(1);
     expect(republish.text).toMatch(/asset_fingerprinted/);
+  });
+
+  it("a deployment's copy with an escrowed preload packs for OPEN//77, validates, and is never re-published", async () => {
+    const dir = resource("esc_market", 'game_build "open77" "2.5"\nenvironment_asset "open77" "dist/esc.zip"\nassets "media/*.png"\n', { "dist/esc.zip": preload(), "media/esc_sign.png": PNG });
+    const res = readResource(dir);
+    if (!res.result.ok) throw new Error("fixture");
+    const release = await scriptgoArchive(res.result.manifest, listFiles(res.root), res.root, res.manifestFile);
+    const identity = { package: "kestrel//esc-market", version: "1.0.0", release: "rel_1", licence: "lic_9", deployment: "dep_3" };
+    const secret = Buffer.alloc(32, 1);
+    const signerSeed = Buffer.alloc(32, 2);
+    // What the platform builds for a download by a deployment token (asset escrow).
+    const copy = buildFingerprinted({
+      zip: release.zip, root: "esc_market/", containers: [{ path: "esc_market/dist/esc.zip", entry: fingerprintEntryPath("open77", "dist/esc.zip") }],
+      identity, secret, signerSeed,
+      transform: escrowedPreloadTransform({ identity, releaseSecret: Buffer.alloc(32, 5), fingerprintSecret: secret, signerSeed, escrowed: ["esc_market/dist/esc.zip"], chunkBytes: 4096 }),
+    });
+    const unpacked = join(tmp, "deployment", String(n++));
+    for (const [name, data] of Object.entries(unzipSync(copy.zip))) {
+      mkdirSync(join(unpacked, name, ".."), { recursive: true });
+      writeFileSync(join(unpacked, name), data);
+    }
+    const buyerDir = join(unpacked, "esc_market");
+    const escrowedZip = readFileSync(join(buyerDir, "dist", "esc.zip"));
+    expect(Object.keys(unzipSync(escrowedZip)).sort()).toEqual(["archive/pc/mod/esc.scriptgo-fingerprint.json", "archive/pc/mod/esc.sgae"]);
+    expect(escrowedZip.includes(RDAR)).toBe(false);
+
+    const packed = packForOpen77(readResource(buyerDir), out("esc"));
+    expect(packed.errors).toEqual([]);
+    const text = readFileSync(join(packed.dest, "open77.lua"), "utf8");
+    expect(text).toMatch(/preload_mod "dist\/esc\.zip"/);
+    expect(text).toMatch(/dependency "archivexl"/); // the sealed preload holds an .xl: read from the clear header
+    expect(readFileSync(join(packed.dest, "dist", "esc.zip")).equals(escrowedZip)).toBe(true);
+    expect(planAssets(readResource(buyerDir), "open77").report.fingerprinted).toEqual(["dist/esc.zip"]);
+
+    const cli = await capture(() => packCommand([buyerDir, "--target", "open77", "--out", out("esc-cli")]));
+    expect(cli.code).toBe(0);
+    const validated = await capture(() => validateCommand([buyerDir]));
+    expect(validated.code).toBe(0);
+    expect(validated.text).toMatch(/open77: supported, 2 files, each player downloads [^;]+; needs archivexl/);
+    const republish = await capture(() => packCommand([buyerDir, "--target", "scriptgo", "--out", out("esc-republish")]));
+    expect(republish.code).toBe(1);
+    expect(republish.text).toMatch(/asset_fingerprinted/);
+  });
+
+  it("refuses a fake .sgae and a .sgae in a subfolder of a preload", () => {
+    const fake = resource("fake_sgae", 'environment_asset "open77" "dist/f.zip"\n', {
+      "dist/f.zip": zip({ "archive/pc/mod/f.sgae": Buffer.from("not a container at all"), "archive/pc/mod/f.scriptgo-fingerprint.json": Buffer.from("{}") }),
+    });
+    const r1 = packForOpen77(readResource(fake), out("fake-sgae"));
+    expect(r1.errors.map((e) => e.code)).toEqual(["open77_escrow_magic"]);
+    expect(r1.dest).toBe("");
+    const sealed = escrowPreload({
+      preload: preload(), entry: "archive/pc/mod/sub/n.sgae", package: "kestrel//n", version: "1.0.0", release: "rel_1",
+      deployment: "dep_1", contentKey: randomBytes(32), signerSeed: Buffer.alloc(32, 9), fingerprint: null, chunkBytes: 4096,
+    });
+    const nested = resource("nested_sgae", 'environment_asset "open77" "dist/n.zip"\n', { "dist/n.zip": sealed });
+    const r2 = packForOpen77(readResource(nested), out("nested-sgae"));
+    expect(r2.errors.map((e) => e.code)).toEqual(["open77_preload_type"]);
+    expect(r2.dest).toBe("");
   });
 });
 
