@@ -178,7 +178,7 @@ M.ENVIRONMENTS = {
         },
     },
     open77 = {
-        protection = { tier = "escrow", state = "available", optIn = true, note = "Code escrow, an opt-in server feature: a protected release is decrypted in memory, with a key released to the licensed server only. The operator of the machine can still inspect their own process; that takes real effort and the copy is traceable." },
+        protection = { tier = "escrow", state = "available", optIn = true, note = "Code escrow, an opt-in server feature: a protected release is decrypted in memory, with a key released to the licensed server only. Client scripts can ship as encrypted, stripped Lua bytecode (client code escrow, scriptgo publish --client-escrow), compiled into the game only for a session the licensed server admits; web_files stay clear. The operator of the machine can still inspect their own process, and a player can read and decompile what their own game runs; that takes real effort and the copy is traceable." },
         name = "OPEN//77",
         -- A layer on top of an existing game (players need the game); every other entry is an engine
         -- or runtime that hosts Lua itself.

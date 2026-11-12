@@ -24,7 +24,10 @@ The license key goes in the `<resource>:license_key` convar, never in the resour
 Code escrow is an opt-in, default-off feature of the OPEN//77 server. The server decrypts a
 protected release through a native library: the key stays in native memory and the plain code never
 reaches the disk. Only server scripts are encrypted; shared and client scripts go to game clients,
-so they stay readable.
+so they stay readable. A release published with `--client-escrow` is the exception for client
+scripts: they reach players as encrypted, stripped bytecode, compiled into the game only for a session
+the server admits (client code escrow, same server switch and token). A player can still decompile
+what their game runs.
 
 1. Install the release still encrypted:
 

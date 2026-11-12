@@ -185,8 +185,10 @@ offline grace period. A resource checks its licence with the
 Every release is signed, and a release can also be encrypted. The key of an encrypted release goes
 only to a licensed server bound by its own key, and each delivery is marked. On a host that runs
 compiled code it is decrypted in memory; on a host that runs plain script the protection is the
-licence and the signature. Only server scripts are protected. It deters copying and makes leaks
-traceable. It does not make copying impossible.
+licence and the signature. Code escrow protects server scripts; on OPEN//77, client scripts can ship
+as encrypted, stripped bytecode ([client code escrow](/docs/protect-your-work#client-scripts-on-open77)),
+which a player can still decompile. It deters copying and makes leaks traceable. It does not make
+copying impossible.
 
 ## For platform builders
 

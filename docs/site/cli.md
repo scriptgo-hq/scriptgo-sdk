@@ -250,6 +250,28 @@ admits. It needs OPEN//77 preloads in the release and cannot be combined with `-
 platforms receive the same release's assets as usual (licensed and fingerprinted). See
 [Selling assets](/docs/selling-assets#encrypted-assets-on-open77).
 
+#### Publish encrypted client scripts (OPEN//77)
+
+```bash
+scriptgo publish --client-escrow --client-lines ./client-lines.json --owns-code
+```
+
+`--client-escrow` ships the release's `client_scripts` to players as **stripped Lua bytecode**, never
+as source. SCRIPT//GO compiles them from your uploaded source with its own Lua 5.4.8 compiler and seals
+them, for each licensed deployment, in `clientcode.sgce`; each script's path in the copy holds a stub.
+The licensed OPEN//77 server hands the key to each player session the master admits, and the game
+compiles the bytecode in native memory. It needs a release whose only environment is `open77` and
+whose client scripts are Lua; it cannot be combined with `--escrow` in this version, and can with
+`--asset-escrow`. `web_files` stay clear.
+
+- `--client-strip full` (default) drops names and line numbers: an error names a position, such as
+  `my-package@1.0.0/client/main.lua:pos:40: …`. `--client-strip names` keeps line numbers.
+- `--client-lines <file>` writes the line map that turns positions back into lines. The same map is
+  on your release (`GET /v1/creator/releases/:id/client-lines`). It is never shipped to players.
+
+A player can still read their own game's memory and decompile what it runs into working Lua without
+your local names. See [Protect your work](/docs/protect-your-work#client-scripts-on-open77).
+
 ### scriptgo add
 
 ```bash
@@ -319,6 +341,7 @@ scriptgo escrow load     --bundle resources/inventory_pro-1.5.0.escrow.zip \
     --deployment-token "$SCRIPTGO_DEPLOYMENT_TOKEN" --identity ./server-identity.json \
     --trusted-signer <the creator's key> --once --out resources/inventory_pro
 scriptgo escrow install  resources/inventory_pro-1.5.0.escrow.zip --target open77 --out <resources folder>
+scriptgo escrow lines    ./client-lines.json "my-package@1.0.0/client/main.lua:pos:40: attempt to index a nil value"
 ```
 
 - `inspect` prints what a bundle holds, readable and encrypted, and checks its signature. It needs
@@ -336,6 +359,10 @@ scriptgo escrow install  resources/inventory_pro-1.5.0.escrow.zip --target open7
 - `install --target open77` writes an OPEN//77 resource folder with the scripts still encrypted.
   It decrypts nothing: a server with that feature switched on does it. It refuses a bundle that was
   not packed for OPEN//77.
+- `lines` resolves the positions of a client-code-escrow error (`…:pos:<n>:`) to source lines with
+  the line map of that release (`publish --client-lines`, or the release's `client-lines` route). It
+  reads a message, or a log on standard input with `-`, and prints it with `<path>:<line>:` in
+  place; with no message it summarises the map.
 
 For code that stays in memory, use a compiled host: the [.NET kit](/docs/dotnet-kit).
 

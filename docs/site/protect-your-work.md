@@ -165,6 +165,47 @@ A refund, a lost payment dispute, an ended subscription or a revocation closes t
   default), then stops. The grace exists so that a short outage of the API never stops a paying
   server.
 
+## Client scripts on OPEN//77
+
+Code escrow keeps server scripts on the server. Client scripts have to run on every player's game,
+so on OPEN//77 they can be protected another way: **client code escrow**.
+
+```bash
+scriptgo publish --client-escrow --client-lines ./client-lines.json --owns-code
+```
+
+- **No source reaches a player.** SCRIPT//GO compiles your client scripts from the source you upload,
+  with its own Lua 5.4.8 compiler, to **stripped bytecode**: no local names, no comments and, by
+  default, no line numbers. It never accepts bytecode from you.
+- **Encrypted at rest and in transit.** Each licensed deployment's copy seals the bytecode in
+  `clientcode.sgce` with a key for that deployment. The player's cache holds only that container and
+  a stub at each script's path.
+- **A key per session.** The licensed server gets the key from SCRIPT//GO and wraps it for each
+  player session the OPEN//77 master admits (a connect ticket). The game decrypts the bytecode in
+  native memory, compiles it, and wipes the buffer. There is no way for a script to load bytecode
+  itself.
+- **Revocation.** After a refund or a revocation, the server's next key request is refused and no new
+  session gets the key: players who join then are refused the resource. A session already running
+  keeps what it compiled until it disconnects.
+- **Errors stay readable for you.** A player's error names a position
+  (`my-package@1.0.0/client/main.lua:pos:40: …`). Your line map turns it into a line:
+  `scriptgo escrow lines ./client-lines.json "<message>"`. The map is on your release and is never
+  shipped.
+
+What it does **not** do, measured in the real game:
+
+- **A player can decompile it.** The game must run the bytecode, so a player who reads their own
+  game's memory can capture it. A stock decompiler (`unluac`) turned our test script back into
+  working Lua: every string and number, every global and field name, the loops and the arithmetic.
+  It lost only local names, comments and line numbers. This is a higher bar than shipping source, and
+  far from secrecy.
+- **`web_files` stay clear.** HTML, JavaScript and CSS reach players as they are.
+- It needs a release whose only environment is `open77`, and it cannot be combined with `--escrow`
+  on the same release in this version.
+
+Keep anything that must stay secret on the server. Client code escrow makes copying slower,
+licence-bound and traceable; it does not make client code private.
+
 ## Protect without selling
 
 You do not have to sell a package to protect it. You can grant a **free licence** for one of your
@@ -317,7 +358,10 @@ environments page, and each package page says what applies to that package.
   the cost and the watermark makes the copy traceable. Neither makes it impossible.
 - **It does not hide code on a pure-script host.** There the protection is the licence check and
   the signature.
-- **It protects server scripts only.** What a client receives can be read on that client.
+- **It does not hide client code from the player.** Code escrow covers server scripts. On OPEN//77,
+  [client code escrow](#client-scripts-on-open77) ships client scripts as encrypted, stripped
+  bytecode instead of source; a player can still decompile what their own game runs. Elsewhere, what
+  a client receives can be read on that client.
 - **It is not obfuscation.** Obfuscation is at most a speed bump, never protection. An optional
   minify step at packaging is in development; it is a speed bump too, and it is never counted as
   protection.

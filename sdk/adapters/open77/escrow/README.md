@@ -19,9 +19,19 @@ each delivery carries a marker that names the licence it was delivered to. It is
 operator of a machine can ultimately recover what their own process runs. We never describe it as
 doing more than raising the cost.
 
-Only **server** scripts are encrypted. OPEN//77 sends shared scripts, client scripts and declared
-files to game clients, so the packer keeps them clear. Anything a creator wants to keep private
-belongs in a server script.
+Only **server** scripts are encrypted by code escrow. OPEN//77 sends shared scripts, client scripts
+and declared files to game clients, so the packer keeps them clear. Anything a creator wants to keep
+private belongs in a server script.
+
+Client scripts have their own, separate path: **client code escrow** (`scriptgo publish
+--client-escrow`, `docs/spec/client-escrow.md`). A licence's copy then carries them as stripped Lua
+bytecode sealed in `clientcode.sgce`, with a stub at each path; the OPEN//77 server registers the
+container at resource start (`resourceEscrow` must be on, with the deployment token) and wraps its
+key to each admitted player session; the game compiles the bytecode in native memory. In v1 a release
+uses one or the other: `--client-escrow` is refused together with `--escrow`. A player can still
+decompile what their own game runs; `web_files` stay clear. Run in the real game on 2026-11-12
+(OPEN//77 research, `resource-escrow.md` Phase 6): granted, refused without ownership, refused after
+revocation.
 
 ## The server feature (as built)
 

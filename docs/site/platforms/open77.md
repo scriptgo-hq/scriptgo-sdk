@@ -103,7 +103,7 @@ What the adapter provides. See [SDK and capabilities](/docs/sdk/capabilities) fo
 
 ## Protection
 
-Code escrow, an opt-in server feature: a protected release is decrypted in memory, with a key released to the licensed server only. The operator of the machine can still inspect their own process; that takes real effort and the copy is traceable.
+Code escrow, an opt-in server feature: a protected release is decrypted in memory, with a key released to the licensed server only. Client scripts can ship as encrypted, stripped Lua bytecode (client code escrow, scriptgo publish --client-escrow), compiled into the game only for a session the licensed server admits; web_files stay clear. The operator of the machine can still inspect their own process, and a player can read and decompile what their own game runs; that takes real effort and the copy is traceable.
 
 See [Protect your work](/docs/protect-your-work) for what protection does and does not do.
 
