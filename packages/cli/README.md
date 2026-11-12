@@ -4,7 +4,7 @@ The `scriptgo` command line: create, test, verify, pack, publish and install SCR
 It runs on Node.js 22 or later.
 
 ```bash
-npm install -g https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.7/scriptgo-cli-0.1.7.tgz
+npm install -g https://github.com/scriptgo-hq/scriptgo-sdk/releases/download/v0.1.8/scriptgo-cli-0.1.8.tgz
 scriptgo --help
 ```
 
