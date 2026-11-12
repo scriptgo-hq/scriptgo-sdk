@@ -16,8 +16,8 @@ import { z } from "zod";
  * `status: "retired"` keys still verify containers sealed before a rotation; a client keeps them
  * until those containers are gone. Keys are base64url, 32 bytes.
  *
- * The list is empty until the platform publishes its key here: until then a host pins the key the
- * platform gives it out of band, and no container should be trusted for being signed at all.
+ * A self-hosted or development API signs with its own key: a host that targets one pins that key
+ * through its own local configuration, never through anything the game server sends.
  */
 export const PlatformSigner = z.object({
   /** First 16 hex of the SHA-256 of the public key. */
@@ -31,7 +31,16 @@ export const PlatformSigner = z.object({
 });
 export type PlatformSigner = z.infer<typeof PlatformSigner>;
 
-export const PLATFORM_CONTAINER_SIGNERS: readonly PlatformSigner[] = Object.freeze([]);
+export const PLATFORM_CONTAINER_SIGNERS: readonly PlatformSigner[] = Object.freeze([
+  {
+    // Production (api.scriptgo.dev), in service since 2026-11-11.
+    keyId: "d39a25324116c63b",
+    alg: "ed25519",
+    publicKey: "kYzQwL0qhMjMufpfD5w6WFybMBtn7sIsoF8k4jYFCSo",
+    signs: ["asset-container", "client-container"],
+    status: "current",
+  },
+]);
 
 /** The public keys a client pins for `kind`, current first. */
 export function platformContainerSigners(kind: PlatformSigner["signs"][number]): string[] {
