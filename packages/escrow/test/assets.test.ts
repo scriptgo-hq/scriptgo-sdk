@@ -11,8 +11,14 @@ import {
   assetKeyId,
   buildFingerprinted,
   canonicalJson,
+  assetServerAad,
   deriveAssetContentKey,
+  ed25519FromSeed,
   ed25519Sign,
+  escrowedPreloadContainer,
+  escrowedPreloadEntry,
+  escrowedPreloadTransform,
+  escrowPreload,
   findFingerprints,
   fingerprintEntry,
   FINGERPRINT_ENTRY,
@@ -22,8 +28,10 @@ import {
   replaceEntries,
   sealAssetContainer,
   unwrapAssetKeyOnClient,
+  unwrapContentKey,
   verifyFingerprintRecord,
   wrapAssetKeyForClient,
+  wrapContentKey,
 } from "../src/index.ts";
 import { assetVectors, MATERIAL, OPEN77_PRELOAD_ENTRY, releaseArchive } from "./vectors/build.ts";
 
@@ -198,5 +206,88 @@ describe("committed asset vectors", () => {
     expect(key.equals(Buffer.from(a.contentKey, "base64"))).toBe(true);
     const r = new AssetContainerReader(Buffer.from(a.containerBase64, "base64"), key, { trustedSigner: a.signerPublicKey });
     for (const f of a.files) expect(createHash("sha256").update(r.readAll(f.path)).digest("hex")).toBe(f.sha256);
+  });
+});
+
+describe("OPEN//77 escrowed preloads", () => {
+  const releaseSecret = MATERIAL.releaseSecret;
+  const escrowedCopy = (deployment: string) =>
+    buildFingerprinted({
+      zip: releaseArchive().zip,
+      root: "night_market/",
+      containers: [{ path: "night_market/dist/night_market.zip", entry: OPEN77_PRELOAD_ENTRY }],
+      identity: { ...identity, deployment },
+      secret: MATERIAL.fingerprintSecret,
+      signerSeed: MATERIAL.fingerprintSignerSeed,
+      transform: escrowedPreloadTransform({
+        identity: { ...identity, deployment },
+        releaseSecret,
+        fingerprintSecret: MATERIAL.fingerprintSecret,
+        signerSeed: MATERIAL.fingerprintSignerSeed,
+        escrowed: ["night_market/dist/night_market.zip"],
+        chunkBytes: 4096,
+      }),
+    });
+  const preloadOf = (zip: Buffer) => Buffer.from(unzipSync(zip)["night_market/dist/night_market.zip"]!);
+
+  it("keeps the preload's path; holds one container and the fingerprint record, no clear file", () => {
+    const preload = preloadOf(escrowedCopy("dep_7").zip);
+    expect(Object.keys(unzipSync(preload)).sort()).toEqual(["archive/pc/mod/night_market.scriptgo-fingerprint.json", "archive/pc/mod/night_market.sgae"]);
+    expect(escrowedPreloadEntry(OPEN77_PRELOAD_ENTRY)).toBe("archive/pc/mod/night_market.sgae");
+    expect(() => escrowedPreloadEntry("x/.scriptgo/fingerprint.json")).toThrow();
+  });
+
+  it("opens with the deployment's key only: the key a server unwraps, re-wrapped to a session", () => {
+    const preload = preloadOf(escrowedCopy("dep_7").zip);
+    const found = escrowedPreloadContainer(preload)!;
+    const header = readAssetContainer(found.container, { trustedSigner: ed25519FromSeed(MATERIAL.fingerprintSignerSeed).publicKey.toString("base64url") }).header;
+    expect(header.deployment).toBe("dep_7");
+    expect(header.fingerprint).toBe(escrowedCopy("dep_7").marker);
+    // The API wraps the deployment's key to the bound server; the server unwraps it ...
+    const server = generateX25519KeyPair();
+    const contentKey = deriveAssetContentKey(releaseSecret, "dep_7");
+    const toServer = wrapContentKey(contentKey, server.publicKey, assetServerAad(identity.package, identity.version, "dep_7"));
+    const onServer = unwrapContentKey(toServer, server.privateKey, server.publicKey, assetServerAad(identity.package, identity.version, "dep_7"));
+    // ... and re-wraps it to one player's session key.
+    const session = generateX25519KeyPair();
+    const aad = assetClientAad(identity.package, identity.version, header.keyId);
+    const onClient = unwrapAssetKeyOnClient(wrapAssetKeyForClient(onServer, session.publicKey, aad), session.privateKey, session.publicKey, aad);
+    const r = new AssetContainerReader(found.container, onClient);
+    const original = unzipSync(releaseArchive().preload);
+    expect(r.paths()).toEqual(Object.keys(original).sort());
+    for (const p of r.paths()) expect(r.readAll(p).equals(Buffer.from(original[p]!))).toBe(true);
+    // Another deployment's key does not open it, and the wrap is bound to its own aad.
+    expect(() => new AssetContainerReader(found.container, deriveAssetContentKey(releaseSecret, "dep_8"))).toThrow(/key/);
+    expect(() => unwrapContentKey(toServer, server.privateKey, server.publicKey, assetServerAad(identity.package, identity.version, "dep_8"))).toThrow();
+  });
+
+  it("differs per deployment and is deterministic", () => {
+    expect(escrowedCopy("dep_7").sha256).toBe(escrowedCopy("dep_7").sha256);
+    expect(escrowedCopy("dep_7").sha256).not.toBe(escrowedCopy("dep_8").sha256);
+  });
+
+  it("refuses a preload that is already escrowed or empty", () => {
+    const preload = preloadOf(escrowedCopy("dep_7").zip);
+    const key = deriveAssetContentKey(releaseSecret, "dep_7");
+    const base = { entry: "archive/pc/mod/x.sgae", package: identity.package, version: identity.version, release: "rel_01", deployment: "dep_7", contentKey: key, signerSeed: MATERIAL.fingerprintSignerSeed, fingerprint: null };
+    expect(() => escrowPreload({ ...base, preload })).toThrow(/already/);
+    expect(() => escrowPreload({ ...base, preload: Buffer.from(zipSync({})) })).toThrow(/no file/);
+  });
+
+  it("the committed vector's server wrap and escrowed copy open with the published material", () => {
+    const v = JSON.parse(readFileSync(join(here, "vectors", "asset-vectors.json"), "utf8")) as {
+      assetEscrow: {
+        contentKey: string;
+        server: { privateKey: string; publicKey: string; aad: string; wrapped: { epk: string; nonce: string; wrapped: string } };
+        escrowedCopy: { zipBase64: string; signerPublicKey: string; preloadEntry: string; preloadFiles: { path: string; sha256: string }[] };
+      };
+    };
+    const a = v.assetEscrow;
+    const key = unwrapContentKey(a.server.wrapped, Buffer.from(a.server.privateKey, "base64url"), Buffer.from(a.server.publicKey, "base64url"), Buffer.from(a.server.aad, "utf8"));
+    expect(key.equals(Buffer.from(a.contentKey, "base64"))).toBe(true);
+    const found = escrowedPreloadContainer(preloadOf(Buffer.from(a.escrowedCopy.zipBase64, "base64")))!;
+    expect(found.entry).toBe(a.escrowedCopy.preloadEntry);
+    const r = new AssetContainerReader(found.container, key, { trustedSigner: a.escrowedCopy.signerPublicKey });
+    for (const f of a.escrowedCopy.preloadFiles) expect(createHash("sha256").update(r.readAll(f.path)).digest("hex")).toBe(f.sha256);
   });
 });

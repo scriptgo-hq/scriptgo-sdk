@@ -248,6 +248,11 @@ export function buildFingerprinted(opts: {
   identity: FingerprintIdentity;
   secret: Buffer;
   signerSeed: Buffer;
+  /**
+   * Replaces a container's bytes before it is stamped (asset escrow: `escrowPreload` turns an
+   * OPEN//77 preload into its escrowed form). Returns the bytes to stamp; called in path order.
+   */
+  transform?: (container: { path: string; entry: string; data: Buffer }) => Buffer;
 }): FingerprintedBuild {
   const src = Buffer.from(opts.zip.buffer, opts.zip.byteOffset, opts.zip.byteLength);
   const archive = readZip(src);
@@ -264,7 +269,8 @@ export function buildFingerprinted(opts: {
     if (!entry) throw new ZipError("missing_entry", `${path}: not in the release archive`);
     const inner = entry.method === 0 ? Buffer.from(src.subarray(entry.dataOffset, entry.dataOffset + entry.compressedSize)) : readEntry(src, entry);
     if (readZip(inner).entries.some((e) => isFingerprintEntryName(e.name))) throw new ZipError("already_stamped", `${path}: already holds a fingerprint entry`);
-    const stamped = appendStoredEntry(inner, wanted.get(path)!, fingerprintEntry(opts.identity, path, opts.secret, opts.signerSeed).bytes);
+    const data = opts.transform ? opts.transform({ path, entry: wanted.get(path)!, data: inner }) : inner;
+    const stamped = appendStoredEntry(data, wanted.get(path)!, fingerprintEntry(opts.identity, path, opts.secret, opts.signerSeed).bytes);
     replacements.set(path, stamped);
     containers.push({ path, sha256: sha256(stamped), bytes: stamped.length });
   }

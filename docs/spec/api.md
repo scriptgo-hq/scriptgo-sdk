@@ -376,10 +376,16 @@ POST /v1/licenses/verify     { licenseKey | deploymentToken, package, environmen
                              → 200 { valid, reason: VerifyFailureReason | null, status: LicenseStatus | null,
                                      activationStatus: ActivationStatus | null, expiresAt, offlineGraceUntil,
                                      environments: string[], token: string }   // ed25519-signed, short-lived
-POST /v1/licenses/key        { licenseKey | deploymentToken, package, version?, environment, adapterVersion, serverPublicKey? }
+POST /v1/licenses/key        { licenseKey | deploymentToken, package, version?, environment, adapterVersion, serverPublicKey?,
+                               kind?: "code" | "assets" }
                              → 200 { valid, reason: KeyReleaseFailureReason | null, final: boolean,
                                      wrappedKey: {epk,nonce,wrapped} | null,
-                                     aad, signerPublicKey, deliveryWatermark, offlineGraceUntil, expiresAt }
+                                     aad, signerPublicKey, deliveryWatermark, offlineGraceUntil, expiresAt,
+                                     keyId?, version? }
+                               // kind "assets" (default "code"): the asset content key of an asset-escrowed
+                               // release, for the token's deployment, wrapped with the server aad of
+                               // docs/spec/assets.md "Asset escrow"; keyId names it. Same checks and order;
+                               // not_escrowed when the release has no asset escrow. Logged with kind assets.
                                // final: true on revoked | refunded | expired | deactivated (the right to run is
                                // over: a loader stops at once); false otherwise (the offline grace applies).
                                // escrow: content key wrapped to the bound server. Gated like verify, plus binding +

@@ -101,6 +101,9 @@ extern "C" {
 #define SG_ERR_UNSUPPORTED (-18)         /* zip64, multi-disk, an encrypted entry or an unknown method */
 #define SG_ERR_INSECURE_PERMISSIONS (-19)/* the identity file is readable by other users (POSIX) */
 #define SG_ERR_EXISTS (-20)              /* the file already exists and was not replaced */
+#define SG_ERR_BAD_CONTAINER (-21)       /* an asset container's preamble, header or file table is malformed */
+#define SG_ERR_KEY_MISMATCH (-22)        /* the asset content key is not this container's key (keyId) */
+#define SG_ERR_UNTRUSTED_SIGNER (-23)    /* the container is signed by another key than the pinned one */
 
 /* ------------------------------------------------------------------------------------------ general */
 
@@ -263,6 +266,117 @@ SG_API int SG_CALL sg_bundle_lua_load(const sg_bundle* bundle, const char* path,
  * from the bundle is invalid. Lua functions already compiled from it keep running: stopping the
  * resource (closing its lua_State) is the host's job. */
 SG_API void SG_CALL sg_bundle_free(sg_bundle* bundle);
+
+/* ------------------------------------------------------------------------------------- asset escrow */
+/* Asset escrow, `scriptgo-asset-escrow/1` (docs/spec/assets.md, "Asset escrow"): files a game client
+ * loads (an OPEN//77 preload's REDengine archives), encrypted per deployment with AES-256-GCM in
+ * chunks so a range can be decrypted without the rest. Added with no change to the calls above
+ * (SG_ABI_VERSION stays 1).
+ *
+ * The key flow:
+ *   licensed server  sg_asset_key_unwrap(server identity, SG_ASSET_WRAP_SERVER, ...)   the API's answer
+ *                    sg_asset_key_wrap(key, player session public key, ...)            per player
+ *   game client      sg_identity_generate()                                           one per connection
+ *                    sg_asset_key_unwrap(session identity, SG_ASSET_WRAP_CLIENT, ...)  the server's wrap
+ *                    sg_asset_container_open / _bind / sg_asset_reader_read            in memory
+ *
+ * Honest ceiling, as everywhere in this library: a client that draws an asset holds it in clear in
+ * its memory and on its GPU, and whoever controls that machine can copy it there. This keeps the
+ * files encrypted at rest and in transit, with a key per deployment handed to one session at a
+ * time and refused after revocation. It does not make extraction from a running client impossible. */
+
+#define SG_ASSET_KEY_BYTES 32u
+#define SG_ASSET_KEY_ID_CHARS 22u                    /* base64url of 16 bytes, without the NUL */
+#define SG_ASSET_MAX_HEADER_BYTES (4u * 1024u * 1024u)
+#define SG_ASSET_MIN_CHUNK_BYTES 4096u
+#define SG_ASSET_MAX_CHUNK_BYTES (16u * 1024u * 1024u)
+#define SG_ASSET_MAX_FILES 16384u
+
+#define SG_ASSET_WRAP_SERVER 1 /* the API to a licensed server: info "scriptgo.escrow.keywrap.v1" */
+#define SG_ASSET_WRAP_CLIENT 2 /* a licensed server to one player's session: info "scriptgo.asset-escrow.client-keywrap.v1" */
+
+/* A content key in guarded memory (sodium_malloc, read-only, wiped on free). Never exported. */
+typedef struct sg_asset_key sg_asset_key;
+
+/* Unwraps a content key wrapped to `identity` (ECIES: X25519, HKDF-SHA256 with salt epk || identity
+ * public key and the info of `kind`, AES-256-GCM over the 32-byte key with `aad`). On the server the
+ * identity is its sg_identity and `aad` the server aad of the API's answer; on a client it is the
+ * session identity made for this connection and `aad` the client aad. `wrapped_len` must be
+ * SG_WRAPPED_KEY_BYTES. SG_ERR_UNWRAP when the key was wrapped to another identity, kind or aad. */
+SG_API int SG_CALL sg_asset_key_unwrap(const sg_identity* identity, int kind,
+                                       const uint8_t epk[SG_PUBLIC_KEY_BYTES],
+                                       const uint8_t wrap_nonce[SG_NONCE_BYTES],
+                                       const uint8_t* wrapped, size_t wrapped_len,
+                                       const uint8_t* aad, size_t aad_len,
+                                       sg_asset_key** out_key);
+
+/* Wraps `key` to one player's session public key (kind SG_ASSET_WRAP_CLIENT, a fresh ephemeral key
+ * and a random nonce per call). `aad` is the client aad: "scriptgo-asset-escrow/1\nclient\n"
+ * <package> "@" <version> "\n" <keyId>. Writes SG_WRAPPED_KEY_BYTES to `out_wrapped`. */
+SG_API int SG_CALL sg_asset_key_wrap(const sg_asset_key* key,
+                                     const uint8_t client_public_key[SG_PUBLIC_KEY_BYTES],
+                                     const uint8_t* aad, size_t aad_len,
+                                     uint8_t out_epk[SG_PUBLIC_KEY_BYTES],
+                                     uint8_t out_wrap_nonce[SG_NONCE_BYTES],
+                                     uint8_t out_wrapped[SG_WRAPPED_KEY_BYTES]);
+
+/* The key's id, base64url(SHA-256("scriptgo.asset-escrow.keyid.v1" || key)[0..16]), NUL-terminated:
+ * `out` holds at least SG_ASSET_KEY_ID_CHARS + 1 bytes. Identifies a key without revealing it. */
+SG_API int SG_CALL sg_asset_key_id(const sg_asset_key* key, char* out, size_t capacity);
+
+/* Wipes and frees. NULL is accepted. */
+SG_API void SG_CALL sg_asset_key_free(sg_asset_key* key);
+
+/* An opened container. It BORROWS the container bytes: keep them alive and unchanged until
+ * sg_asset_container_free. Immutable once bound, so any number of readers may use it at once. */
+typedef struct sg_asset_container sg_asset_container;
+
+/* Runs every check of docs/spec/assets.md "Reading" that needs no key, in that order: preamble,
+ * header length, header JSON in canonical form, format / cipher / kdf, chunk size, the pinned signer
+ * (`trusted_signer`, 32 bytes, or NULL to accept the key the header names), the ed25519 signature,
+ * every file's path, chunk count, range and nonce prefix, the body length, and each file's
+ * ciphertext SHA-256. Errors: SG_ERR_BAD_CONTAINER, SG_ERR_UNTRUSTED_SIGNER, SG_ERR_BAD_SIGNATURE,
+ * SG_ERR_UNSAFE_PATH, SG_ERR_PAYLOAD_HASH (a file's ciphertext does not match the signed hash). */
+SG_API int SG_CALL sg_asset_container_open(const uint8_t* data, size_t len,
+                                           const uint8_t* trusted_signer,
+                                           sg_asset_container** out_container);
+
+/* A header field as a NUL-terminated string owned by the container: "package", "version",
+ * "release", "deployment", "keyId", "signerPublicKey" or "fingerprint" (SG_ERR_NOT_FOUND when the
+ * fingerprint is null). */
+SG_API int SG_CALL sg_asset_container_field(const sg_asset_container* container, const char* name, const char** out_value);
+
+SG_API int SG_CALL sg_asset_container_file_count(const sg_asset_container* container, size_t* out_count);
+
+/* File `index` in path order: its path (owned by the container) and its plaintext size. */
+SG_API int SG_CALL sg_asset_container_file_at(const sg_asset_container* container, size_t index,
+                                              const char** out_path, uint64_t* out_size);
+
+/* Gives the container its content key (copied into the container's guarded memory). SG_ERR_KEY_MISMATCH
+ * when the key's id is not the header's keyId. Call once, before any reader is made. */
+SG_API int SG_CALL sg_asset_container_bind(sg_asset_container* container, const sg_asset_key* key);
+
+/* Wipes the key and frees. Free every reader first. NULL is accepted. */
+SG_API void SG_CALL sg_asset_container_free(sg_asset_container* container);
+
+/* A reader belongs to one thread: it owns one decrypted chunk in guarded memory, so consecutive
+ * small reads of the same chunk cost one decryption. Make one per thread that reads. */
+typedef struct sg_asset_reader sg_asset_reader;
+
+SG_API int SG_CALL sg_asset_reader_new(const sg_asset_container* container, sg_asset_reader** out_reader);
+
+/* Decrypts the bytes [offset, offset + length) of `path`, clamped to the file, into `buffer`
+ * (capacity `length`). `out_read` receives the number of bytes written (0 at or past the end).
+ * Every chunk the range covers is authenticated before a byte of it is copied: SG_ERR_DECRYPT is
+ * a tampered or moved chunk, never a partial result. SG_ERR_NOT_FOUND for an unknown path,
+ * SG_ERR_INVALID_ARGUMENT before sg_asset_container_bind.
+ * THE BUFFER IS PLAINTEXT OUTSIDE THIS LIBRARY: that is the point (the engine's loader reads it),
+ * and from there this library can neither wipe it nor keep it out of a dump. */
+SG_API int SG_CALL sg_asset_reader_read(sg_asset_reader* reader, const char* path, uint64_t offset,
+                                        uint8_t* buffer, size_t length, size_t* out_read);
+
+/* Wipes the cached chunk and frees. NULL is accepted. */
+SG_API void SG_CALL sg_asset_reader_free(sg_asset_reader* reader);
 
 #ifdef __cplusplus
 }

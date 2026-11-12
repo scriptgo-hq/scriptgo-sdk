@@ -1,5 +1,6 @@
 // scriptgo publish [dir] [--package <slug>] --owns-code [--targets-proprietary-game] [--dry-run]
 //                  [--escrow [--escrow-ignore <glob>]...] [--asset-rights original|game-edits|game-extracted]
+//                  [--asset-escrow]
 // scriptgo publish --bundle <file.escrow.zip> --escrow-key <file.json> --package <slug> --owns-code
 //
 // --escrow publishes a PROTECTED release: the CLI builds the encrypted bundle here, signs its
@@ -16,6 +17,10 @@
 // Rights are never assumed: without --owns-code the release is left validated but unpublished.
 // A release with assets also needs --asset-rights: the case that applies to them (made by you,
 // edits of a game's files, or files taken from a game), shown to operators as information.
+// --asset-escrow (a release with OPEN//77 preloads): every deployment's copy carries its preloads
+// sealed in a `scriptgo-asset-escrow/1` container under a key per deployment; the key goes to the
+// licensed, bound server only, which hands it to each player's session (docs/spec/assets.md, "Asset
+// escrow"). Encrypted at rest and in transit, revocable; a player's game still holds what it draws.
 import { existsSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { readBundle } from "@scriptgo/escrow";
@@ -82,7 +87,7 @@ const ASSET_RIGHTS: Record<string, string> = { original: "original", "game-edits
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function run(args: string[]): Promise<number> {
-  const a = parseArgs(args, { booleans: ["help", "owns-code", "targets-proprietary-game", "dry-run", "escrow"], repeatable: ["escrow-ignore"] });
+  const a = parseArgs(args, { booleans: ["help", "owns-code", "targets-proprietary-game", "dry-run", "escrow", "asset-escrow"], repeatable: ["escrow-ignore"] });
   if (a.bools.has("help")) {
     console.log(
       "scriptgo publish [resourceDir] [--package <slug>] --owns-code [--targets-proprietary-game] [--dry-run] [--timeout <seconds>]\n" +
@@ -112,6 +117,14 @@ export async function run(args: string[]): Promise<number> {
   if (pack) {
     const plainSha = createHash("sha256").update(pack.zip).digest("hex");
     console.log(`packed ${pack.name} ${pack.version}: ${pack.files.length} files, ${pack.zip.byteLength} bytes, sha256 ${plainSha}`);
+    if (a.bools.has("asset-escrow") && !hasAssets(pack.manifest)) {
+      console.error("scriptgo publish: --asset-escrow needs a release with assets (environment_asset \"open77\" preloads)");
+      return 2;
+    }
+    if (a.bools.has("asset-escrow") && a.bools.has("escrow")) {
+      console.error("scriptgo publish: --asset-escrow and --escrow cannot be combined: a release with assets is delivered per buyer, its server code is not escrowed");
+      return 2;
+    }
     if (a.bools.has("dry-run") && !a.bools.has("escrow")) return 0;
   }
 
@@ -168,6 +181,7 @@ export async function run(args: string[]): Promise<number> {
     form.append("archive", new Blob([new Uint8Array(upload.bytes)], { type: "application/zip" }), upload.fileName);
     // The content key travels once, in this authenticated request; the master seals it at rest.
     if (upload.contentKey) form.append("contentKey", upload.contentKey);
+    if (a.bools.has("asset-escrow")) form.append("assetEscrow", "true");
     let release = (await api.request<Release>("POST", `/v1/creator/packages/${encodeURIComponent(slug)}/releases`, { form })).data;
     upload.contentKey = null;
     // A release that failed validation stores nothing, so its hash is only checked when it is kept.

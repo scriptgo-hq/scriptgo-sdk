@@ -134,6 +134,25 @@ macOS build is written and not yet built or tested (`sdk/native/README.md`). It 
 | `native_library_unavailable:` | libscriptgo missing, wrong ABI, or no hardware AES | install it, or opt in to managed |
 | `revoked:` | the content was revoked or disposed | open again once licensed |
 
+## Asset escrow (servers that hand asset keys to players)
+
+`docs/spec/assets.md`, "Asset escrow". Native backend only: the content key is never a managed
+array.
+
+```csharp
+var answer = await keys.RequestAssetKeyAsync(version, identity);          // POST /v1/licenses/key {kind:"assets"}
+if (answer.Valid && answer.Aad == AssetEscrowFormat.ServerAad(package, version, deploymentId))
+{
+    using var key = AssetKey.UnwrapForServer(identity, answer.WrappedKey!, answer.Aad);
+    // per player session: their 32-byte X25519 public key
+    var wrapped = key.WrapForClient(sessionPublicKey, AssetEscrowFormat.ClientAad(package, version, key.KeyId));
+}
+```
+
+`AssetContainer` (open, check, `Bind`, `OpenReader`) is the client side in .NET, used by the tests
+and by tools; a game client hook is native code over the same `sg_asset_*` calls.
+`key_mismatch` from `Bind` is another deployment's or another release's key.
+
 ## More
 
 - The wire format, for any language: `docs/spec/escrow.md`.

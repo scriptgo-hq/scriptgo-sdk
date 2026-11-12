@@ -21,10 +21,11 @@ SCRIPT//GO does, a player who controls their machine can extract an asset their 
   takedown on report.** Say "licensed, fingerprinted, traceable". Do not say "encrypted" or
   "escrow" for v1 assets, and never "unbreakable".
 - A fingerprint identifies a copy; it does not prevent copying. Repacking the files removes it.
-- **Asset escrow** (below) is a format, tooling and a hook interface. It needs work in each
-  platform's game client. Where that work exists, it raises the cost of copying an asset from a
-  server or a player's disk; it does not prevent extraction from a running client. No platform has
-  that client work today.
+- **Asset escrow** (below) is a format, a key protocol and a client hook. It needs work in each
+  platform's game client; OPEN//77 is the first environment with that work (on a branch, not
+  released). Say "encrypted at rest and in transit, a key per session, revocable". It raises the
+  cost of copying an asset from a server, from a distribution channel or from a player's disk
+  while the game is not running; it does not prevent extraction from a running client.
 
 ## Manifest
 
@@ -332,9 +333,45 @@ partial result. Closing a reader wipes its key.
   aad)` with `aad = "scriptgo-asset-escrow/1\nclient\n" + package + "@" + version + "\n" + keyId`.
   The session key pair lives in the client's memory for one connection.
 
+### The key protocol
+
+Three hops. No hop carries a key in clear, and the `releaseSecret` never leaves the platform.
+
+```text
+API ──(1) POST /v1/licenses/key {kind:"assets"}──▶ licensed server   wrapped to the server identity, server aad
+licensed server ──(2) per player session────────▶ game client      re-wrapped to the session key, client aad
+game client ──(3) in memory─────────────────────▶ engine loader    sg_asset_reader_read
+```
+
+1. **API to server.** `POST /v1/licenses/key` with `kind: "assets"` and the usual body
+   (`deploymentToken`, `package`, `version`, `environment`, `serverPublicKey`). The checks and their
+   order are those of code escrow (`api.md`), plus `not_escrowed` when the release has no asset
+   escrow. A granted answer is the code-escrow answer plus `keyId` and `version`; `aad` is the
+   server aad of "Key wrapping". The server checks `aad` against the package, version and
+   deployment it expects before it unwraps (`sg_asset_key_unwrap`, kind `SG_ASSET_WRAP_SERVER`;
+   .NET `AssetKey.UnwrapForServer`) and keeps the key in guarded native memory. It renews on the
+   code-escrow cadence; a definitive refusal (revoked, refunded, deployment unbound or deactivated)
+   makes it drop the key and stop handing it out. Every grant and refusal is in the key audit
+   (`escrow_key_events`, `kind = assets`).
+2. **Server to client.** The client makes an X25519 session key pair in memory for one connection
+   and sends the public half with the `keyId`s it needs; the server answers each `keyId` it holds
+   with `sg_asset_key_wrap` (a fresh ephemeral key and nonce per answer; .NET
+   `AssetKey.WrapForClient`) and the signer it trusts. The transport is the environment's own (for
+   OPEN//77, below).
+3. **Client.** `sg_asset_key_unwrap` (kind `SG_ASSET_WRAP_CLIENT`), `sg_asset_container_open` with
+   the signer pinned, `sg_asset_container_bind`, then reads. The session private key and the
+   content key live in `sodium_malloc` memory and are wiped on free.
+
+**What a revocation does.** From the next renewal (or once offline grace has run out) the server
+holds no key and answers no client; a client that starts after that cannot open a container. A
+client already running keeps what it decrypted until it exits. A server operator who copies the
+key out of their own process is not stopped by this protocol; the fingerprint in each container's
+header still names the licence.
+
 ### The client hook (interface)
 
-A platform implements five calls in its game client, in native code:
+A platform implements five calls in its game client, in native code. `libscriptgo`
+(`sdk/native`, `escrow.h`, section "asset escrow") implements all five; a hook links or loads it:
 
 | Call | Does |
 |---|---|
@@ -344,17 +381,58 @@ A platform implements five calls in its game client, in native code:
 | `read(handle, path, offset, length) -> bytes` | decrypts the chunks covering the range, into memory handed to the engine's loader |
 | `close(handle)` | wipes the key and the decrypted buffers |
 
-The decrypted bytes go to the engine's file system layer in memory and are never written to disk.
-The server side (`wrapAssetKeyForClient`) needs a channel to send the wrapped key to one player.
-`AssetContainerReader` in `packages/escrow/src/asset-escrow.ts` is the reference decryptor;
-`scriptgo assets seal` and `scriptgo assets open` make and read containers for hook development;
-`asset-vectors.json` holds a container, its key, a client wrap and the plaintext hashes.
+The goal is that decrypted bytes go to the engine's file system layer in memory and are never
+written to disk. Where an engine cannot mount from memory, a hook may materialise files for the
+life of the process only, and must say so (OPEN//77 below). `AssetContainerReader` in
+`packages/escrow/src/asset-escrow.ts` is the reference decryptor and `sdk/native/src/asset.c` the
+native one; `scriptgo assets seal` and `scriptgo assets open` make and read containers (`open` also
+reads an escrowed OPEN//77 preload). `asset-vectors.json` and `sdk/native/tests/asset_vector.h`
+hold a container, its key, a server wrap, a client wrap, another deployment's key and an escrowed
+OPEN//77 copy, with the plaintext hashes; the TypeScript, C and .NET tests read the same vector.
+
+### OPEN//77 (escrowed preloads)
+
+A release published with `scriptgo publish --asset-escrow` (refused together with code `--escrow`,
+and without an OPEN//77 container) is stored as usual, plus a random `releaseSecret` the API keeps
+sealed. On a download **by a deployment token**, each OPEN//77 preload container
+(`dist/<stem>.zip`) of the buyer's copy is replaced by an **escrowed preload**: a zip holding
+`archive/pc/mod/<stem>.sgae` (the preload's files sealed for that deployment, signed by the
+platform's fingerprint signer, with the copy's marker as `fingerprint`) and the usual fingerprint
+record (`escrowedPreloadTransform` through `buildFingerprinted({ transform })`). The rest of the
+copy (scripts, media) is the normal fingerprinted copy. A licence download without a deployment
+gets containers sealed for the deployment `""`, which no key answer ever opens; creator and staff
+account copies stay plain and fingerprinted.
+
+The OPEN//77 server distributes the escrowed preload through its existing preload channel
+(`/mods/v1/`), and the launcher copies the `.sgae` into `<game>/archive/pc/mod/`, where the engine
+ignores it. The key path:
+
+| Step | Who | What |
+|---|---|---|
+| 1 | server | at start and on renewal, `POST /v1/licenses/key {kind:"assets"}` per escrowed resource; unwraps with its escrow identity |
+| 2 | client plugin, at boot, before the engine mounts archives | finds `archive/pc/mod/*.sgae`, makes a session key pair, asks the server it was launched for (`OP77_CONNECT`): `POST /assets/v1/keys {sessionPublicKey, keyIds}` |
+| 3 | server | answers each `keyId` it holds, re-wrapped to that session (client aad), with its trusted signer; logged per request |
+| 4 | client plugin | opens each container with that signer pinned, binds, decrypts |
+
+**What OPEN//77 cannot do yet, said plainly.** REDengine mounts archives from files under
+`archive/pc/mod/` at boot; no in-memory mount is known for 2.5. The OPEN//77 hook therefore
+decrypts in memory and then **materialises the files for the life of the game process**: written
+at boot next to the container, listed in a journal, deleted when the process exits, and swept at
+the next boot if the process died. While the game runs, the plaintext is on the player's disk.
+What it still buys: the asset is encrypted on the server, in the distribution channel, in the
+launcher's cache and on the player's disk whenever the game is not running, and a client that is
+not launched for a licensed, unrevoked server gets no key. A true in-memory mount (hooking the
+depot's archive loading) is future work and needs reverse engineering of the 2.5 binary.
+
+Who may ask for a key at step 2 is the server's policy: by default any client that can reach the
+server, as for the preload files themselves. Binding it to a player identity (a master connect
+ticket) is an open decision below.
 
 ### Client work per environment
 
 | Environment | Client work escrow needs | Feasibility | What it would buy |
 |---|---|---|---|
-| OPEN//77 | the RED4ext client plugin loads REDengine archives from memory instead of `archive/pc/mod/` (ResourceDepot mounts archives from files at boot), plus the key exchange | unresearched for REDengine 2.5: whether the depot can mount an in-memory archive is open | a preload is useless off a licensed server; extraction from a running client remains |
+| OPEN//77 | the key exchange at boot and a decryptor in the RED4ext client plugin (built, see "OPEN//77"); a true in-memory mount needs the depot's archive loading hooked | key exchange and decryption: built and tested outside the game; in-memory mount: unresearched for REDengine 2.5 | an escrowed preload is useless off a licensed, unrevoked server; while the game runs the files are on disk, and extraction from a running client remains |
 | FiveM / RedM | none possible from a resource: the client is Cfx.re's. FiveM's own Asset Escrow encrypts stream files tied to Cfx.re accounts and server keys; on 2025-08-08 Cfx.re reported a flaw that let assets be extracted from the game client, and on 2025-10-16 added an obfuscation layer for 3D models and a re-encrypt button ([Asset Security Update](https://forum.cfx.re/t/asset-security-update/5344773), [Introducing Asset Escrow](https://forum.cfx.re/t/introducing-asset-escrow-for-your-resources/4777151)) | not by SCRIPT//GO | sellers on FiveM rely on the platform's own escrow and on enforcement against servers |
 | Garry's Mod | a binary module on every client; GMod clients do not load server-sent binary modules | not feasible | - |
 | Luanti | an engine fork (media are hashed and cached by the client) | not feasible without forking the engine | - |
@@ -383,8 +461,8 @@ The SDK fixes the formats; the API and website build these.
   `asset_delivery_hashes(sha256 → delivery_id)`).
 - Secrets, outside the database rows (a secret store, as the escrow keys): one **fingerprint
   secret** (≥ 32 bytes) and one **fingerprint signer** ed25519 seed per platform, with key ids so
-  they can rotate (old keys kept for lookup and verification); for asset escrow later, one
-  `releaseSecret` per release.
+  they can rotate (old keys kept for lookup and verification); for asset escrow, one
+  `releaseSecret` per release, stored sealed (as the code-escrow key material) and never served.
 - `asset_reports` (takedown): `id`, `package`, `release_id`, `reporter`, `evidence` (a hash, a
   record, a URL), `resolved_delivery_id`, `status` (`open`, `actioned`, `rejected`), `action`,
   timestamps, audited.
@@ -430,11 +508,14 @@ otherwise 403 `license_required`). For a release with assets it answers the buye
 id. Creator and staff downloads get a copy fingerprinted to their own account (never the
 unstamped original, except `?variant=original` for staff, audited). Rate limits as other downloads.
 
-### The key endpoint (asset escrow, later)
+### The key endpoint (asset escrow)
 
-`POST /v1/licenses/key` with `kind: "assets"`: the same checks and binding as code escrow, then
-`contentKey = deriveAssetContentKey(releaseSecret, deploymentId)`, wrapped to the server with the
-server aad above. The server re-wraps it to each player's session. Not built in v1.
+`POST /v1/licenses/key` with `kind: "assets"`: the same checks, order and binding as code escrow,
+plus `not_escrowed`; then `contentKey = deriveAssetContentKey(releaseSecret, deploymentId)`,
+wrapped to the server with the server aad above. The answer adds `keyId` and `version`; its
+`deliveryWatermark` is the deployment copy's fingerprint marker when one was built. Audited in
+`escrow_key_events` with `kind = assets`. The server re-wraps the key to each player's session
+("The key protocol").
 
 ### Takedown and lookup
 
@@ -463,6 +544,11 @@ package has no script run there. `sdk/conformance/sg_assets_probe` is the fixtur
   the client are not proven by these runs.
 
 ## Open decisions (owner)
+
+- **Who may ask a server for an asset key.** Any client that reaches the server (the default, like
+  the preload files), or only a player holding a master connect ticket or a signed identity.
+- **A true in-memory mount for OPEN//77.** Until the depot's archive loading is hooked, escrowed
+  preloads are on the player's disk while the game runs.
 
 - **Size caps.** The defaults above (256 MiB per file, 1 GiB per release) are a proposal; storage
   and egress cost scale with them and with the per-buyer copies.

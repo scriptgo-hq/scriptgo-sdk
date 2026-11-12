@@ -109,7 +109,7 @@ if(SG_SANITIZE)
 endif()
 
 # ------------------------------------------------------------------------------------------- scriptgo
-set(SG_SOURCES src/escrow.c src/zip.c src/identity_win.c src/identity_posix.c)
+set(SG_SOURCES src/escrow.c src/asset.c src/zip.c src/identity_win.c src/identity_posix.c)
 if(WIN32)
   list(APPEND SG_SOURCES src/scriptgo.rc)
 endif()
@@ -210,4 +210,32 @@ if(SG_BUILD_TESTS)
   if(SG_TEST_LUA_LIBRARY)
     set_tests_properties(lua_load_through_real_lua PROPERTIES ENVIRONMENT "SG_TEST_LUA_LIBRARY=${SG_TEST_LUA_LIBRARY}")
   endif()
+
+  # Asset escrow (docs/spec/assets.md), against tests/asset_vector.h. Keep in step with tests/test_asset.c.
+  add_executable(sg_asset_tests tests/test_asset.c)
+  target_link_libraries(sg_asset_tests PRIVATE scriptgo)
+  if(SG_SANITIZE)
+    target_compile_options(sg_asset_tests PRIVATE ${SG_SANITIZE_COMPILE})
+    target_link_options(sg_asset_tests PRIVATE ${SG_SANITIZE_LINK})
+  endif()
+  if(MSVC)
+    target_compile_options(sg_asset_tests PRIVATE /W4 /WX /utf-8)
+    target_compile_definitions(sg_asset_tests PRIVATE _CRT_SECURE_NO_WARNINGS)
+  else()
+    target_compile_options(sg_asset_tests PRIVATE -Wall -Wextra)
+  endif()
+  set(SG_ASSET_TEST_CASES
+    asset_keys_unwrap_and_rewrap
+    asset_client_vector_unwrap
+    asset_container_good_path
+    asset_container_refuses_other_key
+    asset_container_refuses_tampering
+    asset_reader_refuses_changed_chunk
+    asset_escrowed_preload_vector
+    asset_container_survives_mutations
+    asset_handles_reject_misuse)
+  foreach(case IN LISTS SG_ASSET_TEST_CASES)
+    add_test(NAME ${case} COMMAND sg_asset_tests ${case})
+    set_tests_properties(${case} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  endforeach()
 endif()

@@ -95,9 +95,11 @@ per-delivery marker (HMAC over release+license+deployment) is returned by the ke
 stamped into the decrypted copy by the loader. Both attribute a leak; neither prevents one.
 
 Assets are not code: a package's client-delivered assets are never encrypted by this format (the
-OPEN//77 builder keeps them clear, like `files`). Their v1 protection is a licence-gated download, a
-fingerprinted copy per buyer and signed releases, and their own container format,
-`scriptgo-asset-escrow/1`, is specified with its client hook in [assets.md](assets.md).
+OPEN//77 builder keeps them clear, like `files`). Their protection is a licence-gated download, a
+fingerprinted copy per buyer and signed releases; a release published with `--asset-escrow` also
+gets its OPEN//77 preloads sealed per deployment in their own container format,
+`scriptgo-asset-escrow/1`, specified with its key protocol and client hook in
+[assets.md](assets.md).
 
 ## Loader (ScriptGo.Host.Escrow)
 
