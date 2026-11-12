@@ -495,6 +495,8 @@ export function clientEscrowCopy(opts: {
   signerSeed: Buffer;
   strip: ClientStrip;
   fingerprint: string | null;
+  /** TRANSITION ONLY, see `sealClientContainer`: for game clients whose libscriptgo predates 0.2.0. */
+  legacyPlaintextSha256?: boolean;
 }): ClientEscrowCopy {
   const scripts = [...new Set(opts.scripts)].sort();
   if (scripts.length === 0) throw new ClientEscrowError("no_scripts", "client escrow needs at least one client script");
@@ -509,6 +511,7 @@ export function clientEscrowCopy(opts: {
     signerSeed: opts.signerSeed,
     strip: opts.strip,
     fingerprint: opts.fingerprint,
+    legacyPlaintextSha256: opts.legacyPlaintextSha256,
   });
   return {
     stubs: new Map(scripts.map((p) => [`${opts.root}${p}`, clientEscrowStub(p)])),

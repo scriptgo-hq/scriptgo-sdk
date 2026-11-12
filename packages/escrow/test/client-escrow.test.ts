@@ -294,12 +294,12 @@ describe("the per-buyer copy", () => {
   const identity = { licence: "lic_1", release: "rel_1", package: "c//pkg", version: "1.0.0", deployment: "dep_1" };
   const secret = Buffer.alloc(32, 9);
 
-  function build() {
+  function build(legacyPlaintextSha256?: boolean) {
     let lines: ReturnType<typeof clientEscrowCopy>["lines"] | null = null;
     const out = buildFingerprinted({
       zip: release, root: "res/", containers: [], identity, secret, signerSeed,
       clientEscrow: ({ marker, read }) => {
-        const copy = clientEscrowCopy({ read, root: "res/", scripts: ["client/main.lua", "client/b.lua"], package: "c//pkg", version: "1.0.0", release: "rel_1", deployment: "dep_1", contentKey: deriveClientContentKey(releaseSecret, "dep_1"), signerSeed, strip: "full", fingerprint: marker });
+        const copy = clientEscrowCopy({ read, root: "res/", scripts: ["client/main.lua", "client/b.lua"], package: "c//pkg", version: "1.0.0", release: "rel_1", deployment: "dep_1", contentKey: deriveClientContentKey(releaseSecret, "dep_1"), signerSeed, strip: "full", fingerprint: marker, legacyPlaintextSha256 });
         lines = copy.lines;
         return copy;
       },
@@ -322,6 +322,18 @@ describe("the per-buyer copy", () => {
     expect(findFingerprints(out.zip, signer).every((f) => f.ok)).toBe(true);
     expect(Object.keys(lines.chunks)).toEqual(["client/b.lua", "client/main.lua"]);
     expect(build().out.sha256).toBe(out.sha256);
+  });
+
+  it("writes the ciphertext hash by default and the legacy plaintext hash only when asked", () => {
+    const chunksOf = (zipBytes: Buffer) => {
+      const zip = readZip(zipBytes);
+      const container = readZipEntry(zipBytes, zip.entries.find((e) => e.name === `res/${CLIENT_ESCROW_ENTRY}`)!);
+      return readClientContainer(container).header.chunks;
+    };
+    const current = chunksOf(build().out.zip);
+    expect(current.every((c) => typeof c.ciphertextSha256 === "string" && c.sha256 === undefined)).toBe(true);
+    const legacy = chunksOf(build(true).out.zip);
+    expect(legacy.every((c) => typeof c.sha256 === "string" && c.ciphertextSha256 === undefined)).toBe(true);
   });
 
   it("refuses an escrowed client script missing from the release", () => {
