@@ -1,4 +1,4 @@
-// scriptgo pack <dir> --target scriptgo|open77|garrysmod|beammp|fivem|luanti|rust|hytale [--out dist]
+// scriptgo pack <dir> --target scriptgo|open77|garrysmod|beammp|fivem|redm|luanti|rust|hytale [--out dist]
 //
 //   scriptgo  a .zip of the resource for `scriptgo publish` (manifest, every referenced file, every
 //             asset); each TypeScript entry x.ts is compiled to x.ts.js inside the archive
@@ -13,6 +13,9 @@
 //   fivem     a FiveM resource folder: a generated fxmanifest.lua, the one-file shim, the resource,
 //             stream/ and data files (lib/fivem-pack.ts). The shim has no licence check: a package
 //             with scripts that needs one is refused.
+//   redm      the same for RedM: game "rdr3" with its rdr3_warning, RedM's own environment assets.
+//             --cfx-escrow (fivem, redm): the build a creator uploads to Cfx.re's own asset escrow,
+//             with escrow_ignore from cfx_escrow_ignore, and its upload zip. Cfx.re encrypts it.
 //   luanti    a Luanti media mod sgmedia_<name>/ (lib/asset-targets.ts), plus the SCRIPT//GO mod and
 //             the resource when the package has scripts.
 //   rust      the package's custom map, for the operator to host at server.levelurl.
@@ -40,7 +43,7 @@ import {
 import { parseArgs } from "../lib/args.ts";
 import { packForGarrysmod } from "../lib/garrysmod.ts";
 import { open77Portability } from "../lib/portability.ts";
-import { packFivemTarget } from "../lib/fivem-pack.ts";
+import { isCfxGame, packCfxTarget } from "../lib/fivem-pack.ts";
 import { listFiles, readResource, sdkRoot, type LoadedResource } from "../lib/sdk.ts";
 import { compileTypeScript, type CompileIssue } from "../lib/typescript.ts";
 import { packBeamMPCommand } from "../lib/beammp.ts";
@@ -50,7 +53,7 @@ import { packAssetTargetCommand } from "../lib/asset-targets.ts";
 import { CLIENT_ESCROW_ENTRY } from "@scriptgo/escrow";
 import { secretFiles } from "../lib/secret-files.ts";
 
-export const summary = "Package a resource: a publishable .zip, or a folder for OPEN//77, Garry's Mod, BeamMP or FiveM";
+export const summary = "Package a resource: a publishable .zip, or a folder for OPEN//77, Garry's Mod, BeamMP, FiveM, RedM, Luanti, Rust or Hytale";
 
 // The OPEN//77 generation (manifest, shim files) lives in @scriptgo/manifest so the master builds a
 // protected release with the same files as this CLI. Re-exported here for the callers that had them.
@@ -105,7 +108,7 @@ export async function scriptgoArchive(
 }
 
 /** Every `--target` of `scriptgo pack`. */
-export const PACK_TARGETS = ["scriptgo", "open77", "garrysmod", "beammp", "fivem", "luanti", "rust", "hytale"];
+export const PACK_TARGETS = ["scriptgo", "open77", "garrysmod", "beammp", "fivem", "redm", "luanti", "rust", "hytale"];
 
 export interface PackIssue {
   code: string;
@@ -193,9 +196,9 @@ export function packForOpen77(
 }
 
 export async function run(args: string[]): Promise<number> {
-  const a = parseArgs(args, { booleans: ["help", "allow-unportable", "no-runtime", "escrow", "without-assets"], repeatable: ["escrow-ignore"] });
+  const a = parseArgs(args, { booleans: ["help", "allow-unportable", "no-runtime", "escrow", "without-assets", "cfx-escrow"], repeatable: ["escrow-ignore"] });
   if (a.bools.has("help") || a.positional.length === 0) {
-    console.log(`scriptgo pack <resourceDir> [--target ${PACK_TARGETS.join("|")}] [--out dist] [--allow-unportable] [--no-runtime] [--without-assets] [--escrow [--escrow-ignore <glob>]... [--escrow-key-out <file>]]`);
+    console.log(`scriptgo pack <resourceDir> [--target ${PACK_TARGETS.join("|")}] [--out dist] [--allow-unportable] [--no-runtime] [--without-assets] [--escrow [--escrow-ignore <glob>]... [--escrow-key-out <file>]] [--cfx-escrow (fivem, redm)]`);
     return a.bools.has("help") ? 0 : 2;
   }
   const res = readResource(a.positional[0]!);
@@ -219,6 +222,10 @@ export async function run(args: string[]): Promise<number> {
   if (secrets.length > 0) {
     for (const s of secrets) console.error(`error secret_file: ${s}: remove it from the resource folder (or from the manifest's globs)`);
     return 1;
+  }
+  if (a.bools.has("cfx-escrow") && !isCfxGame(target)) {
+    console.error("--cfx-escrow builds for Cfx.re's own asset escrow: use it with --target fivem or --target redm");
+    return 2;
   }
   if (target === "scriptgo") {
     // The upload carries every environment's assets: check them all before building it.
@@ -276,7 +283,10 @@ export async function run(args: string[]): Promise<number> {
 
   if (target === "beammp") return packBeamMPCommand(res, join(out, "beammp"), { withoutAssets });
 
-  if (target === "fivem") return packFivemTarget(res, out, a.bools.has("allow-unportable"), withoutAssets); // lib/fivem-pack.ts
+  if (isCfxGame(target)) {
+    // lib/fivem-pack.ts
+    return packCfxTarget(res, out, target, { allowUnportable: a.bools.has("allow-unportable"), withoutAssets, cfxEscrow: a.bools.has("cfx-escrow") });
+  }
   if (target === "luanti" || target === "rust" || target === "hytale") return packAssetTargetCommand(res, target, join(out, target)); // lib/asset-targets.ts
   console.error(`unknown target '${target}' (${PACK_TARGETS.join(", ")})`);
   return 2;

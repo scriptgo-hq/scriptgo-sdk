@@ -3,11 +3,12 @@
 // lines, so they check process handling and parsing, never a package. Real evidence comes only from
 // `scriptgo verify --env fivem` on a real FXServer.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { fivemManifest, luaString, packForFivem } from "../src/lib/fivem-pack.ts";
+import { unzipSync } from "fflate";
+import { fivemManifest, luaString, packForCfx, packForFivem, RDR3_WARNING } from "../src/lib/fivem-pack.ts";
 import { fivemServerCfg, newFxConsole, readFxLine, verifyFivem } from "../src/lib/fivem-verify.ts";
 import { findInterpreters, readResource, repoRoot } from "../src/lib/sdk.ts";
 
@@ -149,6 +150,194 @@ describe("packForFivem", () => {
     expect(seen).toContain("shared_script=scriptgo_shim.lua");
     expect(seen).toContain("server_script=server/probe.lua");
     expect(seen).toContain("dependencies=sg_eventbus,sg_inventory,sg_permissions");
+  });
+});
+
+/**
+ * Evaluates a generated fxmanifest.lua the way FXServer does (every unknown global is a directive,
+ * `data_file "A" "B"` is a curried call) and returns `name=value` lines. Null without lua54.
+ */
+function readFxManifest(file: string): string[] | null {
+  const lua = findInterpreters().find((i) => i.name === "lua54");
+  if (!lua) return null; // tools/build-lua.ps1 not run here
+  const harness = join(tmp, "read-fxmanifest.lua");
+  writeFileSync(harness, [
+    "local seen = {}",
+    "local function show(v) return type(v) == 'table' and table.concat(v, ',') or tostring(v) end",
+    "local env = setmetatable({}, { __index = function(_, k) return function(v)",
+    "  local i = #seen + 1; seen[i] = k .. '=' .. show(v)",
+    "  return function(w) seen[i] = seen[i] .. ' ' .. show(w) end",
+    "end end })",
+    "assert(loadfile(arg[1], 't', env))()",
+    "print(table.concat(seen, '\\n'))",
+  ].join("\n"));
+  const out = spawnSync(lua.path, [harness, file], { encoding: "utf8" });
+  expect(out.status, out.stderr).toBe(0);
+  return out.stdout.trim().split(/\r?\n/);
+}
+
+describe("packForCfx: RedM", () => {
+  it("writes game rdr3 with RedM's exact pre-release acknowledgement, and a shim that says redm", () => {
+    const r = packForCfx(readResource(join(repoRoot, "sdk", "packages", "sg_inventory")), join(tmp, "redm"), { game: "redm" });
+    expect(r.errors).toEqual([]);
+    const text = readFileSync(join(r.dest, "fxmanifest.lua"), "utf8");
+    expect(text).toMatch(/^game "rdr3"$/m);
+    expect(text).not.toMatch(/gta5/);
+    // Word for word what FXServer (build 38435) asks for; without it RedM refuses the resource.
+    expect(text).toContain('rdr3_warning "I acknowledge that this is a prerelease build of RedM, and I am aware my resources *will* become incompatible once RedM ships."');
+    expect(RDR3_WARNING).toBe("I acknowledge that this is a prerelease build of RedM, and I am aware my resources *will* become incompatible once RedM ships.");
+    const shim = readFileSync(join(r.dest, "scriptgo_shim.lua"), "utf8");
+    expect(shim).toMatch(/^local ENVIRONMENT = "redm"\r?$/m);
+    expect(shim).not.toMatch(/^local ENVIRONMENT = "fivem"/m);
+    expect(r.warnings.join(" ")).toMatch(/does not list redm/);
+    const seen = readFxManifest(join(r.dest, "fxmanifest.lua"));
+    if (seen) expect(seen.slice(0, 4)).toEqual(["fx_version=cerulean", "game=rdr3", `rdr3_warning=${RDR3_WARNING}`, "version=1.0.2"]);
+  });
+
+  it("ships RedM's own environment assets and scripts, never FiveM's", () => {
+    const dir = resource("two_games_pkg", {
+      "scriptgo.lua": manifest("two_games_pkg", [
+        'server_script "s.lua"',
+        'environment_script "redm" "env/redm.lua"',
+        'environment_script "fivem" "env/fivem.lua"',
+        'environment_asset "fivem" { "stream/gta/**", "data/gta/**" }',
+        'environment_asset "redm" { "stream/rdr/**", "data/rdr/**" }',
+        'game_build "fivem" "3258"', 'game_build "redm" "1491"',
+        'data_file "VEHICLE_METADATA_FILE" "data/gta/vehicles.meta"',
+        'data_file "DLC_ITYP_REQUEST" "data/rdr/props.ytyp"',
+        "",
+      ].join("\n")),
+      "s.lua": "\n", "env/redm.lua": "\n", "env/fivem.lua": "\n",
+      "stream/gta/a.ydr": "RSC7 gta", "data/gta/vehicles.meta": "<x/>", "stream/rdr/b.ydr": "RSC7 rdr", "stream/rdr/m.ymap": "RSC7 map", "data/rdr/props.ytyp": "RSC7 ytyp",
+    });
+    const r = packForCfx(readResource(dir), join(tmp, "redm"), { game: "redm" });
+    expect(r.errors).toEqual([]);
+    const text = readFileSync(join(r.dest, "fxmanifest.lua"), "utf8");
+    expect(text).toMatch(/^data_file "DLC_ITYP_REQUEST" "data\/rdr\/props\.ytyp"$/m);
+    expect(text).not.toMatch(/gta/);
+    expect(text).toMatch(/^this_is_a_map "yes"$/m);
+    expect(text.split("\n").filter((l) => /_script /.test(l))).toEqual([
+      'shared_script "scriptgo_shim.lua"', 'server_script "s.lua"', 'server_script "env/redm.lua"', 'client_script "env/redm.lua"',
+    ]);
+    expect(existsSync(join(r.dest, "stream", "gta"))).toBe(false);
+    expect(existsSync(join(r.dest, "stream", "rdr", "b.ydr"))).toBe(true);
+    // The FiveM build of the same package keeps the other half.
+    const f = packForFivem(readResource(dir), join(tmp, "fivem2"));
+    expect(f.errors).toEqual([]);
+    const ftext = readFileSync(join(f.dest, "fxmanifest.lua"), "utf8");
+    expect(ftext).toMatch(/^data_file "VEHICLE_METADATA_FILE" "data\/gta\/vehicles\.meta"$/m);
+    expect(ftext).not.toMatch(/rdr/);
+  });
+
+  it("refuses a required presence capability on RedM and strips the section otherwise", () => {
+    const req = resource("needs_presence", { "scriptgo.lua": manifest("needs_presence", 'capabilities { "presence" }\nserver_script "s.lua"\n'), "s.lua": "\n" });
+    expect(packForCfx(readResource(req), join(tmp, "redm"), { game: "redm" }).errors.map((e) => e.code)).toEqual(["redm_presence_unavailable"]);
+    const r = packForCfx(readResource(join(repoRoot, "sdk", "conformance", "sg_probe_presence")), join(tmp, "redm"), { game: "redm" });
+    if (r.errors.length === 0) {
+      expect(readFileSync(join(r.dest, "scriptgo_shim.lua"), "utf8")).not.toMatch(/scriptgo_presence_addr/);
+    } else {
+      expect(r.errors.map((e) => e.code)).toEqual(["redm_presence_unavailable"]);
+    }
+  });
+
+  it("refuses a package that needs a licence check, as on FiveM", () => {
+    const r = packForCfx(readResource(join(repoRoot, "examples", "packages", "inventory_pro")), join(tmp, "redm"), { game: "redm" });
+    expect(r.errors.map((e) => e.code)).toContain("fivem_licensing_unavailable");
+  });
+});
+
+describe("packForCfx: --cfx-escrow", () => {
+  const escrowPkg = (): string =>
+    resource("escrowed_shop", {
+      "scriptgo.lua": manifest("escrowed_shop", [
+        'shared_script "config.lua"',
+        'server_script "server/main.lua"',
+        'client_script "client/main.lua"',
+        'web_ui_page "web/index.html"',
+        'web_file "web/app.js"',
+        'file "data/prices.json"',
+        'environment_asset "fivem" "stream/**"',
+        'game_build "fivem" "3258"',
+        'cfx_escrow_ignore { "config.lua", "data/*.json", "locales/*.lua" }',
+        "",
+      ].join("\n")),
+      "config.lua": "Config = {}\n", "server/main.lua": "\n", "client/main.lua": "\n",
+      "web/index.html": "<p>x</p>", "web/app.js": "1", "data/prices.json": "{}",
+      "stream/shop.ydr": "RSC7 model", "stream/shop.ytd": "RSC7 texture",
+    });
+
+  it("writes escrow_ignore, lua54 and the upload zip, and says what Cfx.re leaves readable", () => {
+    const r = packForCfx(readResource(escrowPkg()), join(tmp, "esc"), { game: "fivem", cfxEscrow: true });
+    expect(r.errors).toEqual([]);
+    const text = readFileSync(join(r.dest, "fxmanifest.lua"), "utf8");
+    expect(text).toMatch(/^lua54 "yes"$/m);
+    expect(text).toMatch(/^escrow_ignore \{ "config\.lua", "data\/prices\.json", "scriptgo_shim\.lua" \}$/m);
+    expect(text).toMatch(/--cfx-escrow/);
+    const e = r.escrow!;
+    expect(e.encrypted).toEqual(["client/main.lua", "server/main.lua", "stream/shop.ydr"]);
+    expect(e.ignored).toEqual(["config.lua", "data/prices.json", "scriptgo_shim.lua"]);
+    expect(e.notEncrypted).toEqual(["stream/shop.ytd", "web/app.js", "web/index.html"]);
+    expect(e.serverBuild).toBe(5181);
+    const w = r.warnings.join("\n");
+    expect(w).toMatch(/cfx_escrow_ignore 'locales\/\*\.lua' matches no file/);
+    expect(w).toMatch(/NUI files .* web\/app\.js, web\/index\.html stay readable/);
+    expect(w).toMatch(/\.ydr, \.ydd and \.yft models only: 1 other streamed files \(\.ytd\)/);
+    // The zip holds the resource folder, byte for byte, and is the same on every build.
+    const entries = unzipSync(readFileSync(e.zip));
+    expect(Object.keys(entries).sort()).toEqual([
+      "escrowed_shop/client/main.lua", "escrowed_shop/config.lua", "escrowed_shop/data/prices.json", "escrowed_shop/fxmanifest.lua",
+      "escrowed_shop/scriptgo_shim.lua", "escrowed_shop/server/main.lua", "escrowed_shop/stream/shop.ydr", "escrowed_shop/stream/shop.ytd",
+      "escrowed_shop/web/app.js", "escrowed_shop/web/index.html",
+    ]);
+    expect(Buffer.from(entries["escrowed_shop/fxmanifest.lua"]!).toString("utf8")).toBe(text);
+    const again = packForCfx(readResource(escrowPkg()), join(tmp, "esc"), { game: "fivem", cfxEscrow: true });
+    expect(readFileSync(again.escrow!.zip).equals(readFileSync(e.zip))).toBe(true);
+    const seen = readFxManifest(join(r.dest, "fxmanifest.lua"));
+    if (seen) {
+      expect(seen).toContain("lua54=yes");
+      expect(seen).toContain("escrow_ignore=config.lua,data/prices.json,scriptgo_shim.lua");
+    }
+  });
+
+  it("RedM: the escrow build needs RedM server 12735 and keeps rdr3_warning", () => {
+    const dir = resource("redm_escrow", {
+      "scriptgo.lua": manifest("redm_escrow", 'server_script "s.lua"\nfile "config.json"\ncfx_escrow_ignore "config.json"\n'),
+      "s.lua": "\n", "config.json": "{}",
+    });
+    const r = packForCfx(readResource(dir), join(tmp, "esc"), { game: "redm", cfxEscrow: true });
+    expect(r.errors).toEqual([]);
+    expect(r.escrow!.serverBuild).toBe(12735);
+    expect(r.escrow!.encrypted).toEqual(["s.lua"]);
+    const text = readFileSync(join(r.dest, "fxmanifest.lua"), "utf8");
+    expect(text).toMatch(/^game "rdr3"$/m);
+    expect(text).toContain(`rdr3_warning "${RDR3_WARNING}"`);
+    expect(text).toMatch(/^escrow_ignore \{ "config\.json", "scriptgo_shim\.lua" \}$/m);
+  });
+
+  it("an asset-only package: Cfx.re encrypts its models, and says nothing is encrypted when there are none", () => {
+    const models = resource("models_only", {
+      "scriptgo.lua": 'resource "models_only"\nversion "1.0.0"\nscriptgo_version ">=0.1.0"\nenvironment_asset "fivem" "stream/**"\ngame_build "fivem" "3258"\n',
+      "stream/car.yft": "RSC7 frag", "stream/car.ytd": "RSC7 tex",
+    });
+    const r = packForCfx(readResource(models), join(tmp, "esc"), { game: "fivem", cfxEscrow: true });
+    expect(r.errors).toEqual([]);
+    expect(r.escrow!.encrypted).toEqual(["stream/car.yft"]);
+    expect(readFileSync(join(r.dest, "fxmanifest.lua"), "utf8")).not.toMatch(/escrow_ignore|scriptgo_shim/);
+    const maps = resource("map_only", {
+      "scriptgo.lua": 'resource "map_only"\nversion "1.0.0"\nscriptgo_version ">=0.1.0"\nenvironment_asset "fivem" "stream/**"\ngame_build "fivem" "3258"\n',
+      "stream/a.ymap": "RSC7 map",
+    });
+    const m = packForCfx(readResource(maps), join(tmp, "esc"), { game: "fivem", cfxEscrow: true });
+    expect(m.escrow!.encrypted).toEqual([]);
+    expect(m.warnings.join(" ")).toMatch(/nothing in this build is a file Cfx\.re's escrow encrypts/);
+  });
+
+  it("refuses a buyer's fingerprinted copy: the escrow upload is the creator's", () => {
+    const dir = escrowPkg();
+    mkdirSync(join(dir, ".scriptgo"), { recursive: true });
+    writeFileSync(join(dir, ".scriptgo", "fingerprint.json"), "{}");
+    const r = packForCfx(readResource(dir), join(tmp, "esc"), { game: "fivem", cfxEscrow: true });
+    expect(r.errors.map((e) => e.code)).toEqual(["cfx_escrow_buyer_copy"]);
   });
 });
 
